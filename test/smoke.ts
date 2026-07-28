@@ -16,6 +16,7 @@ import {
   fragmentos,
   limpiarTermino,
   parseResultados,
+  parseTematica,
   sinTildes,
   trocear,
 } from '../src/parse.ts'
@@ -106,6 +107,19 @@ test('se extrae un artículo puntual y se detecta la derogatoria', () => {
   assert.doesNotMatch(a6!, /Tres/)
   assert.equal(advertenciasVigencia(a6!).length, 1)
   assert.equal(advertenciasVigencia('texto sin marcas').length, 0)
+})
+
+test('la consulta temática se lee con o sin <tbody> explícito', () => {
+  const fila = `<tr><td>Sub</td><td><a onclick="info_restrictor('TEMA X','Sub','Ley 1 de 2000',111,222)">Ley 1 de 2000</a></td></tr>`
+  for (const html of [
+    `<h3>TEMA X</h3><table>${fila}</table>`,
+    `<h3>TEMA X</h3><table><tbody>${fila}</tbody></table>`,
+  ]) {
+    const r = parseTematica(html)
+    assert.equal(r.length, 1, 'ambas formas de tabla deben leerse igual')
+    assert.equal(r[0]!.temsubid, '111')
+    assert.equal(r[0]!.documentos[0]!.normid, '222')
+  }
 })
 
 test('el canario grita en vez de devolver una lista vacía', () => {

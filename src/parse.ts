@@ -1,4 +1,4 @@
-import * as cheerio from 'cheerio'
+import * as cheerio from 'cheerio/slim'
 
 export const BASE_GESTOR = 'https://www.funcionpublica.gov.co/eva/gestornormativo'
 
@@ -339,7 +339,10 @@ export function parseTematica(html: string): FilaTema[] {
     const tema = $(h3).text().trim()
     $(h3)
       .nextAll()
-      .find('tbody tr')
+      // `tr` a secas, no `tbody tr`: htmlparser2 no inserta el tbody implícito
+      // que sí añade un parser conforme a la especificación, y el día que el
+      // portal omita la etiqueta la tabla se leería vacía sin avisar.
+      .find('tr')
       .each((__, tr) => {
         const $tds = $(tr).find('td')
         if ($tds.length < 2) return
