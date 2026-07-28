@@ -6,6 +6,7 @@ import { z } from 'zod'
 import { idTipo, parsearCita } from './citas.ts'
 import {
   advertenciasVigencia,
+  normalizarRotulo,
   articulo as extraerArticulo,
   fragmentos,
   indiceArticulos,
@@ -123,7 +124,14 @@ server.registerTool(
         : `\n\nNo encontré un "artículo ${c.articulo}" en el texto. Usa obtener_norma con buscar_en_texto.`
     }
     return txt(
-      `${n.titulo}\nid: ${n.id}\n${n.resumen ? `Resumen: ${n.resumen}\n` : ''}URL: ${n.url}${extra}`,
+      `${n.titulo}\nid: ${n.id}\n` +
+        // No es un resumen de la norma: el Gestor no publica uno. Es el extracto
+        // de UN tema al que está asociada, y en normas compiladoras como el
+        // Decreto 1083 describe una porción mínima del contenido.
+        (n.resumen
+          ? `Extracto de un tema asociado (NO resume la norma; usa obtener_norma para su objeto y articulado): ${n.resumen}\n`
+          : '') +
+        `URL: ${n.url}${extra}`,
     )
   },
 )
@@ -182,12 +190,16 @@ server.registerTool(
     if (!r.items.length) {
       return vacio(
         'normas con esos filtros',
-        'Quita filtros, revisa las tildes (el portal distingue "gestión" de "gestion") o usa buscar_por_tema.',
+        `Filtros aplicados: ${r.aplicados.join(', ') || '(ninguno)'}.` +
+          (r.nota ? ` ${r.nota}` : '') +
+          ' Si los filtros se resolvieron bien, es que no existe esa combinación en el Gestor: prueba quitando el año' +
+          ' o la entidad. Si buscaste por palabras, recuerda que el portal solo indexa los resúmenes temáticos:' +
+          ' usa buscar_por_tema.',
       )
     }
     const lista = r.items
       .slice(0, limite)
-      .map((i) => `- ${i.titulo} (id ${i.id})\n  ${i.resumen || '(sin resumen)'}\n  ${i.url}`)
+      .map((i) => `- ${i.titulo} (id ${i.id})\n  Extracto temático: ${i.resumen || '(ninguno)'}\n  ${i.url}`)
       .join('\n')
     const mas = r.items.length > limite ? `\n\nSe muestran ${limite} de ${r.items.length} reunidos.` : ''
     return txt(
@@ -203,7 +215,11 @@ server.registerTool(
     description:
       'Consulta temática oficial: devuelve tema, subtema y las normas, sentencias y conceptos asociados. ' +
       'Resuelve contra un índice empaquetado (instantáneo, funciona aunque el portal esté caído). ' +
-      'Cada resultado trae temsubid y normid para pedir después explicar_relacion_tema.',
+      'Cada resultado trae temsubid y normid para pedir después explicar_relacion_tema. ' +
+      'OJO con los identificadores: el temsubid que devuelve esta herramienta SOLO sirve en ' +
+      'explicar_relacion_tema. NO es el mismo número que el subtema de listar_subtemas (que va en el ' +
+      'parámetro subtema de buscar_normas) ni que el tema de listar_catalogos. Son tres numeraciones distintas ' +
+      'del portal y mezclarlas devuelve resultados equivocados.',
     inputSchema: {
       texto: z.string().describe('Tema a buscar, ej. "teletrabajo", "encargo", "prima de servicios"'),
       limite: z.number().int().min(1).max(50).default(15),
@@ -222,7 +238,7 @@ server.registerTool(
           .slice(0, limite)
           .map(
             (f) =>
-              `- ${f.t} / ${f.s} (temsubid ${f.ts})\n` +
+              `- ${normalizarRotulo(f.t)} / ${normalizarRotulo(f.s)} (temsubid ${f.ts})\n` +
               f.n.slice(0, 8).map(([id, tit]) => `    · ${tit} (normid ${id})`).join('\n') +
               (f.n.length > 8 ? `\n    … y ${f.n.length - 8} más` : ''),
           )
@@ -242,7 +258,7 @@ server.registerTool(
       .slice(0, limite)
       .map(
         (f) =>
-          `- ${f.tema} / ${f.subtema} (temsubid ${f.temsubid})\n` +
+          `- ${normalizarRotulo(f.tema)} / ${normalizarRotulo(f.subtema)} (temsubid ${f.temsubid})\n` +
           f.documentos.slice(0, 8).map((d) => `    · ${d.titulo} (normid ${d.normid})`).join('\n'),
       )
       .join('\n')
@@ -321,8 +337,21 @@ server.registerTool(
     }
 
     const avisos = advertenciasVigencia(cuerpo)
-    const temas = n.temas.length
-      ? `\n\nTemas asociados:\n${n.temas.slice(0, 10).map((t) => `- ${t.tema} / ${t.subtema}: ${t.restrictor}`).join('\n')}`
+    // Los temas venían en el orden del portal, así que al buscar "teletrabajo"
+    // en el Decreto 1083 salían diez de bienestar social. Se suben los que
+    // mencionan lo buscado y se dice cuántos hay en total.
+    const aguja = sinTildes(buscar_en_texto ?? articulo ?? '').toLowerCase().trim()
+    const pertinente = (t: (typeof n.temas)[number]) =>
+      Number(sinTildes(`${t.tema} ${t.subtema} ${t.restrictor}`).toLowerCase().includes(aguja))
+    const ordenados = aguja ? [...n.temas].sort((a, b) => pertinente(b) - pertinente(a)) : n.temas
+
+    const temas = ordenados.length
+      ? `\n\nTemas asociados (${Math.min(10, ordenados.length)} de ${ordenados.length}` +
+        `${aguja ? ', primero los que mencionan lo buscado' : ', sin ordenar por relevancia'}):\n` +
+        ordenados
+          .slice(0, 10)
+          .map((t) => `- ${normalizarRotulo(t.tema)} / ${normalizarRotulo(t.subtema)}: ${t.restrictor}`)
+          .join('\n')
       : ''
 
     return txt(
@@ -375,12 +404,16 @@ server.registerTool(
       tipos: z
         .array(z.enum(['C', 'T', 'SU', 'A']))
         .optional()
-        .describe('Filtra por tipo: C constitucionalidad, T tutela, SU unificación, A auto'),
+        .describe(
+          'Tipos a incluir. Por defecto C, T y SU (doctrina). Los autos (A) son mayoría por volumen y suelen ' +
+            'ser trámite, así que hay que pedirlos explícitamente: ["A"] o ["C","T","SU","A"].',
+        ),
       limite: z.number().int().min(1).max(100).default(10),
     },
   },
   async ({ termino, desde, hasta, tipos, limite }) => {
-    const r = await corte.buscar({ termino, desde, hasta, tipos, limite })
+    const porDefecto: ('C' | 'T' | 'SU')[] = ['C', 'T', 'SU']
+    const r = await corte.buscar({ termino, desde, hasta, tipos: tipos ?? porDefecto, limite })
     if (!r.items.length) return vacio(`providencias sobre "${termino}"`, 'Prueba un término más general o revisa el rango de fechas.')
     const lista = r.items
       .map(
@@ -464,17 +497,37 @@ server.registerTool(
   {
     title: 'Explicar por qué una norma aplica a un subtema',
     description:
-      'Devuelve el "restrictor": el extracto que explica por qué esa norma es pertinente para ese subtema. ' +
-      'Es la información más valiosa del Gestor y no aparece en la búsqueda normal.',
+      'Devuelve el "restrictor": el extracto que explica por qué esa norma es pertinente para ESE subtema en ' +
+      'concreto. Ambos identificadores deben salir de la MISMA fila de buscar_por_tema: el temsubid no es el id ' +
+      'de listar_subtemas ni el de listar_catalogos. Para ver todos los restrictores de una norma de una vez, ' +
+      'usa obtener_norma y mira su bloque "Temas asociados".',
     inputSchema: {
-      temsubid: z.string().regex(/^\d+$/).describe('temsubid que devuelve buscar_por_tema'),
-      normid: z.string().regex(/^\d+$/).describe('normid que devuelve buscar_por_tema'),
+      temsubid: z.string().regex(/^\d+$/).describe('temsubid de buscar_por_tema (no vale el id de listar_subtemas)'),
+      normid: z.string().regex(/^\d+$/).describe('normid de la misma fila de buscar_por_tema'),
     },
   },
   async ({ temsubid, normid }) => {
+    // Se recupera el par del índice para poder decir a qué tema corresponde:
+    // sin eso el usuario no puede verificar que la respuesta sea la que pidió.
+    const fila = cargarIndice()?.filas.find((f) => f.ts === temsubid)
+    const rotulo = fila ? `${normalizarRotulo(fila.t)} / ${normalizarRotulo(fila.s)}` : '(subtema no encontrado en el índice)'
+    const enElIndice = fila?.n.some(([id]) => id === normid) ?? false
+
     const r = await gestor.restrictor(temsubid, normid)
-    if (!r) return vacio(`una explicación para temsubid ${temsubid} y normid ${normid}`, 'Verifica los identificadores con buscar_por_tema.')
-    return txt(`${r}\n\nNorma: https://www.funcionpublica.gov.co/eva/gestornormativo/norma.php?i=${normid}`)
+    if (!r) {
+      return vacio(
+        `un restrictor para la norma ${normid} bajo "${rotulo}"`,
+        enElIndice
+          ? 'El índice sí relaciona esa norma con ese subtema, pero el portal no publica el extracto. Usa obtener_norma para ver los restrictores que sí tiene.'
+          : 'Esa norma no está clasificada bajo ese subtema. Verifica que temsubid y normid vengan de la misma fila de buscar_por_tema.',
+      )
+    }
+    return txt(
+      `Tema / subtema: ${rotulo} (temsubid ${temsubid})\nNorma: ${normid}\n\n` +
+        `Por qué aplica:\n${r}\n\n` +
+        `Norma completa: https://www.funcionpublica.gov.co/eva/gestornormativo/norma.php?i=${normid}\n` +
+        `Este es el restrictor de ESTE subtema; la norma puede tener otros distintos bajo otros temas (obtener_norma los lista todos).`,
+    )
   },
 )
 
@@ -531,7 +584,7 @@ server.registerTool(
       `${items.length} de ${todas.length} norma(s) del listado.\n\n` +
         items
           .slice(0, limite)
-          .map((i) => `- ${i.titulo} (id ${i.id})\n  ${i.resumen || '(sin resumen)'}\n  ${i.url}`)
+          .map((i) => `- ${i.titulo} (id ${i.id})\n  Extracto temático: ${i.resumen || '(ninguno)'}\n  ${i.url}`)
           .join('\n') +
         (items.length > limite ? `\n\nSe muestran ${limite} de ${items.length}.` : ''),
     )

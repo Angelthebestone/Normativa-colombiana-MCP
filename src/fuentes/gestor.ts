@@ -140,27 +140,50 @@ export async function subtemaPorNombre(tema: string, subtema: string): Promise<s
   )
 }
 
-export async function buscar(f: Filtros): Promise<{ total: number; items: Resultado[]; nota?: string | undefined }> {
+export async function buscar(
+  f: Filtros,
+): Promise<{ total: number; items: Resultado[]; nota?: string | undefined; aplicados: string[] }> {
   const p = new URLSearchParams()
   const notas: string[] = []
+  // Qué filtros se aplicaron de verdad: sin esto, un cero por combinación
+  // inexistente es indistinguible de un filtro que no se supo resolver.
+  const aplicados: string[] = []
 
   if (f.palabras) {
     const { usadas, descartadas } = quitarStopwords(f.palabras)
     p.set('palabras', usadas)
     if (descartadas.length) notas.push(`Se ignoraron palabras vacías (${descartadas.join(', ')}): el buscador del portal las une con OR e inundan el resultado.`)
   }
-  const tip = await resolver(f.tipo, 'tipos')
-  const ent = await resolver(f.entidad, 'entidades')
-  const tem = await resolver(f.tema, 'temas')
-  if (tip) p.set('tipdoc', tip)
-  if (ent) p.set('entidad1', ent)
-  if (tem) p.set('temarl', tem)
+  for (const [etiqueta, valor, campo, cual] of [
+    ['tipo', f.tipo, 'tipdoc', 'tipos'],
+    ['entidad', f.entidad, 'entidad1', 'entidades'],
+    ['tema', f.tema, 'temarl', 'temas'],
+  ] as const) {
+    if (valor === undefined || valor === '') continue
+    const id = await resolver(valor, cual)
+    if (id) {
+      p.set(campo, id)
+      aplicados.push(`${etiqueta}="${valor}" (id ${id})`)
+    } else {
+      notas.push(`No reconocí ${etiqueta} "${valor}"; se ignoró. Consulta los valores válidos con listar_catalogos.`)
+    }
+  }
   const num = entero(f.numero)
   const an = entero(f.anio)
   const sub = entero(f.subtema)
-  if (num) p.set('nrodoc', num)
-  if (an) p.set('ano', an)
-  if (sub) p.set('subtemaid', sub)
+  if (num) {
+    p.set('nrodoc', num)
+    aplicados.push(`número=${num}`)
+  }
+  if (an) {
+    p.set('ano', an)
+    aplicados.push(`año=${an}`)
+  }
+  if (sub) {
+    p.set('subtemaid', sub)
+    aplicados.push(`subtema=${sub}`)
+  }
+  if (f.palabras) aplicados.push(`palabras="${p.get('palabras')}"`)
 
   if (![...p.keys()].length) throw new Error('Indica al menos un filtro o unas palabras para buscar.')
 
@@ -185,7 +208,22 @@ export async function buscar(f: Filtros): Promise<{ total: number; items: Result
     }
   }
 
-  return { total, items, nota: notas.join(' ') || undefined }
+  // El buscador une los términos con OR: conviene saber cuáles aparecieron de
+  // verdad, o "zopilote interconectado" parece haber encontrado zopilotes.
+  if (f.palabras && items.length) {
+    const heno = sinTildes(items.map((i) => `${i.titulo} ${i.resumen}`).join(' ')).toLowerCase()
+    const ausentes = (p.get('palabras') ?? '')
+      .split(' ')
+      .filter((t) => t && !heno.includes(sinTildes(t).toLowerCase()))
+    if (ausentes.length) {
+      notas.push(
+        `Atención: ${ausentes.map((t) => `"${t}"`).join(' y ')} no aparece en ningún resultado — ` +
+          `el portal une los términos con OR, así que coincidió solo el resto.`,
+      )
+    }
+  }
+
+  return { total, items, nota: notas.join(' ') || undefined, aplicados }
 }
 
 // --- documentos ----------------------------------------------------------
