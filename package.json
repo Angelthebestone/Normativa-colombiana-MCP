@@ -11,7 +11,8 @@
     "pack": "npm run build && npx @anthropic-ai/mcpb pack",
     "typecheck": "tsc --noEmit",
     "lint": "oxlint src scripts test",
-    "check": "npm run typecheck && npm run lint && npm test"
+    "check": "npm run typecheck && npm run lint && npm test && npm run test:e2e",
+    "test:e2e": "npm run build && node --test test/e2e.ts"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.12.0",

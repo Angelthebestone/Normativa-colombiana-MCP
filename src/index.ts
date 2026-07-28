@@ -148,12 +148,12 @@ server.registerTool(
     inputSchema: {
       palabras: z.string().optional().describe('Términos distintivos; evita frases largas'),
       tipo_documento: z.string().optional().describe('Nombre o id: "Ley", "Decreto", "Sentencia", "Concepto"'),
-      numero: z.string().regex(/^\d+$/).optional().describe('Número de la norma, como texto. Ej.: "909"'),
-      anio: z.string().regex(/^\d{4}$/).optional().describe('Año de cuatro dígitos, como texto. Ej.: "2004"'),
+      numero: z.coerce.string().regex(/^\d+$/).optional().describe('Número de la norma, como texto. Ej.: "909"'),
+      anio: z.coerce.string().regex(/^\d{4}$/).optional().describe('Año de cuatro dígitos, como texto. Ej.: "2004"'),
       entidad: z.string().optional().describe('Nombre o id: "Corte Constitucional", "Congreso de la República"'),
       tema: z.string().optional().describe('Nombre o id de tema del catálogo'),
-      subtema: z.string().regex(/^\d+$/).optional().describe('subtemaid del catálogo (NO el temsubid de buscar_por_tema)'),
-      limite: z.number().int().min(1).max(100).default(20),
+      subtema: z.coerce.string().regex(/^\d+$/).optional().describe('subtemaid del catálogo (NO el temsubid de buscar_por_tema)'),
+      limite: z.coerce.number().int().min(1).max(100).default(20),
     },
   },
   async ({ palabras, tipo_documento, numero, anio, entidad, tema, subtema, limite }) => {
@@ -222,7 +222,7 @@ server.registerTool(
       'del portal y mezclarlas devuelve resultados equivocados.',
     inputSchema: {
       texto: z.string().describe('Tema a buscar, ej. "teletrabajo", "encargo", "prima de servicios"'),
-      limite: z.number().int().min(1).max(50).default(15),
+      limite: z.coerce.number().int().min(1).max(50).default(15),
     },
   },
   async ({ texto, limite }) => {
@@ -275,11 +275,11 @@ server.registerTool(
       'el Decreto 1083 de 2015 tiene 925.000 caracteres. Usa buscar_en_texto para encontrar un tema dentro ' +
       'del articulado (esta es la verdadera búsqueda de texto completo), o articulo para un artículo puntual.',
     inputSchema: {
-      id: z.string().regex(/^\d+$/).describe('id numérico de la norma, como texto. Ej.: "31431"'),
+      id: z.coerce.string().regex(/^\d+$/).describe('id numérico de la norma, como texto. Ej.: "31431"'),
       buscar_en_texto: z.string().optional().describe('Devuelve solo los fragmentos que mencionan este término'),
       articulo: z.string().optional().describe('Número de artículo, ej. "6" o "2.2.5.1.5"'),
-      desde: z.number().int().min(0).default(0),
-      limite_caracteres: z.number().int().min(500).max(40000).default(8000),
+      desde: z.coerce.number().int().min(0).default(0),
+      limite_caracteres: z.coerce.number().int().min(500).max(40000).default(8000),
     },
   },
   async ({ id, buscar_en_texto, articulo, desde, limite_caracteres }) => {
@@ -371,7 +371,7 @@ server.registerTool(
     inputSchema: {
       catalogo: z.enum(['tipos', 'anios', 'entidades', 'temas']),
       filtro: z.string().optional().describe('Texto para filtrar; obligatorio en "temas"'),
-      limite: z.number().int().min(1).max(200).default(50),
+      limite: z.coerce.number().int().min(1).max(200).default(50),
     },
   },
   async ({ catalogo, filtro, limite }) => {
@@ -408,7 +408,7 @@ server.registerTool(
           'Tipos a incluir. Por defecto C, T y SU (doctrina). Los autos (A) son mayoría por volumen y suelen ' +
             'ser trámite, así que hay que pedirlos explícitamente: ["A"] o ["C","T","SU","A"].',
         ),
-      limite: z.number().int().min(1).max(100).default(10),
+      limite: z.coerce.number().int().min(1).max(100).default(10),
     },
   },
   async ({ termino, desde, hasta, tipos, limite }) => {
@@ -440,8 +440,8 @@ server.registerTool(
     inputSchema: {
       ruta: z.string().describe('Ruta de la providencia, ej. "2024/T-099-24.htm"'),
       buscar_en_texto: z.string().optional(),
-      desde: z.number().int().min(0).default(0),
-      limite_caracteres: z.number().int().min(500).max(40000).default(8000),
+      desde: z.coerce.number().int().min(0).default(0),
+      limite_caracteres: z.coerce.number().int().min(500).max(40000).default(8000),
     },
   },
   async ({ ruta, buscar_en_texto, desde, limite_caracteres }) => {
@@ -483,7 +483,7 @@ server.registerTool(
   {
     title: 'Listar subtemas de un tema',
     description: 'Subtemas activos de un tema del catálogo, para afinar buscar_normas.',
-    inputSchema: { tema_id: z.string().regex(/^\d+$/).describe('id de tema del catálogo, como texto') },
+    inputSchema: { tema_id: z.coerce.string().regex(/^\d+$/).describe('id de tema del catálogo, como texto') },
   },
   async ({ tema_id }) => {
     const s = await gestor.subtemas(tema_id)
@@ -502,8 +502,8 @@ server.registerTool(
       'de listar_subtemas ni el de listar_catalogos. Para ver todos los restrictores de una norma de una vez, ' +
       'usa obtener_norma y mira su bloque "Temas asociados".',
     inputSchema: {
-      temsubid: z.string().regex(/^\d+$/).describe('temsubid de buscar_por_tema (no vale el id de listar_subtemas)'),
-      normid: z.string().regex(/^\d+$/).describe('normid de la misma fila de buscar_por_tema'),
+      temsubid: z.coerce.string().regex(/^\d+$/).describe('temsubid de buscar_por_tema (no vale el id de listar_subtemas)'),
+      normid: z.coerce.string().regex(/^\d+$/).describe('normid de la misma fila de buscar_por_tema'),
     },
   },
   async ({ temsubid, normid }) => {
@@ -542,8 +542,8 @@ server.registerTool(
       'que sí consulta los resúmenes temáticos.',
     inputSchema: {
       numero: z.string().optional().describe('Número del concepto, como texto. Ej.: "036201"'),
-      anio: z.string().regex(/^\d{4}$/).optional().describe('Año de cuatro dígitos, como texto. Ej.: "2004"'),
-      limite: z.number().int().min(1).max(100).default(20),
+      anio: z.coerce.string().regex(/^\d{4}$/).optional().describe('Año de cuatro dígitos, como texto. Ej.: "2004"'),
+      limite: z.coerce.number().int().min(1).max(100).default(20),
     },
   },
   async ({ numero, anio, limite }) => {
@@ -572,7 +572,7 @@ server.registerTool(
       'de 1993 y leyes del Congreso. Es un listado corto y fijo; para buscar normativa usa buscar_normas.',
     inputSchema: {
       filtro: z.string().optional().describe('Texto para acotar por título, ej. "circular" o "1474"'),
-      limite: z.number().int().min(1).max(150).default(40),
+      limite: z.coerce.number().int().min(1).max(150).default(40),
     },
   },
   async ({ filtro, limite }) => {

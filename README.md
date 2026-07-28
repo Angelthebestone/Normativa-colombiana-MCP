@@ -43,7 +43,7 @@ La extensión también añade comandos listos en Claude Desktop: *¿Qué normas 
 
 ```bash
 npm install
-npm run check             # typecheck + lint + 30 pruebas contra las fuentes reales
+npm run check             # typecheck + lint + 30 pruebas de biblioteca + 17 de extremo a extremo
 npm run generar-indice    # regenera datos/indice-tematico.json (~20 MB de descarga)
 npm run pack              # produce normativa-colombia.mcpb
 ```
@@ -60,6 +60,8 @@ Estructura:
 | `src/http.ts` | Cliente HTTP con la cadena TLS completa |
 | `src/fuentes/gestor.ts` | Gestor Normativo (HTML) |
 | `src/fuentes/corte.ts` | Relatoría de la Corte Constitucional (JSON) |
+| `test/smoke.ts` | Pruebas de biblioteca contra las fuentes reales |
+| `test/e2e.ts` | Arranca el servidor y le habla por stdio, como Claude Desktop |
 
 Dos notas para quien vaya a tocar esto:
 
