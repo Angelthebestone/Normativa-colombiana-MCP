@@ -8,7 +8,7 @@ Este proyecto sigue [versionado semántico](https://semver.org/lang/es/).
 ### Añadido
 
 - Documentos de comunidad: código de conducta, guía de contribución, política de seguridad, plantillas de issue y de pull request.
-- Integración continua: verificación en cada push sin tocar los portales, y una ejecución semanal contra las fuentes reales que abre un issue si el canario salta.
+- Guarda `SIN_RED=1` para correr solo las pruebas de lógica pura, sin consultar los portales.
 
 ## [1.0.0] — 2026-07-28
 

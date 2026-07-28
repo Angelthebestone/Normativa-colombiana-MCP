@@ -1,23 +1,109 @@
-# Normativa Colombia — extensión para Claude
+# Normativa Colombia — servidor MCP
 
-[![CI](https://github.com/Angelthebestone/Normativa-colombiana-MCP/actions/workflows/ci.yml/badge.svg)](https://github.com/Angelthebestone/Normativa-colombiana-MCP/actions/workflows/ci.yml)
-[![Portales](https://github.com/Angelthebestone/Normativa-colombiana-MCP/actions/workflows/portales.yml/badge.svg)](https://github.com/Angelthebestone/Normativa-colombiana-MCP/actions/workflows/portales.yml)
 [![Licencia: MIT](https://img.shields.io/badge/licencia-MIT-blue.svg)](LICENSE)
+[![MCP](https://img.shields.io/badge/MCP-servidor-black.svg)](https://modelcontextprotocol.io)
 
-Consulta la normativa y la jurisprudencia colombiana directamente desde Claude, sin abrir el navegador ni pelear con formularios.
+Consulta la normativa y la jurisprudencia colombiana desde cualquier asistente de IA que hable [Model Context Protocol](https://modelcontextprotocol.io), sin abrir el navegador ni pelear con formularios.
 
 Conecta dos fuentes oficiales:
 
 - **Gestor Normativo** del Departamento Administrativo de la Función Pública — leyes, decretos, resoluciones, circulares y conceptos del sector público, con la consulta temática y los *restrictores* que explican por qué cada norma aplica a un tema.
 - **Relatoría de la Corte Constitucional** — 49.000 sentencias y autos, actualizados a diario.
 
-## Instalación (no necesitas saber programar)
+Es un servidor MCP estándar que se comunica por **stdio**, así que sirve en Claude Desktop, Claude Code, Cursor, VS Code, Windsurf, Zed, Continue, LM Studio, agentes propios hechos con los SDK de MCP y cualquier cliente que aparezca después.
+
+---
+
+## Instalación
+
+### Opción A — Claude Desktop, con un clic
+
+La más sencilla si usas Claude Desktop: no requiere Node ni tocar archivos de configuración.
 
 1. Descarga `normativa-colombia.mcpb` desde [Releases](https://github.com/Angelthebestone/Normativa-colombiana-MCP/releases).
 2. Abre Claude Desktop → **Configuración → Extensiones**.
 3. Arrastra el archivo a esa ventana y confirma.
 
-No hace falta instalar nada más: Claude Desktop trae todo lo necesario.
+Claude Desktop trae su propio Node, así que no hace falta instalar nada más.
+
+### Opción B — cualquier otro cliente MCP
+
+Requiere **Node 22 o superior**. Se prepara una vez:
+
+```bash
+git clone https://github.com/Angelthebestone/Normativa-colombiana-MCP.git
+cd Normativa-colombiana-MCP
+npm install
+npm run generar-indice   # índice temático, ~20 MB de descarga, una sola vez
+npm run build            # genera server/index.js
+```
+
+Eso deja un servidor que se arranca así, desde cualquier directorio:
+
+```bash
+node /ruta/a/Normativa-colombiana-MCP/server/index.js
+```
+
+Esa línea es lo único que necesita cualquier cliente. Lo que cambia entre uno y otro es dónde se escribe.
+
+#### Configuración por cliente
+
+La mayoría comparte este formato. Usa la **ruta absoluta**; en Windows escribe las barras dobles (`C:\\Users\\...`) o barras normales.
+
+```json
+{
+  "mcpServers": {
+    "normativa-colombia": {
+      "command": "node",
+      "args": ["/ruta/absoluta/a/Normativa-colombiana-MCP/server/index.js"]
+    }
+  }
+}
+```
+
+| Cliente | Dónde va esa configuración |
+| --- | --- |
+| **Claude Desktop** (manual) | `claude_desktop_config.json` — en Configuración → Desarrollador → Editar configuración |
+| **Cursor** | `.cursor/mcp.json` en el proyecto, o `~/.cursor/mcp.json` para todos |
+| **Windsurf** | `~/.codeium/windsurf/mcp_config.json` |
+| **Continue** | El bloque `mcpServers` de su configuración |
+| **LM Studio** | Program → Install → Edit mcp.json |
+| **Agente propio** | Como `StdioServerParameters` del SDK de MCP, en Python o TypeScript |
+
+**Claude Code** no usa archivo; se registra por línea de comandos:
+
+```bash
+claude mcp add normativa-colombia -- node /ruta/absoluta/a/Normativa-colombiana-MCP/server/index.js
+```
+
+**VS Code** usa la clave `servers` en vez de `mcpServers`, en `.mcp.json` del proyecto o en la configuración de usuario:
+
+```json
+{
+  "servers": {
+    "normativa-colombia": {
+      "type": "stdio",
+      "command": "node",
+      "args": ["/ruta/absoluta/a/Normativa-colombiana-MCP/server/index.js"]
+    }
+  }
+}
+```
+
+Si tu cliente no está en la lista, busca dónde declara servidores MCP por stdio: el comando y los argumentos son siempre los mismos.
+
+#### Comprobar que quedó bien
+
+```bash
+echo '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"prueba","version":"1"}}}' \
+  | node /ruta/a/Normativa-colombiana-MCP/server/index.js
+```
+
+Debe responder un JSON con `"name":"normativa-colombia"` y un campo `instructions`.
+
+### Qué recibe el cliente
+
+Al conectarse, el servidor entrega **11 herramientas**, **4 prompts** y sus **propias instrucciones de uso**: a qué tipo de pregunta corresponde cada herramienta, que debe citarse siempre la fuente y que nunca debe afirmarse que una norma está vigente. Los clientes que respetan el campo `instructions` del protocolo lo aprovechan sin configurar nada.
 
 ## Qué puedes preguntar
 
@@ -27,23 +113,21 @@ No hace falta instalar nada más: Claude Desktop trae todo lo necesario.
 - «Búscame jurisprudencia reciente de la Corte Constitucional sobre estabilidad laboral reforzada.»
 - «¿La Ley 909 de 2004 sigue vigente?»
 
-La extensión le entrega a Claude, al conectarse, sus propias instrucciones de uso: qué herramienta corresponde a cada tipo de pregunta, que debe citar siempre la fuente y que nunca debe afirmar que una norma está vigente. Eso viaja dentro del `.mcpb`; no hay que configurar nada.
-
-La extensión también añade comandos listos en Claude Desktop: *¿Qué normas aplican sobre un tema?*, *¿Esta norma sigue vigente?*, *Explícame esta norma en lenguaje sencillo* y *Compara dos normas*.
+El servidor incluye además cuatro prompts listos, que los clientes que los soportan muestran como comandos: *¿Qué normas aplican sobre un tema?*, *¿Esta norma sigue vigente?*, *Explícame esta norma en lenguaje sencillo* y *Compara dos normas*.
 
 ## Lo que debes saber antes de confiar en una respuesta
 
-**Esto no es asesoría jurídica.** Es un buscador que le da a Claude acceso a fuentes oficiales. Verifica siempre en el enlace que acompaña cada respuesta.
+**Esto no es asesoría jurídica.** Es un buscador que le da a un asistente de IA acceso a fuentes oficiales. Verifica siempre en el enlace que acompaña cada respuesta.
 
-**La vigencia no es un dato del portal.** Ni el Gestor ni la relatoría tienen un campo que diga «esta norma está derogada»: las derogatorias van escritas dentro del texto. La extensión avisa cuando detecta marcas de «Derogado» o «Modificado por», pero no puede garantizar que un artículo siga vigente. El Decreto 1083 de 2015, por ejemplo, contiene 155 notas de modificación.
+**La vigencia no es un dato del portal.** Ni el Gestor ni la relatoría tienen un campo que diga «esta norma está derogada»: las derogatorias van escritas dentro del texto. El servidor avisa cuando detecta marcas de «Derogado» o «Modificado por», pero no puede garantizar que un artículo siga vigente. El Decreto 1083 de 2015, por ejemplo, contiene 155 notas de modificación.
 
-**El buscador del Gestor no busca en el texto completo**, solo en los resúmenes temáticos, y une los términos con OR. Su índice de palabras además es muy pobre: «teletrabajo» casa con 3 documentos en todo el portal, y con ninguno de los 43 conceptos que sí están clasificados bajo ese subtema. La extensión compensa de tres formas: quita las palabras vacías antes de consultar, reintenta por el subtema oficial cuando la búsqueda por palabras rinde poco, y busca dentro del articulado en tu computador cuando pides una norma concreta.
+**El buscador del Gestor no busca en el texto completo**, solo en los resúmenes temáticos, y une los términos con OR. Su índice de palabras además es muy pobre: «teletrabajo» casa con 3 documentos en todo el portal, y con ninguno de los 43 conceptos que sí están clasificados bajo ese subtema. El servidor compensa de tres formas: quita las palabras vacías antes de consultar, reintenta por el subtema oficial cuando la búsqueda por palabras rinde poco, y busca dentro del articulado en tu computador cuando pides una norma concreta.
 
-**Ritmo de consulta.** La extensión hace como máximo una petición por segundo sostenida a cada portal, con ráfagas de hasta cinco, y nunca dos a la vez al mismo sitio. Si un portal responde que está limitando las consultas, espera lo que él indique en vez de insistir. Son servicios públicos y conviene que un asistente automático les pese menos que una persona navegando.
+**Ritmo de consulta.** El servidor hace como máximo una petición por segundo sostenida a cada portal, con ráfagas de hasta cinco, y nunca dos a la vez al mismo sitio. Si un portal responde que está limitando las consultas, espera lo que él indique en vez de insistir. Son servicios públicos y conviene que un asistente automático les pese menos que una persona navegando.
 
 **Privacidad.** Cada consulta viaja a servidores del Estado colombiano, que registran las peticiones y tu dirección IP, igual que si navegaras el sitio. No se envía nada a ningún otro servidor, no hay analítica y no se recoge información tuya. Tenlo en cuenta si vas a consultar sobre un asunto propio.
 
-**Datos empaquetados.** La extensión incluye un índice temático (12.054 subtemas) para responder al instante y seguir sirviendo si el portal se cae. Ese índice tiene fecha: si supera los tres meses, la extensión te lo advierte.
+**Datos empaquetados.** Se incluye un índice temático (12.054 subtemas) para responder al instante y seguir sirviendo si el portal se cae. Ese índice tiene fecha: si supera los tres meses, el servidor te lo advierte.
 
 ## Para desarrolladores
 
@@ -56,7 +140,9 @@ npm run pack              # produce normativa-colombia.mcpb
 
 `datos/indice-tematico.json` no está versionado por su tamaño: genéralo antes de empaquetar.
 
-Las pruebas consultan los portales oficiales. `SIN_RED=1 npm test` corre solo la lógica pura, que es lo que hace la integración continua en cada push; la suite completa se ejecuta una vez por semana y avisa si los portales cambiaron.
+Las pruebas consultan los portales oficiales. `SIN_RED=1 npm test` corre solo la lógica pura, útil para iterar rápido o sin conexión.
+
+No hay integración continua: `npm run check` se corre a mano antes de publicar. Conviene ejecutarlo cada tanto aunque no se haya tocado el código, porque es lo que detecta que un portal cambió su HTML.
 
 Estructura:
 
@@ -69,7 +155,7 @@ Estructura:
 | `src/fuentes/gestor.ts` | Gestor Normativo (HTML) |
 | `src/fuentes/corte.ts` | Relatoría de la Corte Constitucional (JSON) |
 | `test/smoke.ts` | Pruebas de biblioteca contra las fuentes reales |
-| `test/e2e.ts` | Arranca el servidor y le habla por stdio, como Claude Desktop |
+| `test/e2e.ts` | Arranca el servidor y le habla por stdio, como cualquier cliente MCP |
 
 Las instrucciones de uso que recibe el modelo están en `INSTRUCCIONES`, en `src/index.ts`: son el único mecanismo que orienta *qué* herramienta se elige, cosa que ninguna prueba puede verificar.
 
@@ -82,7 +168,7 @@ Dos notas para quien vaya a tocar esto:
 
 Las guías están en [CONTRIBUTING.md](CONTRIBUTING.md), y hay cuatro reglas que no se negocian: el canario nunca devuelve vacío en silencio, no se desactiva la verificación TLS, no se sube el ritmo de peticiones a los portales y ninguna respuesta afirma vigencia.
 
-Si la extensión te dio una respuesta incorrecta, ese es el reporte más valioso: hay una [plantilla de issue](https://github.com/Angelthebestone/Normativa-colombiana-MCP/issues/new/choose) para eso.
+Si el servidor te dio una respuesta incorrecta, ese es el reporte más valioso: hay una [plantilla de issue](https://github.com/Angelthebestone/Normativa-colombiana-MCP/issues/new/choose) para eso.
 
 Para reportar una vulnerabilidad, mira [SECURITY.md](SECURITY.md); no abras un issue público.
 

@@ -24,9 +24,8 @@ import { decodificar } from '../src/http.ts'
 import * as gestor from '../src/fuentes/gestor.ts'
 import * as corte from '../src/fuentes/corte.ts'
 
-// Las pruebas marcadas con RED consultan los portales oficiales. En integración
-// continua se saltan con SIN_RED=1: no tiene sentido que cada push de cada fork
-// golpee un servicio público. La suite completa corre una vez por semana.
+// Las pruebas marcadas con RED consultan los portales oficiales. Con SIN_RED=1
+// se saltan, para iterar rápido o sin conexión sin golpear un servicio público.
 const RED = { timeout: 180_000, skip: process.env['SIN_RED'] ? 'requiere red (SIN_RED=1)' : false }
 
 // --- lógica pura ---------------------------------------------------------
