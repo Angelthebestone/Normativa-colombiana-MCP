@@ -3,6 +3,16 @@
 Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/).
 Este proyecto sigue [versionado semántico](https://semver.org/lang/es/).
 
+## [1.0.1] — 2026-07-28
+
+### Corregido
+
+- El paquete de npm declaraba como dependencias el SDK de MCP, cheerio y zod, y `npm install` bajaba 111 paquetes que nunca se usan: esbuild ya los empaqueta dentro del bundle. Pasan a dependencias de desarrollo y la instalación queda sin dependencias.
+
+### Añadido
+
+- El README documenta las tres formas de instalar desde npm: `npx`, local y global.
+
 ## [No publicado]
 
 ### Añadido

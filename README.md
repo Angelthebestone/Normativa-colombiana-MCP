@@ -27,9 +27,20 @@ La más sencilla si usas Claude Desktop: no requiere Node ni tocar archivos de c
 
 Claude Desktop trae su propio Node, así que no hace falta instalar nada más.
 
-### Opción B — cualquier otro cliente MCP, con `npx`
+### Opción B — cualquier otro cliente MCP, desde npm
 
-Requiere **Node 18 o superior**. No hay que clonar ni compilar nada: el paquete de npm trae el servidor ya construido y el índice temático dentro.
+Publicado como [`normativa-colombia-mcp`](https://www.npmjs.com/package/normativa-colombia-mcp). Requiere **Node 18 o superior**. No hay que clonar ni compilar nada: el paquete trae el servidor ya construido y el índice temático dentro, y no arrastra ninguna dependencia.
+
+```bash
+# sin instalar nada, la forma habitual en clientes MCP
+npx -y normativa-colombia-mcp
+
+# o instalado en el proyecto
+npm install normativa-colombia-mcp
+
+# o disponible en todo el sistema
+npm install -g normativa-colombia-mcp
+```
 
 Casi todos los clientes comparten este formato:
 
@@ -72,6 +83,8 @@ claude mcp add normativa-colombia -- npx -y normativa-colombia-mcp
   }
 }
 ```
+
+Si lo instalaste con `npm install -g`, el comando es `normativa-colombia-mcp` a secas, sin argumentos.
 
 Si tu cliente no está en la lista, busca dónde declara servidores MCP por stdio: el comando y los argumentos son siempre los mismos.
 
