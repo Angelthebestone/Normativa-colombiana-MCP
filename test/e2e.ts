@@ -14,7 +14,8 @@ import { fileURLToPath } from 'node:url'
 import test, { after, before } from 'node:test'
 
 const SERVIDOR = fileURLToPath(new URL('../server/index.js', import.meta.url))
-const LENTO = { timeout: 240_000 }
+const CONTRATO = { timeout: 30_000 }
+const LENTO = { timeout: 240_000, skip: process.env['SIN_RED'] ? 'requiere red (SIN_RED=1)' : false }
 
 class Cliente {
   private proc: ChildProcessWithoutNullStreams
@@ -89,7 +90,7 @@ after(() => c?.cerrar())
 
 // --- contrato que ve el cliente -----------------------------------------
 
-test('las 11 herramientas se declaran con esquemas utilizables', LENTO, async () => {
+test('las 11 herramientas se declaran con esquemas utilizables', CONTRATO, async () => {
   const { tools } = await c.peticion('tools/list')
   assert.equal(tools.length, 11, tools.map((t: any) => t.name).join(', '))
 
@@ -107,7 +108,7 @@ test('las 11 herramientas se declaran con esquemas utilizables', LENTO, async ()
   assert.deepEqual(sentencia.inputSchema.required, ['ruta'], 'lo obligatorio debe declararse obligatorio')
 })
 
-test('los prompts se declaran y se resuelven', LENTO, async () => {
+test('los prompts se declaran y se resuelven', CONTRATO, async () => {
   const { prompts } = await c.peticion('prompts/list')
   assert.equal(prompts.length, 4)
   const p = await c.peticion('prompts/get', { name: 'sigue-vigente', arguments: { norma: 'Ley 909 de 2004' } })

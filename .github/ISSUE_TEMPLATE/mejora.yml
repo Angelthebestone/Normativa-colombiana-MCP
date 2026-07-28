@@ -1,0 +1,26 @@
+name: Propuesta de mejora
+description: Una herramienta nueva, una fuente nueva o un cambio de comportamiento
+title: '[mejora] '
+labels: ['mejora']
+body:
+  - type: textarea
+    id: problema
+    attributes:
+      label: Qué problema resuelve
+      description: Describe la consulta real que hoy no se puede hacer, o la que se hace mal.
+    validations:
+      required: true
+  - type: textarea
+    id: propuesta
+    attributes:
+      label: Qué propones
+    validations:
+      required: true
+  - type: textarea
+    id: fuente
+    attributes:
+      label: Si propones una fuente nueva
+      description: |
+        Antes de escribir código hay que comprobar dos cosas. Si ya las miraste, ponlas aquí:
+        qué dice el robots.txt del sitio, y si existe una API JSON aunque no esté documentada
+        (los bundles de JavaScript del propio sitio suelen revelarla).

@@ -1,5 +1,9 @@
 # Normativa Colombia — extensión para Claude
 
+[![CI](https://github.com/Angelthebestone/Normativa-colombiana-MCP/actions/workflows/ci.yml/badge.svg)](https://github.com/Angelthebestone/Normativa-colombiana-MCP/actions/workflows/ci.yml)
+[![Portales](https://github.com/Angelthebestone/Normativa-colombiana-MCP/actions/workflows/portales.yml/badge.svg)](https://github.com/Angelthebestone/Normativa-colombiana-MCP/actions/workflows/portales.yml)
+[![Licencia: MIT](https://img.shields.io/badge/licencia-MIT-blue.svg)](LICENSE)
+
 Consulta la normativa y la jurisprudencia colombiana directamente desde Claude, sin abrir el navegador ni pelear con formularios.
 
 Conecta dos fuentes oficiales:
@@ -45,12 +49,14 @@ La extensión también añade comandos listos en Claude Desktop: *¿Qué normas 
 
 ```bash
 npm install
-npm run check             # typecheck + lint + 30 pruebas de biblioteca + 17 de extremo a extremo
+npm run check             # typecheck + lint + 30 pruebas de biblioteca + 18 de extremo a extremo
 npm run generar-indice    # regenera datos/indice-tematico.json (~20 MB de descarga)
 npm run pack              # produce normativa-colombia.mcpb
 ```
 
 `datos/indice-tematico.json` no está versionado por su tamaño: genéralo antes de empaquetar.
+
+Las pruebas consultan los portales oficiales. `SIN_RED=1 npm test` corre solo la lógica pura, que es lo que hace la integración continua en cada push; la suite completa se ejecuta una vez por semana y avisa si los portales cambiaron.
 
 Estructura:
 
@@ -72,6 +78,14 @@ Dos notas para quien vaya a tocar esto:
 - **El portal envía una cadena TLS incompleta.** Su certificado lo emite «Sectigo RSA Organization Validation», pero el servidor manda el intermedio de «Domain Validation». `curl` lo tolera porque su bundle ya trae ese certificado; Node no. `src/ca.ts` incluye el intermedio correcto para completar la cadena **sin desactivar la verificación**. No lo cambies por `rejectUnauthorized: false`.
 - **El canario.** Si el HTML del portal cambia, los parsers lanzan `CanarioError` en vez de devolver listas vacías. Es deliberado: una lista vacía silenciosa se lee como «no existe esa norma», y en materia legal esa confusión es el peor fallo posible.
 
+## Contribuir
+
+Las guías están en [CONTRIBUTING.md](CONTRIBUTING.md), y hay cuatro reglas que no se negocian: el canario nunca devuelve vacío en silencio, no se desactiva la verificación TLS, no se sube el ritmo de peticiones a los portales y ninguna respuesta afirma vigencia.
+
+Si la extensión te dio una respuesta incorrecta, ese es el reporte más valioso: hay una [plantilla de issue](https://github.com/Angelthebestone/Normativa-colombiana-MCP/issues/new/choose) para eso.
+
+Para reportar una vulnerabilidad, mira [SECURITY.md](SECURITY.md); no abras un issue público.
+
 ## Licencia
 
-MIT (ver [LICENSE](LICENSE)). Los contenidos normativos son de sus entidades emisoras y públicos por mandato de la Ley 1712 de 2014.
+Código bajo licencia MIT (ver [LICENSE](LICENSE)). Sobre los contenidos normativos y el acceso automatizado a los portales, mira [NOTICE.md](NOTICE.md).

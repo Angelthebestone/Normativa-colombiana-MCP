@@ -1,0 +1,44 @@
+name: El portal cambió
+description: La extensión avisa de que no pudo leer la respuesta del portal
+title: '[portal] '
+labels: ['portal-cambió']
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Es el fallo más probable de este proyecto: los portales no tienen API documentada y pueden cambiar su HTML sin avisar.
+
+        Si viste un mensaje que empieza con «El portal cambió su estructura», estás en el sitio correcto.
+  - type: textarea
+    id: mensaje
+    attributes:
+      label: Mensaje completo que mostró la extensión
+      description: Incluye el texto entre paréntesis; dice exactamente qué dejó de encontrarse.
+      placeholder: El portal cambió su estructura y esta extensión no pudo leer la respuesta (no aparece "Número de documentos encontrados")...
+    validations:
+      required: true
+  - type: input
+    id: consulta
+    attributes:
+      label: Qué le pediste a Claude
+      placeholder: '"¿Qué normas hay sobre teletrabajo?"'
+    validations:
+      required: true
+  - type: dropdown
+    id: fuente
+    attributes:
+      label: Qué fuente
+      options:
+        - Gestor Normativo (Función Pública)
+        - Relatoría de la Corte Constitucional
+        - No estoy seguro
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Versión de la extensión
+      description: Aparece en Claude Desktop, en Configuración → Extensiones.
+      placeholder: 1.0.0
+    validations:
+      required: true

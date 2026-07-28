@@ -1,0 +1,47 @@
+name: Respuesta incorrecta o engañosa
+description: La extensión respondió, pero lo que devolvió está mal o induce a error
+title: '[respuesta] '
+labels: ['respuesta-incorrecta']
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Es el reporte más valioso de este proyecto. Una respuesta normativa equivocada puede costarle a alguien una decisión laboral o disciplinaria, así que estos issues tienen prioridad.
+  - type: textarea
+    id: pregunta
+    attributes:
+      label: Qué preguntaste
+    validations:
+      required: true
+  - type: textarea
+    id: respuesta
+    attributes:
+      label: Qué respondió la extensión
+      description: Pega el texto de la herramienta, no solo el resumen que hizo Claude.
+    validations:
+      required: true
+  - type: textarea
+    id: esperado
+    attributes:
+      label: Qué debería haber respondido, y cómo lo sabes
+      description: Si puedes, incluye el enlace a la norma o sentencia en el portal oficial.
+    validations:
+      required: true
+  - type: checkboxes
+    id: tipo
+    attributes:
+      label: Qué tipo de error es
+      options:
+        - label: Devolvió vacío y sí existe lo que busqué
+        - label: Devolvió algo que no corresponde a lo que pedí
+        - label: Presentó como resumen algo que no lo es
+        - label: Afirmó o dio a entender que una norma está vigente
+        - label: Citó una norma, artículo o sentencia que no existe
+        - label: El texto salió con caracteres rotos
+  - type: input
+    id: version
+    attributes:
+      label: Versión de la extensión
+      placeholder: 1.0.0
+    validations:
+      required: true

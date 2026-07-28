@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Reportar una vulnerabilidad
+    url: https://github.com/Angelthebestone/Normativa-colombiana-MCP/security/advisories/new
+    about: No abras un issue público para fallos de seguridad; usa el reporte privado.
+  - name: Consultar la fuente oficial
+    url: https://www.funcionpublica.gov.co/eva/gestornormativo
+    about: Si dudas del contenido de una norma, verifícalo en el Gestor Normativo.
