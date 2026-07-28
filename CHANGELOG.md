@@ -12,7 +12,7 @@ Este proyecto sigue [versionado semántico](https://semver.org/lang/es/).
 
 ## [1.0.0] — 2026-07-28
 
-Primera versión.
+Primera versión. Publicada en [npm](https://www.npmjs.com/package/normativa-colombia-mcp) y como extensión `.mcpb` en [Releases](https://github.com/Angelthebestone/Normativa-colombiana-MCP/releases/tag/v1.0.0).
 
 ### Añadido
 

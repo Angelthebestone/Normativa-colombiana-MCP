@@ -1,5 +1,6 @@
 # Normativa Colombia — servidor MCP
 
+[![npm](https://img.shields.io/npm/v/normativa-colombia-mcp.svg)](https://www.npmjs.com/package/normativa-colombia-mcp)
 [![Licencia: MIT](https://img.shields.io/badge/licencia-MIT-blue.svg)](LICENSE)
 [![MCP](https://img.shields.io/badge/MCP-servidor-black.svg)](https://modelcontextprotocol.io)
 
@@ -26,36 +27,18 @@ La más sencilla si usas Claude Desktop: no requiere Node ni tocar archivos de c
 
 Claude Desktop trae su propio Node, así que no hace falta instalar nada más.
 
-### Opción B — cualquier otro cliente MCP
+### Opción B — cualquier otro cliente MCP, con `npx`
 
-Requiere **Node 22 o superior**. Se prepara una vez:
+Requiere **Node 18 o superior**. No hay que clonar ni compilar nada: el paquete de npm trae el servidor ya construido y el índice temático dentro.
 
-```bash
-git clone https://github.com/Angelthebestone/Normativa-colombiana-MCP.git
-cd Normativa-colombiana-MCP
-npm install
-npm run generar-indice   # índice temático, ~20 MB de descarga, una sola vez
-npm run build            # genera server/index.js
-```
-
-Eso deja un servidor que se arranca así, desde cualquier directorio:
-
-```bash
-node /ruta/a/Normativa-colombiana-MCP/server/index.js
-```
-
-Esa línea es lo único que necesita cualquier cliente. Lo que cambia entre uno y otro es dónde se escribe.
-
-#### Configuración por cliente
-
-La mayoría comparte este formato. Usa la **ruta absoluta**; en Windows escribe las barras dobles (`C:\\Users\\...`) o barras normales.
+Casi todos los clientes comparten este formato:
 
 ```json
 {
   "mcpServers": {
     "normativa-colombia": {
-      "command": "node",
-      "args": ["/ruta/absoluta/a/Normativa-colombiana-MCP/server/index.js"]
+      "command": "npx",
+      "args": ["-y", "normativa-colombia-mcp"]
     }
   }
 }
@@ -73,7 +56,7 @@ La mayoría comparte este formato. Usa la **ruta absoluta**; en Windows escribe 
 **Claude Code** no usa archivo; se registra por línea de comandos:
 
 ```bash
-claude mcp add normativa-colombia -- node /ruta/absoluta/a/Normativa-colombiana-MCP/server/index.js
+claude mcp add normativa-colombia -- npx -y normativa-colombia-mcp
 ```
 
 **VS Code** usa la clave `servers` en vez de `mcpServers`, en `.mcp.json` del proyecto o en la configuración de usuario:
@@ -83,8 +66,8 @@ claude mcp add normativa-colombia -- node /ruta/absoluta/a/Normativa-colombiana-
   "servers": {
     "normativa-colombia": {
       "type": "stdio",
-      "command": "node",
-      "args": ["/ruta/absoluta/a/Normativa-colombiana-MCP/server/index.js"]
+      "command": "npx",
+      "args": ["-y", "normativa-colombia-mcp"]
     }
   }
 }
@@ -96,10 +79,24 @@ Si tu cliente no está en la lista, busca dónde declara servidores MCP por stdi
 
 ```bash
 echo '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"prueba","version":"1"}}}' \
-  | node /ruta/a/Normativa-colombiana-MCP/server/index.js
+  | npx -y normativa-colombia-mcp
 ```
 
 Debe responder un JSON con `"name":"normativa-colombia"` y un campo `instructions`.
+
+### Opción C — desde el código
+
+Para desarrollar o para fijar una versión propia. Requiere **Node 22 o superior**:
+
+```bash
+git clone https://github.com/Angelthebestone/Normativa-colombiana-MCP.git
+cd Normativa-colombiana-MCP
+npm install
+npm run generar-indice   # índice temático, ~20 MB de descarga, una sola vez
+npm run build            # genera server/index.js
+```
+
+Después se apunta el cliente a `node /ruta/absoluta/a/Normativa-colombiana-MCP/server/index.js`, con el mismo formato de arriba. Funciona desde cualquier directorio de trabajo.
 
 ### Qué recibe el cliente
 
