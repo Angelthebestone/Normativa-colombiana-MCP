@@ -123,9 +123,29 @@ export type Filtros = {
   subtema?: string | number
 }
 
-async function consultar(p: URLSearchParams): Promise<{ total: number; items: Resultado[] }> {
+async function consultar(p: URLSearchParams, termino = ''): Promise<{ total: number; items: Resultado[] }> {
   p.set('t', 'ejecuta_busqueda_avanzada2')
-  return parseResultados(await traer(`${BASE_GESTOR}/gestion/funphp/funajax.php?${p}`))
+  return parseResultados(await traer(`${BASE_GESTOR}/gestion/funphp/funajax.php?${p}`), termino)
+}
+
+/**
+ * Traduce un par tema/subtema (por nombre) al `subtemaid` que entiende el
+ * buscador. Es la vía que de verdad encuentra: `palabras=teletrabajo` devuelve
+ * 3 documentos en todo el portal, mientras que el subtema correspondiente
+ * devuelve 55, de los cuales 43 son conceptos.
+ *
+ * Ojo: el `temsubid` de la consulta temática es OTRO espacio de ids y no sirve
+ * como `subtemaid`.
+ */
+export async function subtemaPorNombre(tema: string, subtema: string): Promise<string | undefined> {
+  const idTema = await resolver(tema, 'temas')
+  if (!idTema) return undefined
+  const objetivo = sinTildes(subtema).toLowerCase()
+  const lista = await subtemas(idTema)
+  return (
+    lista.find((s) => sinTildes(s.nombre).toLowerCase() === objetivo)?.id ??
+    lista.find((s) => sinTildes(s.nombre).toLowerCase().includes(objetivo))?.id
+  )
 }
 
 export async function buscar(f: Filtros): Promise<{ total: number; items: Resultado[]; nota?: string }> {
@@ -152,7 +172,7 @@ export async function buscar(f: Filtros): Promise<{ total: number; items: Result
 
   if (![...p.keys()].length) throw new Error('Indica al menos un filtro o unas palabras para buscar.')
 
-  let { total, items } = await consultar(p)
+  let { total, items } = await consultar(p, f.palabras ?? '')
 
   // `gestión` (18 resultados) y `gestion` (3) son conjuntos distintos: el portal
   // no normaliza tildes, así que se consultan ambas y se unen.
@@ -160,7 +180,7 @@ export async function buscar(f: Filtros): Promise<{ total: number; items: Result
     const p2 = new URLSearchParams(p)
     p2.set('palabras', sinTildes(p.get('palabras')!))
     try {
-      const otra = await consultar(p2)
+      const otra = await consultar(p2, f.palabras ?? '')
       const vistos = new Set(items.map((i) => i.id))
       const extra = otra.items.filter((i) => !vistos.has(i.id))
       if (extra.length) {
@@ -208,7 +228,7 @@ export async function tematica(texto: string): Promise<FilaTema[]> {
 
 // `normasfp.php` es un listado plano: no trae el contador "encontrados" que sí
 // devuelve el buscador, así que se leen los enlaces directamente.
-export async function normasFp(): Promise<Resultado[]> {
+export async function normasFp(filtro = ''): Promise<Resultado[]> {
   const items = enlacesDeNormas(await traer(`${BASE_GESTOR}/normasfp.php`))
   if (!items.length) throw new CanarioError('el listado de normas de Función Pública no trae enlaces')
   return items

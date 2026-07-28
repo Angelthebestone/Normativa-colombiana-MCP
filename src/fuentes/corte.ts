@@ -74,21 +74,32 @@ function aProvidencia(hit: any): Providencia {
   }
 }
 
+/** C = constitucionalidad, T = tutela, SU = unificación, A = auto. */
+export type TipoProvidencia = 'C' | 'T' | 'SU' | 'A'
+
+const prefijo = (p: Providencia): string =>
+  (p.sentencia.match(/^\s*(SU|C|T|A)\b/i)?.[1] ?? '').toUpperCase()
+
 export async function buscar(opts: {
   termino: string
   desde?: string
   hasta?: string
   limite?: number
+  tipos?: TipoProvidencia[]
 }): Promise<{ total: number; items: Providencia[] }> {
   const termino = limpiarTermino(opts.termino)
   if (!termino) throw new Error('Indica un término para buscar jurisprudencia.')
 
+  const limite = Math.min(Math.max(opts.limite ?? 10, 1), 100)
+  const quiere = opts.tipos?.length ? new Set(opts.tipos.map((t) => t.toUpperCase())) : null
+  // La API no filtra por tipo de providencia, así que se pide de más y se
+  // recorta aquí; sin esto, pedir 10 tutelas podía devolver 10 autos.
   const p = new URLSearchParams({
     searchOption: 'texto',
     fini: opts.desde ?? '1992-01-01',
     ffin: opts.hasta ?? '2100-12-31',
     buscar_por: termino,
-    maxprov: String(Math.min(Math.max(opts.limite ?? 10, 1), 100)),
+    maxprov: String(quiere ? Math.min(limite * 10, 300) : limite),
     slop: '1',
     accion: 'search',
     tipo: 'json',
@@ -99,9 +110,11 @@ export async function buscar(opts: {
   if (!hits) {
     throw new Error('La respuesta de la relatoría no trae el bloque de resultados esperado; la API pudo cambiar.')
   }
+  const todas: Providencia[] = (hits.hits ?? []).map(aProvidencia)
+  const items = (quiere ? todas.filter((x) => quiere.has(prefijo(x))) : todas).slice(0, limite)
   return {
-    total: typeof hits.total?.value === 'number' ? hits.total.value : (hits.hits?.length ?? 0),
-    items: (hits.hits ?? []).map(aProvidencia),
+    total: typeof hits.total?.value === 'number' ? hits.total.value : todas.length,
+    items,
   }
 }
 
@@ -119,8 +132,20 @@ export async function obtenerTexto(ruta: string): Promise<{ url: string; texto: 
     throw new Error(`Ruta de providencia inválida: ${ruta}. Se espera algo como 2024/T-099-24.htm`)
   }
   const url = `${BASE}/${limpia}`
-  const $ = cargar(await pedir(url))
-  return { url, texto: textoDe($, 'body') }
+  const html = await pedir(url)
+  // Una ruta inexistente no da 404: devuelve el armazón de la SPA en Angular.
+  // Confundir eso con "documento vacío" haría creer que la sentencia no dice nada.
+  if (html.includes('data-beasties-container') || /<title>\s*CORTE CONSTITUCIONAL DE COLOMBIA/i.test(html)) {
+    throw new NoExisteProvidencia(limpia)
+  }
+  return { url, texto: textoDe(cargar(html), 'body') }
+}
+
+export class NoExisteProvidencia extends Error {
+  constructor(ruta: string) {
+    super(`No existe una providencia en la ruta "${ruta}". Verifícala con buscar_jurisprudencia.`)
+    this.name = 'NoExisteProvidencia'
+  }
 }
 
 /** Resuelve "C-337/11" a su providencia usando el buscador. */

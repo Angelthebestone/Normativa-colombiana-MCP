@@ -12,6 +12,7 @@ import {
   trocear,
   sinTildes,
 } from './parse.ts'
+import { NoExisteError } from './parse.ts'
 import * as gestor from './fuentes/gestor.ts'
 import * as corte from './fuentes/corte.ts'
 
@@ -43,6 +44,21 @@ function cargarIndice(): Indice | null {
     indice = null // sin índice se consulta el portal; no es un fallo fatal
   }
   return indice
+}
+
+/**
+ * Par tema/subtema del índice que mejor case con el término. Entre varios se
+ * prefiere el que agrupa más normas: "teletrabajo" existe como tema propio con
+ * 1 documento y como subtema de EMPLEO con 55, y el útil es el segundo.
+ */
+function temaDelIndice(termino: string): { t: string; s: string } | null {
+  const idx = cargarIndice()
+  const q = sinTildes(termino).toLowerCase().trim()
+  if (!idx || !q) return null
+  const candidatas = idx.filas.filter((f) => sinTildes(f.s).toLowerCase().includes(q))
+  if (!candidatas.length) return null
+  const exacta = candidatas.filter((f) => sinTildes(f.s).toLowerCase() === q)
+  return (exacta.length ? exacta : candidatas).sort((a, b) => b.n.length - a.n.length)[0] ?? null
 }
 
 function frescura(generado: string): string {
@@ -124,16 +140,45 @@ server.registerTool(
     inputSchema: {
       palabras: z.string().optional().describe('Términos distintivos; evita frases largas'),
       tipo_documento: z.string().optional().describe('Nombre o id: "Ley", "Decreto", "Sentencia", "Concepto"'),
-      numero: z.union([z.string(), z.number()]).optional(),
-      anio: z.union([z.string(), z.number()]).optional(),
+      numero: z.string().regex(/^\d+$/).optional().describe('Número de la norma, como texto. Ej.: "909"'),
+      anio: z.string().regex(/^\d{4}$/).optional().describe('Año de cuatro dígitos, como texto. Ej.: "2004"'),
       entidad: z.string().optional().describe('Nombre o id: "Corte Constitucional", "Congreso de la República"'),
       tema: z.string().optional().describe('Nombre o id de tema del catálogo'),
-      subtema: z.union([z.string(), z.number()]).optional(),
+      subtema: z.string().regex(/^\d+$/).optional().describe('subtemaid del catálogo (NO el temsubid de buscar_por_tema)'),
       limite: z.number().int().min(1).max(100).default(20),
     },
   },
   async ({ palabras, tipo_documento, numero, anio, entidad, tema, subtema, limite }) => {
     const r = await gestor.buscar({ palabras, tipo: tipo_documento, numero, anio, entidad, tema, subtema })
+    const notas = r.nota ? [r.nota] : []
+
+    // El índice de palabras del portal es pobrísimo: "teletrabajo" solo casa con
+    // 3 documentos en todo el corpus, y con ninguno de los 43 conceptos que sí
+    // están clasificados bajo ese subtema. Cuando la búsqueda por palabras rinde
+    // poco, se reintenta por la vía temática, que es la que de verdad encuentra.
+    if (palabras && r.items.length < 5 && !subtema) {
+      const par = temaDelIndice(palabras)
+      if (par) {
+        try {
+          const sub = await gestor.subtemaPorNombre(par.t, par.s)
+          if (sub) {
+            const via = await gestor.buscar({ tipo: tipo_documento, numero, anio, entidad, subtema: sub })
+            const vistos = new Set(r.items.map((i) => i.id))
+            const extra = via.items.filter((i) => !vistos.has(i.id))
+            if (extra.length) {
+              r.items.push(...extra)
+              notas.push(
+                `La búsqueda por palabras solo halló ${r.total}; se añadieron ${extra.length} documentos clasificados ` +
+                  `bajo el subtema oficial "${par.t} / ${par.s}", que es donde el portal los tiene indexados.`,
+              )
+            }
+          }
+        } catch {
+          /* la vía temática es un refuerzo: si falla, quedan los de palabras */
+        }
+      }
+    }
+
     if (!r.items.length) {
       return vacio(
         'normas con esos filtros',
@@ -144,9 +189,9 @@ server.registerTool(
       .slice(0, limite)
       .map((i) => `- ${i.titulo} (id ${i.id})\n  ${i.resumen || '(sin resumen)'}\n  ${i.url}`)
       .join('\n')
-    const mas = r.items.length > limite ? `\n\nSe muestran ${limite} de ${r.total} encontradas.` : ''
+    const mas = r.items.length > limite ? `\n\nSe muestran ${limite} de ${r.items.length} reunidos.` : ''
     return txt(
-      `${r.total} documento(s) encontrado(s).${r.nota ? `\n${r.nota}` : ''}\n\n${lista}${mas}`,
+      `${r.items.length} documento(s) reunido(s).${notas.length ? `\n${notas.join(' ')}` : ''}\n\n${lista}${mas}`,
     )
   },
 )
@@ -214,7 +259,7 @@ server.registerTool(
       'el Decreto 1083 de 2015 tiene 925.000 caracteres. Usa buscar_en_texto para encontrar un tema dentro ' +
       'del articulado (esta es la verdadera búsqueda de texto completo), o articulo para un artículo puntual.',
     inputSchema: {
-      id: z.union([z.string(), z.number()]).describe('id numérico de la norma'),
+      id: z.string().regex(/^\d+$/).describe('id numérico de la norma, como texto. Ej.: "31431"'),
       buscar_en_texto: z.string().optional().describe('Devuelve solo los fragmentos que mencionan este término'),
       articulo: z.string().optional().describe('Número de artículo, ej. "6" o "2.2.5.1.5"'),
       desde: z.number().int().min(0).default(0),
@@ -222,7 +267,13 @@ server.registerTool(
     },
   },
   async ({ id, buscar_en_texto, articulo, desde, limite_caracteres }) => {
-    const n = await gestor.obtenerNorma(id)
+    let n: Awaited<ReturnType<typeof gestor.obtenerNorma>>
+    try {
+      n = await gestor.obtenerNorma(id)
+    } catch (e) {
+      if (e instanceof NoExisteError) return vacio(`una norma con id ${id}`, 'Verifica el id con buscar_normas o resolver_cita.')
+      throw e
+    }
     const cab = [
       n.titulo,
       ...Object.entries(n.fechas).map(([k, v]) => `${k}: ${v}`),
@@ -258,7 +309,7 @@ server.registerTool(
         )
       }
       cuerpo = f.trozos.join('\n\n---\n\n')
-      avisoTexto = `${f.total} aparición(es) de "${buscar_en_texto}"; se muestran ${f.trozos.length}.`
+      avisoTexto = `${f.total} aparición(es) de "${buscar_en_texto}", agrupadas en ${f.pasajes} pasaje(s); se muestran ${f.trozos.length}.`
     } else {
       const t = trocear(n.texto, desde, limite_caracteres)
       cuerpo = t.texto
@@ -319,13 +370,17 @@ server.registerTool(
       'Úsala para sentencias y autos: el Gestor Normativo tiene muy poca jurisprudencia reciente.',
     inputSchema: {
       termino: z.string(),
-      desde: z.string().optional().describe('Fecha inicial AAAA-MM-DD (por defecto 1992-01-01)'),
-      hasta: z.string().optional().describe('Fecha final AAAA-MM-DD'),
+      desde: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional().describe('Fecha inicial AAAA-MM-DD (por defecto 1992-01-01)'),
+      hasta: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional().describe('Fecha final AAAA-MM-DD'),
+      tipos: z
+        .array(z.enum(['C', 'T', 'SU', 'A']))
+        .optional()
+        .describe('Filtra por tipo: C constitucionalidad, T tutela, SU unificación, A auto'),
       limite: z.number().int().min(1).max(100).default(10),
     },
   },
-  async ({ termino, desde, hasta, limite }) => {
-    const r = await corte.buscar({ termino, desde, hasta, limite })
+  async ({ termino, desde, hasta, tipos, limite }) => {
+    const r = await corte.buscar({ termino, desde, hasta, tipos, limite })
     if (!r.items.length) return vacio(`providencias sobre "${termino}"`, 'Prueba un término más general o revisa el rango de fechas.')
     const lista = r.items
       .map(
@@ -357,9 +412,19 @@ server.registerTool(
     },
   },
   async ({ ruta, buscar_en_texto, desde, limite_caracteres }) => {
-    const doc = await corte.obtenerTexto(ruta)
+    let doc: Awaited<ReturnType<typeof corte.obtenerTexto>>
+    try {
+      doc = await corte.obtenerTexto(ruta)
+    } catch (e) {
+      // Que la ruta no exista no es un fallo de la herramienta: se informa como texto.
+      if (e instanceof corte.NoExisteProvidencia) return vacio(`la providencia "${ruta}"`, e.message)
+      throw e
+    }
     if (doc.texto.length < 200) {
-      return txt(`La providencia ${ruta} no trae texto legible (${doc.texto.length} caracteres). URL: ${doc.url}`)
+      return txt(
+        `La providencia ${ruta} existe pero su documento no trae texto legible (${doc.texto.length} caracteres). ` +
+          `Consúltala directamente en ${doc.url}`,
+      )
     }
     if (buscar_en_texto) {
       const f = fragmentos(doc.texto, buscar_en_texto)
@@ -367,8 +432,8 @@ server.registerTool(
         return txt(`El término "${buscar_en_texto}" no aparece en ${ruta} (${doc.texto.length} caracteres revisados).\nURL: ${doc.url}`)
       }
       return txt(
-        `${f.total} aparición(es) de "${buscar_en_texto}" en ${ruta}; se muestran ${f.trozos.length}.\n\n` +
-          `${f.trozos.join('\n\n---\n\n')}\n\nURL: ${doc.url}`,
+        `${f.total} aparición(es) de "${buscar_en_texto}" en ${ruta}, agrupadas en ${f.pasajes} pasaje(s); ` +
+          `se muestran ${f.trozos.length}.\n\n${f.trozos.join('\n\n---\n\n')}\n\nURL: ${doc.url}`,
       )
     }
     const t = trocear(doc.texto, desde, limite_caracteres)
@@ -385,7 +450,7 @@ server.registerTool(
   {
     title: 'Listar subtemas de un tema',
     description: 'Subtemas activos de un tema del catálogo, para afinar buscar_normas.',
-    inputSchema: { tema_id: z.union([z.string(), z.number()]) },
+    inputSchema: { tema_id: z.string().regex(/^\d+$/).describe('id de tema del catálogo, como texto') },
   },
   async ({ tema_id }) => {
     const s = await gestor.subtemas(tema_id)
@@ -402,8 +467,8 @@ server.registerTool(
       'Devuelve el "restrictor": el extracto que explica por qué esa norma es pertinente para ese subtema. ' +
       'Es la información más valiosa del Gestor y no aparece en la búsqueda normal.',
     inputSchema: {
-      temsubid: z.union([z.string(), z.number()]),
-      normid: z.union([z.string(), z.number()]),
+      temsubid: z.string().regex(/^\d+$/).describe('temsubid que devuelve buscar_por_tema'),
+      normid: z.string().regex(/^\d+$/).describe('normid que devuelve buscar_por_tema'),
     },
   },
   async ({ temsubid, normid }) => {
@@ -423,8 +488,8 @@ server.registerTool(
       'sin el asunto. Para buscar conceptos SOBRE UN TEMA usa buscar_normas con tipo_documento "Concepto", ' +
       'que sí consulta los resúmenes temáticos.',
     inputSchema: {
-      numero: z.union([z.string(), z.number()]).optional().describe('Número del concepto, ej. 036201'),
-      anio: z.union([z.string(), z.number()]).optional(),
+      numero: z.string().optional().describe('Número del concepto, como texto. Ej.: "036201"'),
+      anio: z.string().regex(/^\d{4}$/).optional().describe('Año de cuatro dígitos, como texto. Ej.: "2004"'),
       limite: z.number().int().min(1).max(100).default(20),
     },
   },
@@ -447,16 +512,28 @@ server.registerTool(
 server.registerTool(
   'listar_normas_fp',
   {
-    title: 'Listar las normas propias de Función Pública',
-    description: 'Las normas emitidas por el Departamento Administrativo de la Función Pública.',
-    inputSchema: {},
+    title: 'Listar la normativa de competencia de Función Pública',
+    description:
+      'Listado curado por el portal con la normativa que rige o le compete al Departamento Administrativo de la ' +
+      'Función Pública. OJO: no son normas que el DAFP haya expedido — incluye la Constitución Política, la Ley 100 ' +
+      'de 1993 y leyes del Congreso. Es un listado corto y fijo; para buscar normativa usa buscar_normas.',
+    inputSchema: {
+      filtro: z.string().optional().describe('Texto para acotar por título, ej. "circular" o "1474"'),
+      limite: z.number().int().min(1).max(150).default(40),
+    },
   },
-  async () => {
-    const items = await gestor.normasFp()
-    if (!items.length) return vacio('normas de Función Pública', 'El portal pudo cambiar; reintenta más tarde.')
+  async ({ filtro, limite }) => {
+    const todas = await gestor.normasFp()
+    const q = filtro ? sinTildes(filtro).toLowerCase() : ''
+    const items = todas.filter((i) => !q || sinTildes(`${i.titulo} ${i.resumen}`).toLowerCase().includes(q))
+    if (!items.length) return vacio(`normativa de competencia del DAFP que coincida con "${filtro}"`, 'Prueba sin filtro para ver el listado completo.')
     return txt(
-      `${items.length} norma(s):\n` + items.map((i) => `- ${i.titulo} (id ${i.id})\n  ${i.url}`).join('\n') +
-        ``,
+      `${items.length} de ${todas.length} norma(s) del listado.\n\n` +
+        items
+          .slice(0, limite)
+          .map((i) => `- ${i.titulo} (id ${i.id})\n  ${i.resumen || '(sin resumen)'}\n  ${i.url}`)
+          .join('\n') +
+        (items.length > limite ? `\n\nSe muestran ${limite} de ${items.length}.` : ''),
     )
   },
 )

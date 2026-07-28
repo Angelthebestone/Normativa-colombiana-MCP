@@ -19,6 +19,7 @@ import {
   sinTildes,
   trocear,
 } from '../src/parse.ts'
+import { decodificar } from '../src/http.ts'
 import * as gestor from '../src/fuentes/gestor.ts'
 import * as corte from '../src/fuentes/corte.ts'
 
@@ -55,6 +56,32 @@ test('sinTildes conserva la longitud, para poder cortar por índice', () => {
   assert.equal(sinTildes('Ñoño áéíóú').length, 'Ñoño áéíóú'.length)
 })
 
+test('las ventanas de coincidencia solapadas se fusionan', () => {
+  // Dos apariciones a 10 caracteres una de otra caben en la misma ventana:
+  // devolver dos extractos casi idénticos hace leer lo mismo dos veces.
+  const texto = `${'x'.repeat(500)}pension y pension${'y'.repeat(500)}pension${'z'.repeat(2000)}pension`
+  const f = fragmentos(texto, 'pension', 100)
+  assert.equal(f.total, 4)
+  // Las dos primeras están a 10 caracteres: un solo pasaje. Las otras dos quedan
+  // fuera de la ventana de 100 y son pasajes aparte.
+  assert.equal(f.pasajes, 3)
+  assert.equal(f.trozos.length, 3)
+  assert.match(f.trozos[0]!, /2 coincidencias en este pasaje/)
+})
+
+test('una referencia cruzada dentro de una nota no corta el artículo', () => {
+  const texto = 'ARTÍCULO 1. Uno.\n\nNOTA: ver Artículo 15 Ley 91 de 1989 y su alcance.\n\nARTÍCULO 2. Dos.'
+  const a1 = articulo(texto, '1')
+  assert.match(a1!, /NOTA: ver Artículo 15/, 'la nota de vigencia debe conservarse')
+  assert.doesNotMatch(a1!, /Dos\./)
+})
+
+test('decodifica windows-1252 aunque la cabecera no lo diga', () => {
+  const cp1252 = Buffer.from([0x52, 0x65, 0x69, 0x74, 0x65, 0x72, 0x61, 0x63, 0x69, 0xf3, 0x6e]) // "Reiteración"
+  assert.equal(decodificar(cp1252, 'text/html'), 'Reiteración')
+  assert.equal(decodificar(Buffer.from('gestión', 'utf8'), 'text/html; charset=utf-8'), 'gestión')
+})
+
 test('el troceado informa cuánto omite', () => {
   const t = trocear('a'.repeat(1000), 0, 100)
   assert.equal(t.texto.length, 100)
@@ -71,7 +98,9 @@ test('fragmentos encuentra sin importar tildes y recorta con contexto', () => {
 })
 
 test('se extrae un artículo puntual y se detecta la derogatoria', () => {
-  const texto = 'ARTÍCULO 5. Uno. ARTÍCULO 6. Derogado por la Ley 2 de 2020. Dos. ARTÍCULO 7. Tres.'
+  // Los artículos llegan como encabezado de renglón, que es lo que produce el
+  // extractor de texto sobre el HTML del portal.
+  const texto = 'ARTÍCULO 5. Uno.\nARTÍCULO 6. Derogado por la Ley 2 de 2020. Dos.\nARTÍCULO 7. Tres.'
   const a6 = articulo(texto, '6')
   assert.match(a6!, /Derogado/)
   assert.doesNotMatch(a6!, /Tres/)
@@ -165,6 +194,31 @@ test('el texto de una providencia se trocea', RED, async () => {
   const doc = await corte.obtenerTexto('2024/T-099-24.htm')
   assert.ok(doc.texto.length > 50_000, `texto: ${doc.texto.length}`)
   assert.ok(trocear(doc.texto).texto.length <= 8000)
+})
+
+test('el texto de la Corte llega sin mojibake', RED, async () => {
+  const doc = await corte.obtenerTexto('2011/C-337-11.htm')
+  assert.doesNotMatch(doc.texto, /�/, 'la relatoría sirve windows-1252; leerlo como UTF-8 rompe las tildes')
+  assert.match(doc.texto, /ó|í|á/, 'debe haber tildes bien decodificadas')
+})
+
+test('la jurisprudencia se puede filtrar por tipo de providencia', RED, async () => {
+  const r = await corte.buscar({ termino: 'teletrabajo', tipos: ['C'], limite: 5 })
+  assert.ok(r.items.length > 0)
+  assert.ok(r.items.every((p) => /^\s*C/i.test(p.sentencia)), r.items.map((p) => p.sentencia).join(', '))
+})
+
+test('una ruta de providencia inexistente se distingue de un documento vacío', RED, async () => {
+  await assert.rejects(() => corte.obtenerTexto('2024/NO-EXISTE-99.htm'), /No existe una providencia/)
+})
+
+test('la vía temática encuentra los conceptos que las palabras no', RED, async () => {
+  // palabras=teletrabajo halla 3 documentos en todo el portal y ningún concepto;
+  // el subtema oficial tiene 43. Es el bug que rompía la ruta que documentamos.
+  const sub = await gestor.subtemaPorNombre('EMPLEO', 'Teletrabajo')
+  assert.ok(sub, 'debería resolverse el subtemaid')
+  const r = await gestor.buscar({ subtema: sub!, tipo: 'Concepto' })
+  assert.ok(r.total > 20, `conceptos por subtema: ${r.total}`)
 })
 
 test('la relatoría está al día: hay providencias recientes', RED, async () => {

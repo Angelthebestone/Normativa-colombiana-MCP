@@ -131,21 +131,35 @@ export function trocear(texto: string, desde = 0, limite = 8000): Trozo {
 export function fragmentos(texto: string, termino: string, contexto = 400, max = 10) {
   const plano = sinTildes(texto).toLowerCase()
   const aguja = sinTildes(termino).toLowerCase().trim()
-  if (!aguja) return { total: 0, trozos: [] as string[] }
+  if (!aguja) return { total: 0, trozos: [] as string[], pasajes: 0 }
 
-  const trozos: string[] = []
-  let i = plano.indexOf(aguja)
+  // Ventanas solapadas se fusionan: dos coincidencias cercanas producían seis
+  // extractos casi idénticos y hacían leer lo mismo varias veces.
+  const ventanas: { ini: number; fin: number; hits: number }[] = []
   let total = 0
-  while (i !== -1) {
+  for (let i = plano.indexOf(aguja); i !== -1; i = plano.indexOf(aguja, i + aguja.length)) {
     total++
-    if (trozos.length < max) {
-      const ini = Math.max(0, i - contexto)
-      const fin = Math.min(texto.length, i + aguja.length + contexto)
-      trozos.push((ini > 0 ? '…' : '') + texto.slice(ini, fin).trim() + (fin < texto.length ? '…' : ''))
+    const ini = Math.max(0, i - contexto)
+    const fin = Math.min(texto.length, i + aguja.length + contexto)
+    const ultima = ventanas.at(-1)
+    if (ultima && ini <= ultima.fin) {
+      ultima.fin = Math.max(ultima.fin, fin)
+      ultima.hits++
+    } else {
+      ventanas.push({ ini, fin, hits: 1 })
     }
-    i = plano.indexOf(aguja, i + aguja.length)
   }
-  return { total, trozos }
+
+  const trozos = ventanas
+    .slice(0, max)
+    .map(
+      (v) =>
+        (v.ini > 0 ? '…' : '') +
+        texto.slice(v.ini, v.fin).trim() +
+        (v.fin < texto.length ? '…' : '') +
+        (v.hits > 1 ? `\n[${v.hits} coincidencias en este pasaje]` : ''),
+    )
+  return { total, trozos, pasajes: ventanas.length }
 }
 
 /** Índice de artículos, para que Claude sepa qué pedir sin traerse la norma entera. */
@@ -165,7 +179,11 @@ export function articulo(texto: string, numero: string): string | null {
   const m = re.exec(texto)
   if (!m) return null
   const desde = m.index + m[0].length
-  const sig = texto.slice(desde).search(/\bART[IÍ]CULOS?\b|\bArt[ií]culos?\b/)
+  // El siguiente artículo tiene que ser un encabezado (inicio de renglón y
+  // seguido de su número). Sin esta exigencia, una referencia cruzada dentro de
+  // una nota —"Artículo 15 Ley 91 de 1989"— cortaba el artículo por la mitad y
+  // se perdían justo las notas de vigencia.
+  const sig = texto.slice(desde).search(/\n\s*(?:ART[IÍ]CULO|Art[ií]culo)\s+[\d]/)
   return texto.slice(m.index, sig >= 0 ? desde + sig : Math.min(texto.length, m.index + 20000)).trim()
 }
 
@@ -187,29 +205,62 @@ export function advertenciasVigencia(texto: string): string[] {
 
 export type Resultado = { id: string; titulo: string; resumen: string; url: string }
 
-/** Enlaces a normas de cualquier listado del portal (resultados, normas FP…). */
-export function enlacesDeNormas(html: string): Resultado[] {
+/**
+ * Enlaces a normas de cualquier listado del portal (resultados, normas FP…).
+ *
+ * `termino` sirve para elegir el resumen: una norma puede traer varios
+ * restrictores y el portal no ordena por pertinencia, así que al buscar
+ * "teletrabajo" el Decreto 1083 salía resumido como "estándares para la
+ * elección de personeros". Se prefiere el fragmento que menciona lo buscado.
+ */
+export function enlacesDeNormas(html: string, termino = ''): Resultado[] {
   const $ = cargar(html)
+  const aguja = sinTildes(termino).toLowerCase().trim()
+  const vistos = new Set<string>()
+
   return $('a[href*="norma.php?i="]')
     .map((_, el) => {
       const $a = $(el)
       const id = ($a.attr('href') ?? '').replace(/\D/g, '')
-      return {
-        id,
-        titulo: $a.find('h5').text().trim() || $a.text().trim(),
-        resumen: $a.find('p').text().replace(/\s+/g, ' ').trim(),
-        url: `${BASE_GESTOR}/norma.php?i=${id}`,
+
+      const partes = $a
+        .find('li')
+        .map((__, li) => $(li).text().replace(/\s+/g, ' ').trim())
+        .get()
+        .filter(Boolean)
+      const parrafos = partes.length
+        ? partes
+        : $a
+            .find('p')
+            .map((__, p) => $(p).text().replace(/\s+/g, ' ').trim())
+            .get()
+            .filter(Boolean)
+
+      const pertinente = aguja ? parrafos.find((t) => sinTildes(t).toLowerCase().includes(aguja)) : undefined
+      const resumen = pertinente ?? parrafos.join(' ')
+
+      // Sin <h5> el título y el resumen quedan pegados ("Ley 87 de 1993Establece…").
+      let titulo = $a.find('h5').text().replace(/\s+/g, ' ').trim()
+      if (!titulo) {
+        const todo = $a.text().replace(/\s+/g, ' ').trim()
+        titulo = (resumen && todo.endsWith(resumen) ? todo.slice(0, -resumen.length) : todo).trim()
       }
+
+      return { id, titulo, resumen, url: `${BASE_GESTOR}/norma.php?i=${id}` }
     })
     .get()
-    .filter((r) => r.id)
+    .filter((r) => {
+      if (!r.id || vistos.has(r.id)) return false // los listados repiten normas
+      vistos.add(r.id)
+      return true
+    })
 }
 
-export function parseResultados(html: string): { total: number; items: Resultado[] } {
+export function parseResultados(html: string, termino = ''): { total: number; items: Resultado[] } {
   const m = html.match(/encontrados:\s*(\d+)/i)
   if (!m) throw new CanarioError('no aparece "Número de documentos encontrados"')
   const total = Number(m[1])
-  const items = enlacesDeNormas(html)
+  const items = enlacesDeNormas(html, termino)
   if (total > 0 && items.length === 0) throw new CanarioError('hay resultados pero ningún enlace de norma')
   return { total, items }
 }

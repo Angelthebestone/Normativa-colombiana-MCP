@@ -31,7 +31,9 @@ La extensión también añade comandos listos en Claude Desktop: *¿Qué normas 
 
 **La vigencia no es un dato del portal.** Ni el Gestor ni la relatoría tienen un campo que diga «esta norma está derogada»: las derogatorias van escritas dentro del texto. La extensión avisa cuando detecta marcas de «Derogado» o «Modificado por», pero no puede garantizar que un artículo siga vigente. El Decreto 1083 de 2015, por ejemplo, contiene 155 notas de modificación.
 
-**El buscador del Gestor no busca en el texto completo**, solo en los resúmenes temáticos, y une los términos con OR. La extensión compensa esto de dos formas: quita las palabras vacías antes de consultar, y busca dentro del articulado en tu computador cuando pides una norma concreta.
+**El buscador del Gestor no busca en el texto completo**, solo en los resúmenes temáticos, y une los términos con OR. Su índice de palabras además es muy pobre: «teletrabajo» casa con 3 documentos en todo el portal, y con ninguno de los 43 conceptos que sí están clasificados bajo ese subtema. La extensión compensa de tres formas: quita las palabras vacías antes de consultar, reintenta por el subtema oficial cuando la búsqueda por palabras rinde poco, y busca dentro del articulado en tu computador cuando pides una norma concreta.
+
+**Ritmo de consulta.** La extensión no hace más de dos peticiones por segundo a cada portal. Son servicios públicos y conviene que un asistente automático les pese menos que una persona navegando.
 
 **Privacidad.** Cada consulta viaja a servidores del Estado colombiano, que registran las peticiones y tu dirección IP, igual que si navegaras el sitio. No se envía nada a ningún otro servidor, no hay analítica y no se recoge información tuya. Tenlo en cuenta si vas a consultar sobre un asunto propio.
 
