@@ -13,7 +13,7 @@ export class CanarioError extends Error {
     super(
       `El portal cambió su estructura y esta extensión no pudo leer la respuesta (${que}). ` +
         `No es que no haya resultados: es que no se pudieron interpretar. ` +
-        `Actualiza la extensión desde https://github.com/anfepena/normativa-colombia-mcp/releases`,
+        `Actualiza la extensión desde https://github.com/Angelthebestone/Normativa-colombiana-MCP/releases`,
     )
     this.name = 'CanarioError'
   }

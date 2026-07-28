@@ -9,7 +9,7 @@ Conecta dos fuentes oficiales:
 
 ## Instalación (no necesitas saber programar)
 
-1. Descarga `normativa-colombia.mcpb` desde la sección *Releases*.
+1. Descarga `normativa-colombia.mcpb` desde [Releases](https://github.com/Angelthebestone/Normativa-colombiana-MCP/releases).
 2. Abre Claude Desktop → **Configuración → Extensiones**.
 3. Arrastra el archivo a esa ventana y confirma.
 
@@ -33,7 +33,7 @@ La extensión también añade comandos listos en Claude Desktop: *¿Qué normas 
 
 **El buscador del Gestor no busca en el texto completo**, solo en los resúmenes temáticos, y une los términos con OR. Su índice de palabras además es muy pobre: «teletrabajo» casa con 3 documentos en todo el portal, y con ninguno de los 43 conceptos que sí están clasificados bajo ese subtema. La extensión compensa de tres formas: quita las palabras vacías antes de consultar, reintenta por el subtema oficial cuando la búsqueda por palabras rinde poco, y busca dentro del articulado en tu computador cuando pides una norma concreta.
 
-**Ritmo de consulta.** La extensión no hace más de dos peticiones por segundo a cada portal. Son servicios públicos y conviene que un asistente automático les pese menos que una persona navegando.
+**Ritmo de consulta.** La extensión hace como máximo una petición por segundo sostenida a cada portal, con ráfagas de hasta cinco, y nunca dos a la vez al mismo sitio. Si un portal responde que está limitando las consultas, espera lo que él indique en vez de insistir. Son servicios públicos y conviene que un asistente automático les pese menos que una persona navegando.
 
 **Privacidad.** Cada consulta viaja a servidores del Estado colombiano, que registran las peticiones y tu dirección IP, igual que si navegaras el sitio. No se envía nada a ningún otro servidor, no hay analítica y no se recoge información tuya. Tenlo en cuenta si vas a consultar sobre un asunto propio.
 
@@ -43,10 +43,12 @@ La extensión también añade comandos listos en Claude Desktop: *¿Qué normas 
 
 ```bash
 npm install
-npm test                  # pruebas contra las fuentes reales
+npm run check             # typecheck + lint + 30 pruebas contra las fuentes reales
 npm run generar-indice    # regenera datos/indice-tematico.json (~20 MB de descarga)
 npm run pack              # produce normativa-colombia.mcpb
 ```
+
+`datos/indice-tematico.json` no está versionado por su tamaño: genéralo antes de empaquetar.
 
 Estructura:
 
@@ -66,4 +68,4 @@ Dos notas para quien vaya a tocar esto:
 
 ## Licencia
 
-MIT. Los contenidos normativos son de sus entidades emisoras y públicos por mandato de la Ley 1712 de 2014.
+MIT (ver [LICENSE](LICENSE)). Los contenidos normativos son de sus entidades emisoras y públicos por mandato de la Ley 1712 de 2014.

@@ -23,5 +23,14 @@
     "esbuild": "^0.24.0",
     "oxlint": "^1.76.0",
     "typescript": "^5.6.0"
-  }
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Angelthebestone/Normativa-colombiana-MCP.git"
+  },
+  "homepage": "https://github.com/Angelthebestone/Normativa-colombiana-MCP",
+  "bugs": {
+    "url": "https://github.com/Angelthebestone/Normativa-colombiana-MCP/issues"
+  },
+  "author": "Angel Peña"
 }

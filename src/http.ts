@@ -11,7 +11,7 @@ import { SECTIGO_OV } from './ca.ts'
  */
 const CA = [...rootCertificates, SECTIGO_OV]
 
-const UA = 'normativa-colombia-mcp/1.0 (+https://github.com/anfepena/normativa-colombia-mcp)'
+const UA = 'normativa-colombia-mcp/1.0 (+https://github.com/Angelthebestone/Normativa-colombiana-MCP)'
 
 // --- ritmo ---------------------------------------------------------------
 
