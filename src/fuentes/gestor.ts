@@ -17,35 +17,27 @@ import {
 
 import { pedir } from '../http.ts'
 
-// ponytail: una sola cola global. Es infraestructura pública y el MCP debe
-// pesarle menos que una persona navegando; si algún día hace falta caudal,
-// aquí va un semáforo de N permisos.
-let cola: Promise<unknown> = Promise.resolve()
-
+// El ritmo y la serialización por dominio los gobierna `pedir`.
 async function traer(url: string): Promise<string> {
-  const tarea = cola.then(async () => {
-    let res: Awaited<ReturnType<typeof pedir>>
-    try {
-      res = await pedir(url) // 60 s por defecto: el Decreto 1083 tarda ~8 s
-    } catch (e) {
-      throw new Error(
-        `No se pudo contactar el Gestor Normativo (${(e as Error).message}). ` +
-          `Revisa tu conexión o intenta más tarde: el portal a veces está en mantenimiento.`,
-      )
-    }
-    // Un id inexistente redirige en vez de dar 404.
-    if (res.status >= 300 && res.status < 400) throw new NoExisteError(url.replace(/^.*i=/, ''))
-    if (res.status === 500) {
-      throw new Error(
-        'El portal rechazó la consulta (error 500). Suele pasar con comillas o caracteres raros en los términos; ' +
-          'intenta con palabras sencillas, sin comillas.',
-      )
-    }
-    if (res.status !== 200) throw new Error(`El portal respondió ${res.status}.`)
-    return res.cuerpo
-  })
-  cola = tarea.catch(() => {})
-  return tarea
+  let res: Awaited<ReturnType<typeof pedir>>
+  try {
+    res = await pedir(url) // 60 s por defecto: el Decreto 1083 tarda ~8 s
+  } catch (e) {
+    throw new Error(
+      `No se pudo contactar el Gestor Normativo (${(e as Error).message}). ` +
+        `Revisa tu conexión o intenta más tarde: el portal a veces está en mantenimiento.`,
+    )
+  }
+  // Un id inexistente redirige en vez de dar 404.
+  if (res.status >= 300 && res.status < 400) throw new NoExisteError(url.replace(/^.*i=/, ''))
+  if (res.status === 500) {
+    throw new Error(
+      'El portal rechazó la consulta (error 500). Suele pasar con comillas o caracteres raros en los términos; ' +
+        'intenta con palabras sencillas, sin comillas.',
+    )
+  }
+  if (res.status !== 200) throw new Error(`El portal respondió ${res.status}.`)
+  return res.cuerpo
 }
 
 // --- saneamiento ---------------------------------------------------------
@@ -114,13 +106,13 @@ export async function resolver(valor: string | number | undefined, cual: keyof C
 // --- búsqueda ------------------------------------------------------------
 
 export type Filtros = {
-  palabras?: string
-  tipo?: string | number
-  numero?: string | number
-  anio?: string | number
-  entidad?: string | number
-  tema?: string | number
-  subtema?: string | number
+  palabras?: string | undefined
+  tipo?: string | number | undefined
+  numero?: string | number | undefined
+  anio?: string | number | undefined
+  entidad?: string | number | undefined
+  tema?: string | number | undefined
+  subtema?: string | number | undefined
 }
 
 async function consultar(p: URLSearchParams, termino = ''): Promise<{ total: number; items: Resultado[] }> {
@@ -148,7 +140,7 @@ export async function subtemaPorNombre(tema: string, subtema: string): Promise<s
   )
 }
 
-export async function buscar(f: Filtros): Promise<{ total: number; items: Resultado[]; nota?: string }> {
+export async function buscar(f: Filtros): Promise<{ total: number; items: Resultado[]; nota?: string | undefined }> {
   const p = new URLSearchParams()
   const notas: string[] = []
 
@@ -228,7 +220,7 @@ export async function tematica(texto: string): Promise<FilaTema[]> {
 
 // `normasfp.php` es un listado plano: no trae el contador "encontrados" que sí
 // devuelve el buscador, así que se leen los enlaces directamente.
-export async function normasFp(filtro = ''): Promise<Resultado[]> {
+export async function normasFp(): Promise<Resultado[]> {
   const items = enlacesDeNormas(await traer(`${BASE_GESTOR}/normasfp.php`))
   if (!items.length) throw new CanarioError('el listado de normas de Función Pública no trae enlaces')
   return items

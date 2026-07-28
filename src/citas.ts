@@ -10,10 +10,10 @@
 export type Cita = {
   tipo: string
   numero: string
-  anio?: string
-  articulo?: string
+  anio?: string | undefined
+  articulo?: string | undefined
   /** Forma canónica de la Corte Constitucional: C-337/11, T-099/24, SU-123/20. */
-  sentencia?: string
+  sentencia?: string | undefined
 }
 
 /** Ids de `tipdoc` en el Gestor, para no depender del catálogo en la ruta rápida. */

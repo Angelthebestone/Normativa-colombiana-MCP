@@ -42,10 +42,27 @@ async function pedir(url: string): Promise<string> {
   return res.cuerpo
 }
 
-async function pedirJson(url: string): Promise<any> {
+/** Forma de la respuesta de Elasticsearch, tal como la reenvía la relatoría. */
+type FuenteES = {
+  prov_id?: string | number
+  prov_sentencia?: string
+  prov_tipo?: string
+  prov_f_sentencia?: string
+  prov_f_public?: string
+  prov_tema?: string
+  prov_sintesis?: string
+  prov_magistrados?: unknown
+  prov_expediente?: string
+  rutahtml?: string
+}
+type HitES = { _id?: string; _source?: FuenteES }
+type BloqueHits = { total?: { value?: number }; hits?: HitES[] }
+type RespuestaES = { data?: { hits?: BloqueHits }; hits?: BloqueHits }
+
+async function pedirJson(url: string): Promise<RespuestaES | HitES[]> {
   const bruto = await pedir(url)
   try {
-    return JSON.parse(bruto)
+    return JSON.parse(bruto) as RespuestaES | HitES[]
   } catch {
     throw new Error(
       'La API de la relatoría devolvió algo que no es JSON. Es una API no documentada y pudo haber cambiado; ' +
@@ -56,11 +73,11 @@ async function pedirJson(url: string): Promise<any> {
 
 const texto = (v: unknown): string => (typeof v === 'string' ? v.replace(/\s+/g, ' ').trim() : '')
 
-function aProvidencia(hit: any): Providencia {
-  const s = hit?._source ?? {}
+function aProvidencia(hit: HitES): Providencia {
+  const s = hit._source ?? {}
   const ruta = texto(s.rutahtml)
   return {
-    id: String(s.prov_id ?? hit?._id ?? ''),
+    id: String(s.prov_id ?? hit._id ?? ''),
     sentencia: texto(s.prov_sentencia),
     tipo: texto(s.prov_tipo),
     fecha: texto(s.prov_f_sentencia),
@@ -82,10 +99,10 @@ const prefijo = (p: Providencia): string =>
 
 export async function buscar(opts: {
   termino: string
-  desde?: string
-  hasta?: string
-  limite?: number
-  tipos?: TipoProvidencia[]
+  desde?: string | undefined
+  hasta?: string | undefined
+  limite?: number | undefined
+  tipos?: TipoProvidencia[] | undefined
 }): Promise<{ total: number; items: Providencia[] }> {
   const termino = limpiarTermino(opts.termino)
   if (!termino) throw new Error('Indica un término para buscar jurisprudencia.')
@@ -106,7 +123,7 @@ export async function buscar(opts: {
   })
 
   const j = await pedirJson(`${BUSCADOR}?${p}`)
-  const hits = j?.data?.hits
+  const hits = Array.isArray(j) ? undefined : j.data?.hits
   if (!hits) {
     throw new Error('La respuesta de la relatoría no trae el bloque de resultados esperado; la API pudo cambiar.')
   }
@@ -121,7 +138,7 @@ export async function buscar(opts: {
 export async function ultimas(cantidad = 10): Promise<Providencia[]> {
   const n = Math.min(Math.max(cantidad, 1), 50)
   const j = await pedirJson(`${BUSCADOR}?accion=ver_modal_ultimas_providencias&cantidad=${n}&tipo=json`)
-  const lista = Array.isArray(j) ? j : (j?.data?.hits?.hits ?? j?.hits?.hits ?? [])
+  const lista: HitES[] = Array.isArray(j) ? j : (j.data?.hits?.hits ?? j.hits?.hits ?? [])
   return lista.map(aProvidencia)
 }
 

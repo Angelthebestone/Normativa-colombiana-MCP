@@ -8,7 +8,10 @@
     "build": "esbuild src/index.ts --bundle --platform=node --format=esm --target=node18 --outfile=server/index.js --banner:js=\"import{createRequire}from'module';const require=createRequire(import.meta.url);\"",
     "generar-indice": "node scripts/generar-indice.ts",
     "test": "node --test test/smoke.ts",
-    "pack": "npm run build && npx @anthropic-ai/mcpb pack"
+    "pack": "npm run build && npx @anthropic-ai/mcpb pack",
+    "typecheck": "tsc --noEmit",
+    "lint": "oxlint src scripts test",
+    "check": "npm run typecheck && npm run lint && npm test"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.12.0",
@@ -18,6 +21,7 @@
   "devDependencies": {
     "@types/node": "^26.1.2",
     "esbuild": "^0.24.0",
+    "oxlint": "^1.76.0",
     "typescript": "^5.6.0"
   }
 }

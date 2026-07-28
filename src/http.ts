@@ -13,20 +13,60 @@ const CA = [...rootCertificates, SECTIGO_OV]
 
 const UA = 'normativa-colombia-mcp/1.0 (+https://github.com/anfepena/normativa-colombia-mcp)'
 
-/**
- * Máximo dos peticiones por segundo y por dominio. Son portales públicos
- * financiados con impuestos: el MCP debe pesarles menos que una persona
- * navegando, y un ritmo constante evita que un cortafuegos lo tome por abuso.
- */
-const MS_ENTRE_PETICIONES = 500
-const turnos = new Map<string, Promise<void>>()
+// --- ritmo ---------------------------------------------------------------
 
-function turno(host: string): Promise<void> {
-  const anterior = turnos.get(host) ?? Promise.resolve()
-  const propio = anterior.then(() => new Promise<void>((r) => setTimeout(r, MS_ENTRE_PETICIONES)))
-  turnos.set(host, propio)
-  return anterior
+/**
+ * Una petición por segundo sostenida y ráfagas de hasta cinco, por dominio.
+ *
+ * Ninguno de los dos portales declara `Crawl-delay`, así que la cifra es
+ * criterio propio: una interacción real encadena entre dos y cuatro peticiones
+ * (resolver la cita, traer la norma; o buscar, resolver el subtema, reconsultar)
+ * y con cinco fichas salen sin demora perceptible, mientras el techo sostenido
+ * queda por debajo de lo que genera una persona navegando.
+ *
+ * Más importante que la tasa: una sola petición en vuelo por dominio. Eso es lo
+ * que impide apilar carga sobre un servicio público.
+ */
+const CAPACIDAD = 5
+const RELLENO_MS = 1000
+
+type Cubo = { fichas: number; ultimo: number }
+const cubos = new Map<string, Cubo>()
+const colas = new Map<string, Promise<unknown>>()
+
+const pausa = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms))
+
+async function ficha(host: string): Promise<void> {
+  const c = cubos.get(host) ?? { fichas: CAPACIDAD, ultimo: Date.now() }
+  cubos.set(host, c)
+
+  const ahora = Date.now()
+  c.fichas = Math.min(CAPACIDAD, c.fichas + (ahora - c.ultimo) / RELLENO_MS)
+  c.ultimo = ahora
+
+  if (c.fichas < 1) {
+    await pausa((1 - c.fichas) * RELLENO_MS)
+    c.fichas = 1
+    c.ultimo = Date.now()
+  }
+  c.fichas -= 1
 }
+
+/** Serializa por dominio: nunca hay dos peticiones simultáneas al mismo sitio. */
+function enCola<T>(host: string, fn: () => Promise<T>): Promise<T> {
+  const previa = colas.get(host) ?? Promise.resolve()
+  const tarea = previa.then(async () => {
+    await ficha(host)
+    return fn()
+  })
+  colas.set(
+    host,
+    tarea.catch(() => {}),
+  )
+  return tarea
+}
+
+// --- decodificación ------------------------------------------------------
 
 export type Respuesta = { status: number; cuerpo: string }
 
@@ -56,31 +96,68 @@ export function decodificar(datos: Buffer, contentType = ''): string {
   }
 }
 
-export function pedir(url: string, timeout = 60_000, accept = 'text/html,*/*'): Promise<Respuesta> {
-  const host = new URL(url).host
-  return turno(host).then(
-    () =>
-      new Promise<Respuesta>((resolve, reject) => {
-        const req = request(
-          url,
-          { ca: CA, timeout, headers: { 'User-Agent': UA, Accept: accept, 'Accept-Encoding': 'gzip, deflate' } },
-          (res) => {
-            const enc = String(res.headers['content-encoding'] ?? '')
-            const flujo = enc === 'gzip' ? res.pipe(createGunzip()) : enc === 'deflate' ? res.pipe(createInflate()) : res
-            const trozos: Buffer[] = []
-            flujo.on('data', (c: Buffer) => trozos.push(c))
-            flujo.on('end', () =>
-              resolve({
-                status: res.statusCode ?? 0,
-                cuerpo: decodificar(Buffer.concat(trozos), String(res.headers['content-type'] ?? '')),
-              }),
-            )
-            flujo.on('error', reject)
-          },
+// --- petición ------------------------------------------------------------
+
+type Cruda = { status: number; datos: Buffer; contentType: string; retryAfter: string }
+
+function crudo(url: string, timeout: number, accept: string): Promise<Cruda> {
+  return new Promise((resolve, reject) => {
+    const req = request(
+      url,
+      { ca: CA, timeout, headers: { 'User-Agent': UA, Accept: accept, 'Accept-Encoding': 'gzip, deflate' } },
+      (res) => {
+        const enc = String(res.headers['content-encoding'] ?? '')
+        const flujo = enc === 'gzip' ? res.pipe(createGunzip()) : enc === 'deflate' ? res.pipe(createInflate()) : res
+        const trozos: Buffer[] = []
+        flujo.on('data', (c: Buffer) => trozos.push(c))
+        flujo.on('end', () =>
+          resolve({
+            status: res.statusCode ?? 0,
+            datos: Buffer.concat(trozos),
+            contentType: String(res.headers['content-type'] ?? ''),
+            retryAfter: String(res.headers['retry-after'] ?? ''),
+          }),
         )
-        req.on('timeout', () => req.destroy(new Error(`tiempo de espera agotado tras ${timeout} ms`)))
-        req.on('error', reject)
-        req.end()
-      }),
-  )
+        flujo.on('error', reject)
+      },
+    )
+    req.on('timeout', () => req.destroy(new Error(`tiempo de espera agotado tras ${timeout} ms`)))
+    req.on('error', reject)
+    req.end()
+  })
+}
+
+/** `Retry-After` puede venir en segundos o como fecha HTTP. */
+function esperaSugerida(cabecera: string): number {
+  if (!cabecera) return 0
+  const segundos = Number(cabecera)
+  if (Number.isFinite(segundos)) return Math.max(0, segundos * 1000)
+  const fecha = Date.parse(cabecera)
+  return Number.isNaN(fecha) ? 0 : Math.max(0, fecha - Date.now())
+}
+
+const ESPERA_MAXIMA_MS = 30_000
+
+export async function pedir(url: string, timeout = 60_000, accept = 'text/html,*/*'): Promise<Respuesta> {
+  const host = new URL(url).host
+
+  for (let intento = 0; ; intento++) {
+    const r = await enCola(host, () => crudo(url, timeout, accept))
+
+    // Si el portal pide calma, se le hace caso en vez de insistir al mismo ritmo.
+    if ((r.status === 429 || r.status === 503) && intento === 0) {
+      const espera = Math.min(esperaSugerida(r.retryAfter) || 2000, ESPERA_MAXIMA_MS)
+      await pausa(espera)
+      // Se vacía el cubo: veníamos yendo más rápido de lo que el sitio tolera.
+      cubos.set(host, { fichas: 0, ultimo: Date.now() })
+      continue
+    }
+    if (r.status === 429 || r.status === 503) {
+      throw new Error(
+        `El portal está limitando las consultas (${r.status}). Espera un momento y vuelve a intentarlo.`,
+      )
+    }
+
+    return { status: r.status, cuerpo: decodificar(r.datos, r.contentType) }
+  }
 }
