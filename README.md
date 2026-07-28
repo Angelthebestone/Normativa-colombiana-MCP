@@ -23,6 +23,8 @@ No hace falta instalar nada más: Claude Desktop trae todo lo necesario.
 - «Búscame jurisprudencia reciente de la Corte Constitucional sobre estabilidad laboral reforzada.»
 - «¿La Ley 909 de 2004 sigue vigente?»
 
+La extensión le entrega a Claude, al conectarse, sus propias instrucciones de uso: qué herramienta corresponde a cada tipo de pregunta, que debe citar siempre la fuente y que nunca debe afirmar que una norma está vigente. Eso viaja dentro del `.mcpb`; no hay que configurar nada.
+
 La extensión también añade comandos listos en Claude Desktop: *¿Qué normas aplican sobre un tema?*, *¿Esta norma sigue vigente?*, *Explícame esta norma en lenguaje sencillo* y *Compara dos normas*.
 
 ## Lo que debes saber antes de confiar en una respuesta
@@ -62,6 +64,8 @@ Estructura:
 | `src/fuentes/corte.ts` | Relatoría de la Corte Constitucional (JSON) |
 | `test/smoke.ts` | Pruebas de biblioteca contra las fuentes reales |
 | `test/e2e.ts` | Arranca el servidor y le habla por stdio, como Claude Desktop |
+
+Las instrucciones de uso que recibe el modelo están en `INSTRUCCIONES`, en `src/index.ts`: son el único mecanismo que orienta *qué* herramienta se elige, cosa que ninguna prueba puede verificar.
 
 Dos notas para quien vaya a tocar esto:
 

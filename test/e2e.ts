@@ -63,6 +63,7 @@ class Cliente {
 }
 
 let c: Cliente
+let instrucciones = ''
 
 before(async () => {
   c = new Cliente()
@@ -72,6 +73,16 @@ before(async () => {
     clientInfo: { name: 'pruebas', version: '1' },
   })
   assert.equal(r.serverInfo.name, 'normativa-colombia')
+  instrucciones = r.instructions ?? ''
+})
+
+test('el servidor entrega instrucciones de uso al conectarse', () => {
+  // Es lo único que orienta la ELECCIÓN de herramienta, que ninguna prueba
+  // puede verificar: si desaparecen, el servidor sigue verde y responde peor.
+  assert.ok(instrucciones.length > 500, `instructions: ${instrucciones.length} caracteres`)
+  for (const regla of [/resolver_cita/, /buscar_por_tema/, /buscar_en_texto/, /NUNCA afirmes que una norma/, /temsubid/]) {
+    assert.match(instrucciones, regla)
+  }
 })
 
 after(() => c?.cerrar())

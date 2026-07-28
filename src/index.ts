@@ -71,7 +71,33 @@ function frescura(generado: string): string {
 
 // --- servidor ------------------------------------------------------------
 
-const server = new McpServer({ name: 'normativa-colombia', version: '1.0.0' })
+/**
+ * Instrucciones de uso que viajan con el servidor: el cliente MCP las recibe en
+ * el `initialize` y las pone en contexto. Es el único mecanismo que corrige lo
+ * que ninguna prueba puede verificar —que se elija la herramienta correcta—,
+ * así que aquí van las reglas de enrutamiento y las trampas del portal, no una
+ * descripción del producto. Conviene que sea corto: ocupa contexto siempre.
+ */
+const INSTRUCCIONES = `Fuentes oficiales de normativa colombiana: Gestor Normativo de Función Pública y relatoría de la Corte Constitucional.
+
+Qué herramienta usar:
+- La pregunta menciona una norma concreta ("Ley 909 de 2004", "Decreto 1083", "C-337/11", "el art. 6 de la Ley 1221") → resolver_cita. Es exacta; el buscador por palabras no.
+- La pregunta es por materia ("¿qué normas hay sobre teletrabajo?") → buscar_por_tema. El buscador por palabras del portal solo indexa resúmenes y encuentra poquísimo: "teletrabajo" casa con 3 documentos cuando el subtema oficial tiene 55.
+- Hay que saber qué dice una norma sobre algo → obtener_norma con buscar_en_texto. Esa es la verdadera búsqueda de texto completo; el portal no la ofrece.
+- Sentencias y autos → buscar_jurisprudencia (Corte Constitucional, al día). El Gestor casi no tiene jurisprudencia reciente.
+- Por qué una norma aplica a un tema → explicar_relacion_tema con el temsubid y el normid de la MISMA fila de buscar_por_tema.
+
+Reglas al responder:
+- Cita siempre el enlace y la fecha de consulta que devuelven las herramientas. Una afirmación normativa sin fuente verificable no sirve.
+- NUNCA afirmes que una norma o un artículo está vigente. Ninguna de las dos fuentes publica la vigencia como dato: solo hay marcas de "Derogado" y "Modificado por" dentro del texto. Traslada esas advertencias y di con claridad que no se puede confirmar.
+- El "extracto temático" que acompaña a cada resultado NO resume la norma: es el apunte de un tema al que está asociada. Para el objeto real usa obtener_norma.
+- Si una herramienta devuelve vacío, es que no se encontró; no completes con conocimiento propio.
+- Nunca inventes números de norma, artículos ni sentencias. Si no aparecen en una respuesta, no existen para efectos de esta conversación.
+- Tres numeraciones distintas y no intercambiables: temsubid (solo de buscar_por_tema), subtemaid (de listar_subtemas, va en buscar_normas) y tema (de listar_catalogos).
+
+Esto no es asesoría jurídica.`
+
+const server = new McpServer({ name: 'normativa-colombia', version: '1.0.0' }, { instructions: INSTRUCCIONES })
 
 server.registerTool(
   'resolver_cita',
