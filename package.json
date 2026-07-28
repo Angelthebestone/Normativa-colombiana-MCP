@@ -5,14 +5,15 @@
   "license": "MIT",
   "type": "module",
   "scripts": {
-    "build": "esbuild src/index.ts --bundle --platform=node --format=esm --target=node18 --outfile=server/index.js --banner:js=\"import{createRequire}from'module';const require=createRequire(import.meta.url);\"",
+    "build": "node scripts/construir.ts",
     "generar-indice": "node scripts/generar-indice.ts",
     "test": "node --test test/smoke.ts",
     "pack": "npm run build && npx @anthropic-ai/mcpb pack",
     "typecheck": "tsc --noEmit",
     "lint": "oxlint src scripts test",
     "check": "npm run typecheck && npm run lint && npm test && npm run test:e2e",
-    "test:e2e": "npm run build && node --test test/e2e.ts"
+    "test:e2e": "npm run build && node --test test/e2e.ts",
+    "prepublishOnly": "npm run check && npm run build"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.12.0",
@@ -33,5 +34,28 @@
   "bugs": {
     "url": "https://github.com/Angelthebestone/Normativa-colombiana-MCP/issues"
   },
-  "author": "Angel Peña <adavidpena@uts.edu.co>"
+  "author": "Angel Peña <adavidpena@uts.edu.co>",
+  "bin": {
+    "normativa-colombia-mcp": "server/index.js"
+  },
+  "files": [
+    "server/",
+    "datos/",
+    "README.md",
+    "LICENSE",
+    "NOTICE.md"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "claude",
+    "colombia",
+    "normativa",
+    "jurisprudencia",
+    "legaltech",
+    "derecho"
+  ]
 }

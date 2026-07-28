@@ -36,7 +36,8 @@ class Cliente {
         const p = this.pendientes.get(msg.id)
         if (!p) continue
         this.pendientes.delete(msg.id)
-        msg.error ? p.fallo(new Error(JSON.stringify(msg.error))) : p.ok(msg.result)
+        if (msg.error) p.fallo(new Error(JSON.stringify(msg.error)))
+        else p.ok(msg.result)
       }
     })
   }
