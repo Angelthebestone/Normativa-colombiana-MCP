@@ -170,7 +170,21 @@ export async function buscar(
   }
   const num = entero(f.numero)
   const an = entero(f.anio)
-  const sub = entero(f.subtema)
+
+  // El subtema admite el id o el nombre. Por nombre hace falta el tema, porque
+  // los subtemas no son únicos en el portal: "Teletrabajo" cuelga de varios.
+  let sub = entero(f.subtema)
+  if (!sub && f.subtema) {
+    if (!f.tema) {
+      notas.push(
+        `Para usar el subtema por nombre ("${f.subtema}") hace falta indicar también el tema; ` +
+          `si no, usa el id numérico que devuelve listar_subtemas.`,
+      )
+    } else {
+      sub = await subtemaPorNombre(String(f.tema), String(f.subtema))
+      if (!sub) notas.push(`No encontré el subtema "${f.subtema}" dentro del tema "${f.tema}"; se ignoró.`)
+    }
+  }
   if (num) {
     p.set('nrodoc', num)
     aplicados.push(`número=${num}`)
@@ -185,7 +199,14 @@ export async function buscar(
   }
   if (f.palabras) aplicados.push(`palabras="${p.get('palabras')}"`)
 
-  if (![...p.keys()].length) throw new Error('Indica al menos un filtro o unas palabras para buscar.')
+  if (![...p.keys()].length) {
+    // Si algún filtro se descartó, el motivo explica más que un error genérico.
+    throw new Error(
+      notas.length
+        ? `No quedó ningún filtro aplicable. ${notas.join(' ')}`
+        : 'Indica al menos un filtro o unas palabras para buscar.',
+    )
+  }
 
   let { total, items } = await consultar(p, f.palabras ?? '')
 

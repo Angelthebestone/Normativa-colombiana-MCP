@@ -178,7 +178,10 @@ server.registerTool(
       anio: z.coerce.string().regex(/^\d{4}$/).optional().describe('Año de cuatro dígitos, como texto. Ej.: "2004"'),
       entidad: z.string().optional().describe('Nombre o id: "Corte Constitucional", "Congreso de la República"'),
       tema: z.string().optional().describe('Nombre o id de tema del catálogo'),
-      subtema: z.coerce.string().regex(/^\d+$/).optional().describe('subtemaid del catálogo (NO el temsubid de buscar_por_tema)'),
+      subtema: z.coerce
+        .string()
+        .optional()
+        .describe('subtemaid de listar_subtemas, o su nombre si además indicas tema. NO sirve el temsubid de buscar_por_tema.'),
       limite: z.coerce.number().int().min(1).max(100).default(20),
     },
   },
@@ -202,8 +205,10 @@ server.registerTool(
             if (extra.length) {
               r.items.push(...extra)
               notas.push(
-                `La búsqueda por palabras solo halló ${r.total}; se añadieron ${extra.length} documentos clasificados ` +
-                  `bajo el subtema oficial "${par.t} / ${par.s}", que es donde el portal los tiene indexados.`,
+                `La búsqueda por palabras solo halló ${r.total}. Se reconsultó con el subtema "${normalizarRotulo(par.s)}" ` +
+                  `(id ${sub}) del catálogo de búsqueda y se añadieron ${extra.length} documentos. Ese catálogo y el de ` +
+                  `buscar_por_tema son taxonomías distintas del portal, así que allí estos documentos pueden aparecer ` +
+                  `bajo otro tema.`,
               )
             }
           }
@@ -305,10 +310,17 @@ server.registerTool(
       buscar_en_texto: z.string().optional().describe('Devuelve solo los fragmentos que mencionan este término'),
       articulo: z.string().optional().describe('Número de artículo, ej. "6" o "2.2.5.1.5"'),
       desde: z.coerce.number().int().min(0).default(0),
-      limite_caracteres: z.coerce.number().int().min(500).max(40000).default(8000),
+      max_pasajes: z.coerce.number().int().positive().optional().describe('Máximo de pasajes con buscar_en_texto (por defecto 10)'),
+      limite_caracteres: z.coerce
+        .number()
+        .int()
+        .positive()
+        .default(8000)
+        .describe('Tope de caracteres del TEXTO devuelto; se aplica también con buscar_en_texto. La respuesta añade encabezado y temas asociados. Se ajusta al rango 200–40.000.'),
     },
   },
-  async ({ id, buscar_en_texto, articulo, desde, limite_caracteres }) => {
+  async ({ id, buscar_en_texto, articulo, desde, limite_caracteres, max_pasajes }) => {
+    const tope = Math.min(Math.max(limite_caracteres, 200), 40_000)
     let n: Awaited<ReturnType<typeof gestor.obtenerNorma>>
     try {
       n = await gestor.obtenerNorma(id)
@@ -343,7 +355,7 @@ server.registerTool(
       }
       cuerpo = art
     } else if (buscar_en_texto) {
-      const f = fragmentos(n.texto, buscar_en_texto)
+      const f = fragmentos(n.texto, buscar_en_texto, 400, max_pasajes ?? 10, tope)
       if (!f.total) {
         return txt(
           `${cab}\n\nEl término "${buscar_en_texto}" no aparece en el texto de esta norma ` +
@@ -351,9 +363,11 @@ server.registerTool(
         )
       }
       cuerpo = f.trozos.join('\n\n---\n\n')
-      avisoTexto = `${f.total} aparición(es) de "${buscar_en_texto}", agrupadas en ${f.pasajes} pasaje(s); se muestran ${f.trozos.length}.`
+      avisoTexto =
+        `${f.total} aparición(es) de "${buscar_en_texto}", agrupadas en ${f.pasajes} pasaje(s); se muestran ${f.mostrados}` +
+        (f.mostrados < f.pasajes ? ` (los demás no caben en ${tope} caracteres: sube limite_caracteres o afina el término).` : '.')
     } else {
-      const t = trocear(n.texto, desde, limite_caracteres)
+      const t = trocear(n.texto, desde, tope)
       cuerpo = t.texto
       const arts = indiceArticulos(n.texto)
       avisoTexto =
@@ -370,12 +384,14 @@ server.registerTool(
     const pertinente = (t: (typeof n.temas)[number]) =>
       Number(sinTildes(`${t.tema} ${t.subtema} ${t.restrictor}`).toLowerCase().includes(aguja))
     const ordenados = aguja ? [...n.temas].sort((a, b) => pertinente(b) - pertinente(a)) : n.temas
+    // Con un presupuesto corto no tiene sentido gastar la mitad en temas.
+    const cuantosTemas = tope < 2000 ? 3 : 10
 
     const temas = ordenados.length
       ? `\n\nTemas asociados (${Math.min(10, ordenados.length)} de ${ordenados.length}` +
         `${aguja ? ', primero los que mencionan lo buscado' : ', sin ordenar por relevancia'}):\n` +
         ordenados
-          .slice(0, 10)
+          .slice(0, cuantosTemas)
           .map((t) => `- ${normalizarRotulo(t.tema)} / ${normalizarRotulo(t.subtema)}: ${t.restrictor}`)
           .join('\n')
       : ''
@@ -441,16 +457,28 @@ server.registerTool(
     const porDefecto: ('C' | 'T' | 'SU')[] = ['C', 'T', 'SU']
     const r = await corte.buscar({ termino, desde, hasta, tipos: tipos ?? porDefecto, limite })
     if (!r.items.length) return vacio(`providencias sobre "${termino}"`, 'Prueba un término más general o revisa el rango de fechas.')
+    // Al acotar por fechas, el buscador de la relatoría devuelve providencias
+    // que no mencionan el término. Se señalan en vez de presentarlas como
+    // pertinentes: quien pregunta por teletrabajo no espera un impedimento.
+    const aguja = sinTildes(termino).toLowerCase()
+    const menciona = (p: (typeof r.items)[number]) =>
+      sinTildes(`${p.tema} ${p.sintesis} ${p.sentencia}`).toLowerCase().includes(aguja)
+    const flojas = r.items.filter((p) => !menciona(p)).map((p) => p.sentencia)
     const lista = r.items
       .map(
         (p) =>
-          `- ${p.sentencia} (${p.tipo}, ${p.fecha})\n  ${p.tema || '(sin tema)'}\n` +
+          `- ${p.sentencia} (${p.tipo}, ${p.fecha})${menciona(p) ? '' : '  ⚠ no menciona el término'}\n  ${p.tema || '(sin tema)'}\n` +
           (p.sintesis ? `  Síntesis: ${p.sintesis.slice(0, 300)}${p.sintesis.length > 300 ? '…' : ''}\n` : '') +
           `  ruta: ${p.ruta}\n  ${p.url}`,
       )
       .join('\n')
+    const aviso = flojas.length
+      ? `\n\nAtención: ${flojas.join(', ')} no mencionan "${termino}" en su tema ni en su síntesis. ` +
+        `El buscador de la relatoría pierde precisión al acotar por fechas; si buscas doctrina sobre la materia, ` +
+        `prueba sin desde/hasta.`
+      : ''
     return txt(
-      `${r.total} providencia(s) coinciden; se muestran ${r.items.length}.\n\n${lista}\n\n` +
+      `${r.total} providencia(s) coinciden; se muestran ${r.items.length}.\n\n${lista}${aviso}\n\n` +
         `Para el texto completo usa obtener_sentencia con la ruta.`,
     )
   },
@@ -467,10 +495,17 @@ server.registerTool(
       ruta: z.string().describe('Ruta de la providencia, ej. "2024/T-099-24.htm"'),
       buscar_en_texto: z.string().optional(),
       desde: z.coerce.number().int().min(0).default(0),
-      limite_caracteres: z.coerce.number().int().min(500).max(40000).default(8000),
+      max_pasajes: z.coerce.number().int().positive().optional().describe('Máximo de pasajes con buscar_en_texto (por defecto 10)'),
+      limite_caracteres: z.coerce
+        .number()
+        .int()
+        .positive()
+        .default(8000)
+        .describe('Tope de caracteres del TEXTO devuelto; se aplica también con buscar_en_texto. La respuesta añade encabezado y temas asociados. Se ajusta al rango 200–40.000.'),
     },
   },
-  async ({ ruta, buscar_en_texto, desde, limite_caracteres }) => {
+  async ({ ruta, buscar_en_texto, desde, limite_caracteres, max_pasajes }) => {
+    const tope = Math.min(Math.max(limite_caracteres, 200), 40_000)
     let doc: Awaited<ReturnType<typeof corte.obtenerTexto>>
     try {
       doc = await corte.obtenerTexto(ruta)
@@ -486,7 +521,7 @@ server.registerTool(
       )
     }
     if (buscar_en_texto) {
-      const f = fragmentos(doc.texto, buscar_en_texto)
+      const f = fragmentos(doc.texto, buscar_en_texto, 400, max_pasajes ?? 10, tope)
       if (!f.total) {
         return txt(`El término "${buscar_en_texto}" no aparece en ${ruta} (${doc.texto.length} caracteres revisados).\nURL: ${doc.url}`)
       }
@@ -495,7 +530,7 @@ server.registerTool(
           `se muestran ${f.trozos.length}.\n\n${f.trozos.join('\n\n---\n\n')}\n\nURL: ${doc.url}`,
       )
     }
-    const t = trocear(doc.texto, desde, limite_caracteres)
+    const t = trocear(doc.texto, desde, tope)
     return txt(
       `Providencia ${ruta}\nTexto total: ${t.total} caracteres; se muestran ${t.texto.length} desde ${t.desde}` +
         (t.omitido > 0 ? `; quedan ${t.omitido}.` : '.') +
@@ -508,7 +543,11 @@ server.registerTool(
   'listar_subtemas',
   {
     title: 'Listar subtemas de un tema',
-    description: 'Subtemas activos de un tema del catálogo, para afinar buscar_normas.',
+    description:
+      'Subtemas de un tema del CATÁLOGO DE BÚSQUEDA, cuyos ids van en el parámetro subtema de buscar_normas. ' +
+      'Ojo: el portal mantiene dos taxonomías distintas y no sincronizadas. Esta es la del formulario de consulta ' +
+      'avanzada y suele ser más pobre; la de buscar_por_tema es más rica (para "teletrabajo" tiene ocho pares ' +
+      'tema/subtema donde esta tiene uno). Los ids de una NO sirven en la otra.',
     inputSchema: { tema_id: z.coerce.string().regex(/^\d+$/).describe('id de tema del catálogo, como texto') },
   },
   async ({ tema_id }) => {

@@ -3,7 +3,22 @@
 Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/).
 Este proyecto sigue [versionado semántico](https://semver.org/lang/es/).
 
-## [1.0.1] — 2026-07-28
+## [1.1.0] — 2026-07-28
+
+### Corregido
+
+- `limite_caracteres` se ignoraba al usar `buscar_en_texto`, tanto en `obtener_norma` como en `obtener_sentencia`: pedir 1.500 caracteres devolvía más de 18.000. Era el defecto más caro, porque reventaba el contexto justo en las normas grandes, que son las que el troceado existe para poder manejar. Ahora el tope manda en los dos modos.
+- Un `limite_caracteres` por debajo del mínimo lanzaba un error de validación crudo. Ahora se ajusta al rango en silencio.
+- `buscar_normas` rechazaba el subtema por nombre sin decir qué esperaba. Ahora lo acepta si se indica también el tema —los subtemas no son únicos en el portal— y si falta el tema, lo explica.
+- El respaldo temático atribuía los resultados a un par tema/subtema que no era el suyo. Ahora dice qué filtro se usó y advierte que las dos taxonomías del portal no coinciden.
+
+### Añadido
+
+- `max_pasajes` en `obtener_norma` y `obtener_sentencia`, para acotar cuántos extractos devuelve `buscar_en_texto`.
+- `buscar_jurisprudencia` señala las providencias que no mencionan el término buscado. Al acotar por fechas, el buscador de la relatoría pierde precisión y colaba resultados sin relación.
+- `listar_subtemas` advierte en su descripción que el catálogo de búsqueda y el índice temático son dos taxonomías distintas del portal, con ids que no son intercambiables.
+
+## [1.0.1] — no publicada
 
 ### Corregido
 

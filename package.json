@@ -1,6 +1,6 @@
 {
   "name": "normativa-colombia-mcp",
-  "version": "1.0.1",
+  "version": "1.1.0",
   "description": "MCP para consultar el Gestor Normativo de Función Pública y la jurisprudencia de la Corte Constitucional de Colombia",
   "license": "MIT",
   "type": "module",

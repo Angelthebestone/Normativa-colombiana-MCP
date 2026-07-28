@@ -183,7 +183,9 @@ test('la búsqueda por palabras cae a la vía temática cuando rinde poco', LENT
     tipo_documento: 'Concepto',
     limite: 3,
   })
-  assert.match(texto, /subtema oficial/, 'debe explicar de dónde salieron los documentos')
+  assert.match(texto, /Se reconsultó con el subtema/, 'debe explicar de dónde salieron los documentos')
+  // No debe afirmar bajo qué tema están clasificados: son dos taxonomías y no coinciden.
+  assert.match(texto, /taxonomías distintas del portal/)
   assert.doesNotMatch(texto, /^0 documento/m)
 })
 
@@ -209,6 +211,54 @@ test('buscar_en_texto agrupa pasajes y prioriza los temas pertinentes', LENTO, a
   const { texto } = await c.tool('obtener_norma', { id: '62866', buscar_en_texto: 'encargo' })
   assert.match(texto, /agrupadas en \d+ pasaje/)
   assert.match(texto, /Temas asociados \(\d+ de \d+, primero los que mencionan lo buscado\)/)
+})
+
+test('limite_caracteres manda también en modo búsqueda', LENTO, async () => {
+  // Era el defecto más caro: en modo buscar_en_texto se ignoraba el tope y un
+  // límite de 1.500 devolvía 18.000 caracteres, justo en las normas grandes.
+  const corto = await c.tool('obtener_norma', { id: '14861', buscar_en_texto: 'empleo', limite_caracteres: 1500 })
+  const largo = await c.tool('obtener_norma', { id: '14861', buscar_en_texto: 'empleo', limite_caracteres: 20000 })
+  assert.ok(corto.texto.length < 5000, `con tope 1500 devolvió ${corto.texto.length} caracteres`)
+  assert.ok(largo.texto.length > corto.texto.length, 'un tope mayor debe devolver más texto')
+  assert.match(corto.texto, /no caben en 1500 caracteres/)
+})
+
+test('max_pasajes acota el número de extractos', LENTO, async () => {
+  const uno = await c.tool('obtener_norma', { id: '62866', buscar_en_texto: 'encargo', max_pasajes: 1 })
+  const tres = await c.tool('obtener_norma', { id: '62866', buscar_en_texto: 'encargo', max_pasajes: 3 })
+  assert.ok(uno.texto.length < tres.texto.length, 'pedir menos pasajes debe devolver menos texto')
+})
+
+test('un límite fuera de rango se ajusta en vez de reventar', LENTO, async () => {
+  const r = await c.tool('obtener_norma', { id: '31431', limite_caracteres: 400 })
+  assert.equal(r.esError, false, 'un valor pequeño no debería producir un error de validación crudo')
+  assert.match(r.texto, /Ley 1221 de 2008/)
+})
+
+test('el subtema se acepta por nombre cuando viene con su tema', LENTO, async () => {
+  const conTema = await c.tool('buscar_normas', {
+    tema: 'TELETRABAJO',
+    subtema: 'Telebrajo durante jornada día sin carro',
+    limite: 2,
+  })
+  assert.equal(conTema.esError, false, conTema.texto.slice(0, 120))
+
+  // Sin tema no se puede resolver, y el mensaje debe decir por qué.
+  const sinTema = await c.tool('buscar_normas', { subtema: 'Telebrajo durante jornada día sin carro' })
+  assert.match(sinTema.texto, /hace falta indicar también el tema/)
+})
+
+test('la jurisprudencia poco pertinente se señala', LENTO, async () => {
+  // Al acotar por fechas, la relatoría devuelve providencias que no tratan el tema.
+  const r = await c.tool('buscar_jurisprudencia', {
+    termino: 'teletrabajo',
+    desde: '2024-01-01',
+    hasta: '2024-12-31',
+    limite: 5,
+  })
+  if (/⚠ no menciona el término/.test(r.texto)) {
+    assert.match(r.texto, /pierde precisión al acotar por fechas/)
+  }
 })
 
 test('lo inexistente se informa como texto, no como fallo de herramienta', LENTO, async () => {

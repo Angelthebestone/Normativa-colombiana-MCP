@@ -144,10 +144,16 @@ export function trocear(texto: string, desde = 0, limite = 8000): Trozo {
  * indexa los resúmenes temáticos, así que es aquí donde realmente se busca
  * dentro del articulado.
  */
-export function fragmentos(texto: string, termino: string, contexto = 400, max = 10) {
+export function fragmentos(
+  texto: string,
+  termino: string,
+  contexto = 400,
+  max = 10,
+  presupuesto = Number.POSITIVE_INFINITY,
+) {
   const plano = sinTildes(texto).toLowerCase()
   const aguja = sinTildes(termino).toLowerCase().trim()
-  if (!aguja) return { total: 0, trozos: [] as string[], pasajes: 0 }
+  if (!aguja) return { total: 0, trozos: [] as string[], pasajes: 0, mostrados: 0 }
 
   // Ventanas solapadas se fusionan: dos coincidencias cercanas producían seis
   // extractos casi idénticos y hacían leer lo mismo varias veces.
@@ -166,16 +172,26 @@ export function fragmentos(texto: string, termino: string, contexto = 400, max =
     }
   }
 
-  const trozos = ventanas
-    .slice(0, max)
-    .map(
-      (v) =>
-        (v.ini > 0 ? '…' : '') +
-        texto.slice(v.ini, v.fin).trim() +
-        (v.fin < texto.length ? '…' : '') +
-        (v.hits > 1 ? `\n[${v.hits} coincidencias en este pasaje]` : ''),
-    )
-  return { total, trozos, pasajes: ventanas.length }
+  // El presupuesto de caracteres manda sobre el número de pasajes: sin él, diez
+  // pasajes fusionados pueden superar los 18.000 caracteres justo en las normas
+  // grandes, que son las que este troceado existe para poder manejar.
+  const trozos: string[] = []
+  let gastado = 0
+  for (const v of ventanas.slice(0, max)) {
+    if (gastado >= presupuesto) break
+    const margen = presupuesto - gastado
+    let cuerpo = texto.slice(v.ini, v.fin).trim()
+    if (cuerpo.length > margen) cuerpo = `${cuerpo.slice(0, Math.max(0, margen - 1)).trimEnd()}…`
+    const trozo =
+      (v.ini > 0 ? '…' : '') +
+      cuerpo +
+      (v.fin < texto.length ? '…' : '') +
+      (v.hits > 1 ? `\n[${v.hits} coincidencias en este pasaje]` : '')
+    trozos.push(trozo)
+    gastado += cuerpo.length
+  }
+
+  return { total, trozos, pasajes: ventanas.length, mostrados: trozos.length }
 }
 
 /** Índice de artículos, para que Claude sepa qué pedir sin traerse la norma entera. */
