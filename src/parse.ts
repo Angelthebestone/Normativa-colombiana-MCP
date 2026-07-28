@@ -39,6 +39,10 @@ export const sinTildes = (s: string): string =>
 
 export const tieneTildes = (s: string): boolean => sinTildes(s) !== s
 
+/** Ambos portales devuelven error ante comillas y signos de control en los términos. */
+export const limpiarTermino = (s: string): string =>
+  s.replace(/["'<>;%\\]/g, ' ').replace(/\s+/g, ' ').trim()
+
 /** Basura que Word deja incrustada en los documentos viejos (ver Ley 114 de 1913). */
 const LINEA_BASURA =
   /mso-|MsoNormal|X-NONE|Style Definitions|^\s*\d{4}-\d{2}-\d{2}T[\d:]{8}Z|^\s*<!\[endif\]|^(Clean|false|true|Normal|ES-CO|MicrosoftInternetExplorer\d*)$|^[\d.,]+( pto)?$|^[a-z-]+:[^;]{0,60};$/i
@@ -144,8 +148,6 @@ export function fragmentos(texto: string, termino: string, contexto = 400, max =
   return { total, trozos }
 }
 
-const RE_ART = /\bART[IÍ]CULOS?\b|\bArt[ií]culos?\b/g
-
 /** Índice de artículos, para que Claude sepa qué pedir sin traerse la norma entera. */
 export function indiceArticulos(texto: string, max = 60): string[] {
   const vistos = new Set<string>()
@@ -162,10 +164,9 @@ export function articulo(texto: string, numero: string): string | null {
   const re = new RegExp(`\\b(?:ART[IÍ]CULO|Art[ií]culo)\\s+${esc}\\b`, 'g')
   const m = re.exec(texto)
   if (!m) return null
-  RE_ART.lastIndex = m.index + m[0].length
-  const sig = RE_ART.exec(texto)
-  RE_ART.lastIndex = 0
-  return texto.slice(m.index, sig ? sig.index : Math.min(texto.length, m.index + 20000)).trim()
+  const desde = m.index + m[0].length
+  const sig = texto.slice(desde).search(/\bART[IÍ]CULOS?\b|\bArt[ií]culos?\b/)
+  return texto.slice(m.index, sig >= 0 ? desde + sig : Math.min(texto.length, m.index + 20000)).trim()
 }
 
 /**

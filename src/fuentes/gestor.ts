@@ -6,6 +6,7 @@ import {
   parseOpciones,
   parseResultados,
   parseTematica,
+  limpiarTermino,
   sinTildes,
   tieneTildes,
   type FilaTema,
@@ -14,8 +15,6 @@ import {
 } from '../parse.ts'
 
 import { pedir } from '../http.ts'
-
-const TIMEOUT = 60_000 // el Decreto 1083 tarda ~8 s; 60 s es holgura, no anomalía
 
 // ponytail: una sola cola global. Es infraestructura pública y el MCP debe
 // pesarle menos que una persona navegando; si algún día hace falta caudal,
@@ -26,7 +25,7 @@ async function traer(url: string): Promise<string> {
   const tarea = cola.then(async () => {
     let res: Awaited<ReturnType<typeof pedir>>
     try {
-      res = await pedir(url, TIMEOUT)
+      res = await pedir(url) // 60 s por defecto: el Decreto 1083 tarda ~8 s
     } catch (e) {
       throw new Error(
         `No se pudo contactar el Gestor Normativo (${(e as Error).message}). ` +
@@ -49,10 +48,6 @@ async function traer(url: string): Promise<string> {
 }
 
 // --- saneamiento ---------------------------------------------------------
-
-/** El portal devuelve 500 ante comillas y ante `tipdoc` no numérico. */
-export const limpiarTermino = (s: string): string =>
-  s.replace(/["'<>;%\\]/g, ' ').replace(/\s+/g, ' ').trim()
 
 const entero = (v: unknown): string | undefined => {
   if (v === undefined || v === null || v === '') return undefined

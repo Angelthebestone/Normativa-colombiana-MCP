@@ -9,12 +9,11 @@
  * Cubre lo que al Gestor Normativo le falta: en el Gestor hay 3 sentencias de
  * 2024; aquí hay 49.409 providencias y se publican el mismo día.
  */
-import { cargar, textoDe } from '../parse.ts'
+import { cargar, limpiarTermino, textoDe } from '../parse.ts'
 import { pedir as http } from '../http.ts'
 
 const BASE = 'https://www.corteconstitucional.gov.co/relatoria'
 const BUSCADOR = `${BASE}/buscador_new/`
-const TIMEOUT = 60_000
 
 export type Providencia = {
   id: string
@@ -33,7 +32,7 @@ export type Providencia = {
 async function pedir(url: string): Promise<string> {
   let res: Awaited<ReturnType<typeof http>>
   try {
-    res = await http(url, TIMEOUT, 'application/json,text/html,*/*')
+    res = await http(url, undefined, 'application/json,text/html,*/*')
   } catch (e) {
     throw new Error(`No se pudo contactar la relatoría de la Corte Constitucional (${(e as Error).message}).`)
   }
@@ -81,7 +80,7 @@ export async function buscar(opts: {
   hasta?: string
   limite?: number
 }): Promise<{ total: number; items: Providencia[] }> {
-  const termino = opts.termino.replace(/["'<>;%\\]/g, ' ').replace(/\s+/g, ' ').trim()
+  const termino = limpiarTermino(opts.termino)
   if (!termino) throw new Error('Indica un término para buscar jurisprudencia.')
 
   const p = new URLSearchParams({
@@ -111,11 +110,6 @@ export async function ultimas(cantidad = 10): Promise<Providencia[]> {
   const j = await pedirJson(`${BUSCADOR}?accion=ver_modal_ultimas_providencias&cantidad=${n}&tipo=json`)
   const lista = Array.isArray(j) ? j : (j?.data?.hits?.hits ?? j?.hits?.hits ?? [])
   return lista.map(aProvidencia)
-}
-
-export async function total(): Promise<number> {
-  const j = await pedirJson(`${BUSCADOR}?accion=ver_total_providencias&tipo=json`)
-  return j?.hits?.total?.value ?? j?.data?.hits?.total?.value ?? 0
 }
 
 /** Texto completo de una providencia: acepta `2024/T-099-24.htm` o la URL entera. */

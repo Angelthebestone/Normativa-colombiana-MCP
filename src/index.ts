@@ -19,11 +19,15 @@ const DESCARGO =
   'Fuente oficial; los datos se publican con propósitos informativos. Verifica siempre en el enlace antes de tomar una decisión.'
 
 const hoy = () => new Date().toISOString().slice(0, 10)
-const txt = (s: string) => ({ content: [{ type: 'text' as const, text: s }] })
+
+/** Toda respuesta sale fechada y con el descargo: es la fuente lo que la hace útil. */
+const txt = (s: string) => ({
+  content: [{ type: 'text' as const, text: `${s}\n\nConsulta del ${hoy()}. ${DESCARGO}` }],
+})
 
 /** Nunca se devuelve una lista vacía a secas: el vacío se explica. */
 const vacio = (que: string, sugerencia: string) =>
-  txt(`No encontré ${que} en las fuentes consultadas (consulta del ${hoy()}).\n\n${sugerencia}`)
+  txt(`No encontré ${que} en las fuentes consultadas.\n\n${sugerencia}`)
 
 // --- índice temático empaquetado -----------------------------------------
 
@@ -32,15 +36,12 @@ let indice: Indice | null | undefined
 
 function cargarIndice(): Indice | null {
   if (indice !== undefined) return indice
-  for (const rel of ['../datos/indice-tematico.json', './indice-tematico.json', '../indice-tematico.json']) {
-    try {
-      indice = JSON.parse(readFileSync(new URL(rel, import.meta.url), 'utf8')) as Indice
-      return indice
-    } catch {
-      /* siguiente candidato */
-    }
+  try {
+    // El bundle vive en server/index.js y el índice en datos/, junto al manifiesto.
+    indice = JSON.parse(readFileSync(new URL('../datos/indice-tematico.json', import.meta.url), 'utf8')) as Indice
+  } catch {
+    indice = null // sin índice se consulta el portal; no es un fallo fatal
   }
-  indice = null
   return indice
 }
 
@@ -82,8 +83,6 @@ server.registerTool(
             p.sintesis ? `Síntesis: ${p.sintesis}` : '',
             `Texto completo: usa obtener_sentencia con ruta="${p.ruta}"`,
             `URL: ${p.url}`,
-            '',
-            `Consulta del ${hoy()}. ${DESCARGO}`,
           ]
             .filter(Boolean)
             .join('\n'),
@@ -108,8 +107,7 @@ server.registerTool(
         : `\n\nNo encontré un "artículo ${c.articulo}" en el texto. Usa obtener_norma con buscar_en_texto.`
     }
     return txt(
-      `${n.titulo}\nid: ${n.id}\n${n.resumen ? `Resumen: ${n.resumen}\n` : ''}URL: ${n.url}${extra}\n\n` +
-        `Consulta del ${hoy()}. ${DESCARGO}`,
+      `${n.titulo}\nid: ${n.id}\n${n.resumen ? `Resumen: ${n.resumen}\n` : ''}URL: ${n.url}${extra}`,
     )
   },
 )
@@ -148,8 +146,7 @@ server.registerTool(
       .join('\n')
     const mas = r.items.length > limite ? `\n\nSe muestran ${limite} de ${r.total} encontradas.` : ''
     return txt(
-      `${r.total} documento(s) encontrado(s).${r.nota ? `\n${r.nota}` : ''}\n\n${lista}${mas}\n\n` +
-        `Consulta del ${hoy()}. ${DESCARGO}`,
+      `${r.total} documento(s) encontrado(s).${r.nota ? `\n${r.nota}` : ''}\n\n${lista}${mas}`,
     )
   },
 )
@@ -204,7 +201,7 @@ server.registerTool(
           f.documentos.slice(0, 8).map((d) => `    · ${d.titulo} (normid ${d.normid})`).join('\n'),
       )
       .join('\n')
-    return txt(`${filas.length} resultado(s) para "${texto}".\n\n${salida}\n\nConsulta del ${hoy()}. ${DESCARGO}`)
+    return txt(`${filas.length} resultado(s) para "${texto}".\n\n${salida}`)
   },
 )
 
@@ -237,7 +234,7 @@ server.registerTool(
       return txt(
         `${cab}\n\nEsta norma está registrada pero no tiene texto publicado en el Gestor Normativo ` +
           `(se recibieron ${n.texto.length} caracteres). No significa que la norma no diga nada: ` +
-          `consúltala en el PDF o en la página oficial.\n\nConsulta del ${hoy()}. ${DESCARGO}`,
+          `consúltala en el PDF o en la página oficial.`,
       )
     }
 
@@ -248,8 +245,7 @@ server.registerTool(
       const art = extraerArticulo(n.texto, articulo)
       if (!art) {
         return txt(
-          `${cab}\n\nNo encontré el artículo ${articulo}. Artículos detectados: ${indiceArticulos(n.texto).join(', ') || '(ninguno)'}\n\n` +
-            `Consulta del ${hoy()}. ${DESCARGO}`,
+          `${cab}\n\nNo encontré el artículo ${articulo}. Artículos detectados: ${indiceArticulos(n.texto).join(', ') || '(ninguno)'}`,
         )
       }
       cuerpo = art
@@ -258,7 +254,7 @@ server.registerTool(
       if (!f.total) {
         return txt(
           `${cab}\n\nEl término "${buscar_en_texto}" no aparece en el texto de esta norma ` +
-            `(${n.texto.length} caracteres revisados).\n\nConsulta del ${hoy()}. ${DESCARGO}`,
+            `(${n.texto.length} caracteres revisados).`,
         )
       }
       cuerpo = f.trozos.join('\n\n---\n\n')
@@ -280,7 +276,7 @@ server.registerTool(
 
     return txt(
       `${cab}\n${avisoTexto ? `\n${avisoTexto}\n` : ''}${avisos.length ? `\n${avisos.join('\n')}\n` : ''}` +
-        `\n--- Texto ---\n${cuerpo}${temas}\n\nConsulta del ${hoy()}. ${DESCARGO}`,
+        `\n--- Texto ---\n${cuerpo}${temas}`,
     )
   },
 )
@@ -341,7 +337,7 @@ server.registerTool(
       .join('\n')
     return txt(
       `${r.total} providencia(s) coinciden; se muestran ${r.items.length}.\n\n${lista}\n\n` +
-        `Para el texto completo usa obtener_sentencia con la ruta. Consulta del ${hoy()}. ${DESCARGO}`,
+        `Para el texto completo usa obtener_sentencia con la ruta.`,
     )
   },
 )
@@ -372,14 +368,14 @@ server.registerTool(
       }
       return txt(
         `${f.total} aparición(es) de "${buscar_en_texto}" en ${ruta}; se muestran ${f.trozos.length}.\n\n` +
-          `${f.trozos.join('\n\n---\n\n')}\n\nURL: ${doc.url}\nConsulta del ${hoy()}. ${DESCARGO}`,
+          `${f.trozos.join('\n\n---\n\n')}\n\nURL: ${doc.url}`,
       )
     }
     const t = trocear(doc.texto, desde, limite_caracteres)
     return txt(
       `Providencia ${ruta}\nTexto total: ${t.total} caracteres; se muestran ${t.texto.length} desde ${t.desde}` +
         (t.omitido > 0 ? `; quedan ${t.omitido}.` : '.') +
-        `\n\n--- Texto ---\n${t.texto}\n\nURL: ${doc.url}\nConsulta del ${hoy()}. ${DESCARGO}`,
+        `\n\n--- Texto ---\n${t.texto}\n\nURL: ${doc.url}`,
     )
   },
 )
@@ -413,7 +409,7 @@ server.registerTool(
   async ({ temsubid, normid }) => {
     const r = await gestor.restrictor(temsubid, normid)
     if (!r) return vacio(`una explicación para temsubid ${temsubid} y normid ${normid}`, 'Verifica los identificadores con buscar_por_tema.')
-    return txt(`${r}\n\nNorma: https://www.funcionpublica.gov.co/eva/gestornormativo/norma.php?i=${normid}\nConsulta del ${hoy()}. ${DESCARGO}`)
+    return txt(`${r}\n\nNorma: https://www.funcionpublica.gov.co/eva/gestornormativo/norma.php?i=${normid}`)
   },
 )
 
@@ -436,7 +432,7 @@ server.registerTool(
     return txt(
       `${r.total} concepto(s) coinciden; se muestran ${r.items.length}.\n\n` +
         r.items.map((c) => `- ${c.titulo} (id ${c.id})\n  ${c.url}`).join('\n') +
-        `\n\nConsulta del ${hoy()}. ${DESCARGO}`,
+        ``,
     )
   },
 )
@@ -453,7 +449,7 @@ server.registerTool(
     if (!items.length) return vacio('normas de Función Pública', 'El portal pudo cambiar; reintenta más tarde.')
     return txt(
       `${items.length} norma(s):\n` + items.map((i) => `- ${i.titulo} (id ${i.id})\n  ${i.url}`).join('\n') +
-        `\n\nConsulta del ${hoy()}. ${DESCARGO}`,
+        ``,
     )
   },
 )

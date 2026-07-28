@@ -14,6 +14,7 @@ import {
   advertenciasVigencia,
   articulo,
   fragmentos,
+  limpiarTermino,
   parseResultados,
   sinTildes,
   trocear,
@@ -45,8 +46,8 @@ test('las stopwords se descartan: son las que inundan el resultado', () => {
 })
 
 test('el saneamiento quita lo que hace fallar al portal con 500', () => {
-  assert.equal(gestor.limpiarTermino('Ley 80 "de 1993"'), 'Ley 80 de 1993')
-  assert.equal(gestor.limpiarTermino("<script>'x'"), 'script x')
+  assert.equal(limpiarTermino('Ley 80 "de 1993"'), 'Ley 80 de 1993')
+  assert.equal(limpiarTermino("<script>'x'"), 'script x')
 })
 
 test('sinTildes conserva la longitud, para poder cortar por índice', () => {

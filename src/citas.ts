@@ -17,7 +17,7 @@ export type Cita = {
 }
 
 /** Ids de `tipdoc` en el Gestor, para no depender del catálogo en la ruta rápida. */
-export const TIPOS: Record<string, number> = {
+const TIPOS: Record<string, number> = {
   'acto legislativo': 2,
   acuerdo: 3,
   auto: 1205,
