@@ -416,19 +416,26 @@ server.registerTool(
 server.registerTool(
   'buscar_conceptos_fp',
   {
-    title: 'Buscar conceptos de Función Pública',
+    title: 'Localizar conceptos de Función Pública por número o año',
     description:
-      'Filtra los 21.759 conceptos emitidos por Función Pública. La primera llamada descarga un listado grande ' +
-      'y puede tardar; después queda en caché. Para la mayoría de casos basta buscar_normas con tipo_documento "Concepto".',
+      'Lista los 21.759 conceptos emitidos por Función Pública, filtrando por NÚMERO o AÑO únicamente. ' +
+      'NO busca por materia: el listado solo contiene el número y el año de cada concepto ("Concepto 036201 de 2024"), ' +
+      'sin el asunto. Para buscar conceptos SOBRE UN TEMA usa buscar_normas con tipo_documento "Concepto", ' +
+      'que sí consulta los resúmenes temáticos.',
     inputSchema: {
-      texto: z.string().optional(),
+      numero: z.union([z.string(), z.number()]).optional().describe('Número del concepto, ej. 036201'),
       anio: z.union([z.string(), z.number()]).optional(),
       limite: z.number().int().min(1).max(100).default(20),
     },
   },
-  async ({ texto, anio, limite }) => {
-    const r = await gestor.conceptosFp(texto, anio, limite)
-    if (!r.items.length) return vacio('conceptos con esos criterios', 'Prueba con otro término o sin filtrar por año.')
+  async ({ numero, anio, limite }) => {
+    const r = await gestor.conceptosFp(numero, anio, limite)
+    if (!r.items.length) {
+      return vacio(
+        'conceptos con ese número o año',
+        'Recuerda que este listado solo filtra por número y año. Si buscas conceptos sobre un tema, usa buscar_normas con tipo_documento "Concepto".',
+      )
+    }
     return txt(
       `${r.total} concepto(s) coinciden; se muestran ${r.items.length}.\n\n` +
         r.items.map((c) => `- ${c.titulo} (id ${c.id})\n  ${c.url}`).join('\n') +

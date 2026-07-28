@@ -2,6 +2,7 @@ import {
   BASE_GESTOR,
   CanarioError,
   NoExisteError,
+  enlacesDeNormas,
   parseNorma,
   parseOpciones,
   parseResultados,
@@ -205,8 +206,12 @@ export async function tematica(texto: string): Promise<FilaTema[]> {
   return parseTematica(await traer(`${BASE_GESTOR}/consulta-tematica.php?texto=${encodeURIComponent(q)}`))
 }
 
+// `normasfp.php` es un listado plano: no trae el contador "encontrados" que sí
+// devuelve el buscador, así que se leen los enlaces directamente.
 export async function normasFp(): Promise<Resultado[]> {
-  return parseResultados(await traer(`${BASE_GESTOR}/normasfp.php`)).items
+  const items = enlacesDeNormas(await traer(`${BASE_GESTOR}/normasfp.php`))
+  if (!items.length) throw new CanarioError('el listado de normas de Función Pública no trae enlaces')
+  return items
 }
 
 // --- conceptos de Función Pública ---------------------------------------
@@ -217,7 +222,14 @@ export async function normasFp(): Promise<Resultado[]> {
 let cacheConceptos: { cuando: number; items: Resultado[] } | null = null
 const TTL_CONCEPTOS = 7 * 24 * 3600 * 1000
 
-export async function conceptosFp(texto?: string, anio?: string | number, limite = 20) {
+/**
+ * El listado solo trae número y año ("Concepto 036201 de 2024"): no hay materia
+ * en el título, así que aquí NO se puede buscar por tema. Filtrar por asunto
+ * devolvería siempre cero y eso se leería como "no existen conceptos sobre
+ * esto", que es justo la confusión que hay que evitar. Para buscar por materia,
+ * `buscar` con tipo Concepto (7), que sí consulta los restrictores.
+ */
+export async function conceptosFp(numero?: string | number, anio?: string | number, limite = 20) {
   if (!cacheConceptos || Date.now() - cacheConceptos.cuando > TTL_CONCEPTOS) {
     const html = await traer(`${BASE_GESTOR}/conceptosfp.php`)
     const items = [...html.matchAll(/norma\.php\?i=(\d+)"[^>]*>([^<]+)</g)].map((m) => ({
@@ -229,10 +241,10 @@ export async function conceptosFp(texto?: string, anio?: string | number, limite
     if (items.length < 100) throw new CanarioError(`la lista de conceptos trae ${items.length} entradas`)
     cacheConceptos = { cuando: Date.now(), items }
   }
-  const q = texto ? sinTildes(texto).toLowerCase() : ''
+  const num = numero ? String(numero).replace(/\D/g, '') : ''
   const a = anio ? String(anio) : ''
   const filtrados = cacheConceptos.items.filter(
-    (c) => (!q || sinTildes(c.titulo).toLowerCase().includes(q)) && (!a || c.titulo.includes(a)),
+    (c) => (!num || c.titulo.includes(num)) && (!a || c.titulo.includes(a)),
   )
   return { total: filtrados.length, items: filtrados.slice(0, limite) }
 }

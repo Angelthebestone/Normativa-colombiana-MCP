@@ -133,6 +133,25 @@ test('los catálogos traen los tipos de documento', RED, async () => {
   assert.ok(c.temas.length > 1000, `temas: ${c.temas.length}`)
 })
 
+test('el listado de normas de Función Pública se lee sin contador', RED, async () => {
+  // normasfp.php no trae "Número de documentos encontrados": es un listado plano.
+  const items = await gestor.normasFp()
+  assert.ok(items.length > 50, `esperaba ~108 normas, hubo ${items.length}`)
+  assert.ok(items.every((i) => i.id && i.url.includes(i.id)))
+})
+
+test('listar_subtemas responde para un tema real del catálogo', RED, async () => {
+  const c = await gestor.catalogos()
+  const tema = c.temas.find((t) => /^EMPLEO$/i.test(t.nombre))!
+  assert.ok((await gestor.subtemas(tema.id)).length > 10)
+})
+
+test('los conceptos se filtran por año, que es lo único que trae el listado', RED, async () => {
+  const r = await gestor.conceptosFp(undefined, 2024, 3)
+  assert.ok(r.total > 100, `conceptos de 2024: ${r.total}`)
+  assert.ok(r.items.every((c) => c.titulo.includes('2024')))
+})
+
 // --- Corte Constitucional ------------------------------------------------
 
 test('la relatoría encuentra jurisprudencia sobre teletrabajo', RED, async () => {

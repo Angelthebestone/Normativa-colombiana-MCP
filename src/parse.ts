@@ -187,13 +187,10 @@ export function advertenciasVigencia(texto: string): string[] {
 
 export type Resultado = { id: string; titulo: string; resumen: string; url: string }
 
-export function parseResultados(html: string): { total: number; items: Resultado[] } {
-  const m = html.match(/encontrados:\s*(\d+)/i)
-  if (!m) throw new CanarioError('no aparece "Número de documentos encontrados"')
-  const total = Number(m[1])
-
+/** Enlaces a normas de cualquier listado del portal (resultados, normas FP…). */
+export function enlacesDeNormas(html: string): Resultado[] {
   const $ = cargar(html)
-  const items: Resultado[] = $('a[href*="norma.php?i="]')
+  return $('a[href*="norma.php?i="]')
     .map((_, el) => {
       const $a = $(el)
       const id = ($a.attr('href') ?? '').replace(/\D/g, '')
@@ -206,7 +203,13 @@ export function parseResultados(html: string): { total: number; items: Resultado
     })
     .get()
     .filter((r) => r.id)
+}
 
+export function parseResultados(html: string): { total: number; items: Resultado[] } {
+  const m = html.match(/encontrados:\s*(\d+)/i)
+  if (!m) throw new CanarioError('no aparece "Número de documentos encontrados"')
+  const total = Number(m[1])
+  const items = enlacesDeNormas(html)
   if (total > 0 && items.length === 0) throw new CanarioError('hay resultados pero ningún enlace de norma')
   return { total, items }
 }
