@@ -1,7 +1,19 @@
+# La extensión lleva solo lo que necesita para ejecutarse y para que el usuario
+# sepa qué instaló. Lo demás es material del repositorio.
 src/
 scripts/
 test/
 node_modules/
-tsconfig.json
 .git/
+.github/
+tsconfig.json
+.editorconfig
+.gitattributes
+.gitignore
+.mcpbignore
+CONTRIBUTING.md
+CODE_OF_CONDUCT.md
+SECURITY.md
+CHANGELOG.md
+CHECKSUMS.txt
 *.mcpb
