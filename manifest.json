@@ -1,0 +1,66 @@
+{
+  "manifest_version": "0.2",
+  "name": "normativa-colombia",
+  "display_name": "Normativa Colombia",
+  "version": "1.0.0",
+  "description": "Consulta la normativa y la jurisprudencia colombiana desde Claude: Gestor Normativo de Función Pública y relatoría de la Corte Constitucional.",
+  "long_description": "Conecta Claude con dos fuentes oficiales colombianas.\n\n**Gestor Normativo** del Departamento Administrativo de la Función Pública: leyes, decretos, resoluciones, circulares y conceptos aplicables al sector público, con su consulta temática y los restrictores que explican por qué cada norma aplica a un tema.\n\n**Relatoría de la Corte Constitucional**: 49.000 sentencias y autos, actualizados a diario.\n\nIncluye un índice temático empaquetado (12.054 subtemas) que responde al instante y sigue funcionando aunque el portal esté caído. Toda respuesta cita el enlace oficial y la fecha de consulta.\n\nNo sustituye asesoría jurídica: verifica siempre en la fuente antes de tomar una decisión.",
+  "author": {
+    "name": "Angel Peña"
+  },
+  "license": "MIT",
+  "keywords": ["colombia", "normativa", "leyes", "jurisprudencia", "función pública", "derecho"],
+  "server": {
+    "type": "node",
+    "entry_point": "server/index.js",
+    "mcp_config": {
+      "command": "node",
+      "args": ["${__dirname}/server/index.js"]
+    }
+  },
+  "tools": [
+    { "name": "resolver_cita", "description": "Resuelve una cita como \"Ley 909 de 2004\", \"Decreto 1083\" o \"C-337/11\" al documento exacto." },
+    { "name": "buscar_normas", "description": "Busca normas en el Gestor Normativo por palabras, tipo, número, año, entidad o tema." },
+    { "name": "buscar_por_tema", "description": "Consulta temática oficial: temas, subtemas y las normas asociadas." },
+    { "name": "obtener_norma", "description": "Texto de una norma, troceado y con búsqueda dentro del articulado." },
+    { "name": "listar_catalogos", "description": "Valores válidos para filtrar: tipos, años, entidades y temas." },
+    { "name": "buscar_jurisprudencia", "description": "Busca sentencias y autos en la relatoría de la Corte Constitucional." },
+    { "name": "obtener_sentencia", "description": "Texto completo de una providencia de la Corte Constitucional." },
+    { "name": "listar_subtemas", "description": "Subtemas activos de un tema del catálogo." },
+    { "name": "explicar_relacion_tema", "description": "Explica por qué una norma aplica a un subtema (restrictor)." },
+    { "name": "buscar_conceptos_fp", "description": "Filtra los conceptos emitidos por Función Pública." },
+    { "name": "listar_normas_fp", "description": "Normas emitidas por el Departamento Administrativo de la Función Pública." }
+  ],
+  "prompts": [
+    {
+      "name": "normas-sobre",
+      "description": "¿Qué normas aplican sobre un tema?",
+      "arguments": ["tema"],
+      "text": "¿Qué normas del sector público colombiano aplican sobre \"${arguments.tema}\"? Usa buscar_por_tema, y para las más relevantes usa explicar_relacion_tema para decirme por qué aplican. Cita siempre con enlace."
+    },
+    {
+      "name": "sigue-vigente",
+      "description": "¿Esta norma sigue vigente?",
+      "arguments": ["norma"],
+      "text": "¿\"${arguments.norma}\" sigue vigente? Resuélvela con resolver_cita y revisa el texto con obtener_norma buscando \"derogad\" y \"modificado por\". Advierte con claridad si no puedes confirmarlo: el Gestor no tiene un campo de vigencia."
+    },
+    {
+      "name": "explicar-sencillo",
+      "description": "Explícame esta norma en lenguaje sencillo",
+      "arguments": ["norma"],
+      "text": "Explícame \"${arguments.norma}\" en lenguaje sencillo, sin jerga jurídica: qué regula, a quién aplica y qué obliga. Consúltala primero con resolver_cita y cita los artículos con su enlace."
+    },
+    {
+      "name": "comparar-normas",
+      "description": "Compara dos normas",
+      "arguments": ["primera", "segunda"],
+      "text": "Compara \"${arguments.primera}\" y \"${arguments.segunda}\": qué regula cada una, en qué se solapan y en qué se contradicen. Consulta ambas y cita con enlaces."
+    }
+  ],
+  "compatibility": {
+    "platforms": ["darwin", "win32", "linux"],
+    "runtimes": {
+      "node": ">=18.0.0"
+    }
+  }
+}
