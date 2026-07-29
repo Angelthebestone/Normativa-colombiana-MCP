@@ -7,7 +7,14 @@
  * de `createRequire` y quedaban seis llamadas a `require()` sin definir,
  * esperando a que alguien tomara ese camino.
  */
+import { readFileSync } from 'node:fs'
 import { build } from 'esbuild'
+
+// La versión se inyecta desde package.json: escrita a mano en el User-Agent se
+// quedaba atrás, y es lo que ven los portales para saber quién los consulta.
+const { version } = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')) as {
+  version: string
+}
 
 const BANNER = [
   '#!/usr/bin/env node',
@@ -23,6 +30,7 @@ const r = await build({
   target: 'node18',
   outfile: 'server/index.js',
   banner: { js: BANNER },
+  define: { __VERSION__: JSON.stringify(version) },
   logLevel: 'info',
 })
 

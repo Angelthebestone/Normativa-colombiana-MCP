@@ -14,8 +14,10 @@ import {
   sinTildes,
 } from './parse.ts'
 import { NoExisteError } from './parse.ts'
+import { VERSION } from './http.ts'
 import * as gestor from './fuentes/gestor.ts'
 import * as corte from './fuentes/corte.ts'
+
 
 const DESCARGO =
   'Fuente oficial; los datos se publican con propósitos informativos. Verifica siempre en el enlace antes de tomar una decisión.'
@@ -97,7 +99,7 @@ Reglas al responder:
 
 Esto no es asesoría jurídica.`
 
-const server = new McpServer({ name: 'normativa-colombia', version: '1.0.0' }, { instructions: INSTRUCCIONES })
+const server = new McpServer({ name: 'normativa-colombia', version: VERSION }, { instructions: INSTRUCCIONES })
 
 server.registerTool(
   'resolver_cita',

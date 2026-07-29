@@ -11,7 +11,11 @@ import { SECTIGO_OV } from './ca.ts'
  */
 const CA = [...rootCertificates, SECTIGO_OV]
 
-const UA = 'normativa-colombia-mcp/1.0 (+https://github.com/Angelthebestone/Normativa-colombiana-MCP)'
+/** esbuild la sustituye desde package.json; sin empaquetar no existe. */
+declare const __VERSION__: string | undefined
+export const VERSION = typeof __VERSION__ === 'string' ? __VERSION__ : 'dev'
+
+const UA = `normativa-colombia-mcp/${VERSION} (+https://github.com/Angelthebestone/Normativa-colombiana-MCP)`
 
 // --- ritmo ---------------------------------------------------------------
 
