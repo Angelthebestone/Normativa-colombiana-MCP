@@ -1,15 +1,16 @@
 import { request } from 'node:https'
 import { rootCertificates } from 'node:tls'
 import { createGunzip, createInflate } from 'node:zlib'
-import { SECTIGO_OV } from './ca.ts'
+import { SECTIGO_EV, SECTIGO_OV } from './ca.ts'
 
 /**
- * Raíces de Node más el intermedio que funcionpublica.gov.co omite. La
- * verificación del certificado sigue ACTIVA: solo se completa una cadena que el
- * servidor envía incompleta. Nunca usar rejectUnauthorized:false — este MCP
- * entrega información legal y la autenticidad de la fuente es parte del producto.
+ * Raíces de Node más los intermedios que funcionpublica.gov.co y
+ * suin-juriscol.gov.co omiten. La verificación del certificado sigue ACTIVA:
+ * solo se completa una cadena que el servidor envía incompleta. Nunca usar
+ * rejectUnauthorized:false — este MCP entrega información legal y la
+ * autenticidad de la fuente es parte del producto.
  */
-const CA = [...rootCertificates, SECTIGO_OV]
+const CA = [...rootCertificates, SECTIGO_OV, SECTIGO_EV]
 
 /** esbuild la sustituye desde package.json; sin empaquetar no existe. */
 declare const __VERSION__: string | undefined
@@ -104,11 +105,11 @@ export function decodificar(datos: Buffer, contentType = ''): string {
 
 type Cruda = { status: number; datos: Buffer; contentType: string; retryAfter: string }
 
-function crudo(url: string, timeout: number, accept: string): Promise<Cruda> {
+function crudo(url: string, timeout: number, accept: string, extra: Record<string, string>): Promise<Cruda> {
   return new Promise((resolve, reject) => {
     const req = request(
       url,
-      { ca: CA, timeout, headers: { 'User-Agent': UA, Accept: accept, 'Accept-Encoding': 'gzip, deflate' } },
+      { ca: CA, timeout, headers: { 'User-Agent': UA, Accept: accept, 'Accept-Encoding': 'gzip, deflate', ...extra } },
       (res) => {
         const enc = String(res.headers['content-encoding'] ?? '')
         const flujo = enc === 'gzip' ? res.pipe(createGunzip()) : enc === 'deflate' ? res.pipe(createInflate()) : res
@@ -142,11 +143,17 @@ function esperaSugerida(cabecera: string): number {
 
 const ESPERA_MAXIMA_MS = 30_000
 
-export async function pedir(url: string, timeout = 60_000, accept = 'text/html,*/*'): Promise<Respuesta> {
+export async function pedir(
+  url: string,
+  timeout = 60_000,
+  accept = 'text/html,*/*',
+  /** Cabeceras extra; hoy solo la `api-key` que exige el buscador de SUIN. */
+  extra: Record<string, string> = {},
+): Promise<Respuesta> {
   const host = new URL(url).host
 
   for (let intento = 0; ; intento++) {
-    const r = await enCola(host, () => crudo(url, timeout, accept))
+    const r = await enCola(host, () => crudo(url, timeout, accept, extra))
 
     // Si el portal pide calma, se le hace caso en vez de insistir al mismo ritmo.
     if ((r.status === 429 || r.status === 503) && intento === 0) {

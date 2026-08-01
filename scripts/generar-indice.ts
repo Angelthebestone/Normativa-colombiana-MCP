@@ -31,7 +31,17 @@ if (res.status !== 200) throw new Error(`El portal respondió ${res.status}`)
 const html = res.cuerpo
 console.log(`Recibidos ${(html.length / 1e6).toFixed(1)} MB.`)
 
-const grupos = new Map<string, { t: string; s: string; ts: string; n: [string, string][] }>()
+/**
+ * `n` guarda `[normid, titulo]`, pero el título solo se conserva en las ocho
+ * primeras normas de cada fila: buscar_por_tema imprime ocho y resume el resto
+ * como "… y N más", así que los demás títulos viajaban en el paquete para no
+ * mostrarse nunca. Los ids se conservan todos, que es lo que usan
+ * explicar_relacion_tema y el desempate por tamaño de temaDelIndice.
+ * Medido: 5,16 MB → 3,25 MB, un 37% menos.
+ */
+const TITULOS_POR_FILA = 8
+
+const grupos = new Map<string, { t: string; s: string; ts: string; n: [string, string?][] }>()
 let n = 0
 for (const m of html.matchAll(RE)) {
   const [, tema, subtema, titulo, ts, normid] = m
@@ -41,7 +51,7 @@ for (const m of html.matchAll(RE)) {
     g = { t: entidades(tema!), s: entidades(subtema!), ts: ts!, n: [] }
     grupos.set(clave, g)
   }
-  g.n.push([normid!, entidades(titulo!)])
+  g.n.push(g.n.length < TITULOS_POR_FILA ? [normid!, entidades(titulo!)] : [normid!])
   n++
 }
 

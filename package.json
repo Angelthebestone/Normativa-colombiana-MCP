@@ -1,14 +1,16 @@
 {
   "name": "normativa-colombia-mcp",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "MCP para consultar el Gestor Normativo de Función Pública y la jurisprudencia de la Corte Constitucional de Colombia",
   "license": "MIT",
   "type": "module",
   "scripts": {
     "build": "node scripts/construir.ts",
     "generar-indice": "node scripts/generar-indice.ts",
+    "generar-indice-suin": "node scripts/generar-indice-suin.ts",
     "test": "node --test test/smoke.ts",
     "pack": "npm run build && npx @anthropic-ai/mcpb pack",
+    "medir": "npm run build && node scripts/medir.ts",
     "typecheck": "tsc --noEmit",
     "lint": "oxlint src scripts test",
     "check": "npm run typecheck && npm run lint && npm test && npm run test:e2e",

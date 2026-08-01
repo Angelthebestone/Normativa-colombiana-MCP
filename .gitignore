@@ -2,4 +2,14 @@ node_modules/
 server/
 *.mcpb
 .env
-datos/
+
+# Artefactos que se rehacen en cada release.
+CHECKSUMS.txt
+
+# Notas de trabajo, no documentación del proyecto.
+PLAN.md
+
+# datos/ SÍ se versiona: es lo que npm empaqueta, y sin ello un clon limpio no
+# pasa las pruebas (se comprobó: dos e2e fallan). Además el índice de SUIN
+# cuesta 45 min de peticiones a un servicio público; regenerarlo en cada clon
+# no tiene sentido.

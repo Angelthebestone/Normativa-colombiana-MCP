@@ -8,13 +8,19 @@
 import { strict as assert } from 'node:assert'
 import test from 'node:test'
 
-import { parsearCita, idTipo } from '../src/citas.ts'
+import { parsearCita, idTipo, rutaDeSentencia } from '../src/citas.ts'
+import { claveSuin, fichaSuin } from '../src/fuentes/suin.ts'
+import { pedir as pedirHttp } from '../src/http.ts'
 import {
   CanarioError,
   advertenciasVigencia,
   articulo,
+  avisoSinTexto,
   fragmentos,
   limpiarTermino,
+  pdfEsEscaneo,
+  cargar,
+  textoDe,
   parseResultados,
   parseTematica,
   sinTildes,
@@ -39,8 +45,63 @@ test('el parser de citas entiende las formas colombianas', () => {
   assert.equal(parsearCita('artículo 6 de la Ley 1221 de 2008')?.articulo, '6')
   assert.equal(parsearCita('art. 2.2.5.1.5 del Decreto 1083')?.articulo, '2.2.5.1.5')
   assert.equal(parsearCita('¿cuánto cuesta el pan?'), null)
+  // Un número absurdamente largo no debe partirse: si se parte, el año queda
+  // fuera y el error acaba pidiendo un año que el usuario ya había indicado.
+  assert.deepEqual(parsearCita('Ley 99999999 de 1800'), {
+    tipo: 'ley',
+    numero: '99999999',
+    anio: '1800',
+    articulo: undefined,
+  })
   assert.equal(idTipo('ley'), 18)
   assert.equal(idTipo('Decreto'), 11)
+})
+
+test('una cita corta de sentencia se convierte en la ruta de la relatoría', () => {
+  assert.equal(rutaDeSentencia('C-337/11'), '2011/C-337-11.htm')
+  assert.equal(rutaDeSentencia('T-099 de 2024'), '2024/T-099-24.htm')
+  assert.equal(rutaDeSentencia('2024/T-099-24.htm'), '2024/T-099-24.htm') // idempotente
+  assert.equal(rutaDeSentencia('Ley 909 de 2004'), null)
+})
+
+test('un PDF escaneado se distingue de uno con texto', () => {
+  const escaneo = '%PDF-1.4\n/Type /XObject /Subtype /Image /Filter /DCTDecode\n'
+  const conTexto = '%PDF-1.4\n/FontFile2 12 0 R\n/Subtype /Image /Filter /DCTDecode\n'
+  assert.equal(pdfEsEscaneo(escaneo), true)
+  assert.equal(pdfEsEscaneo(conTexto), false, 'con fuentes incrustadas hay texto, aunque haya imágenes')
+  assert.equal(pdfEsEscaneo('<html>no soy un pdf</html>'), false)
+
+  // El vacío nunca puede leerse como "el documento no dice nada".
+  assert.match(avisoSinTexto(0, 'http://x/y.pdf', true), /ESCANEO[\s\S]*no hace OCR/)
+  assert.match(avisoSinTexto(12, 'http://x/y.pdf'), /NO significa que no diga nada/)
+})
+
+test('SUIN: la ficha se lee del bloque de campos, no de la prosa', () => {
+  const html =
+    '<span field="tipo">LEY</span><span field="numero">74</span><span field="anio">1923</span>' +
+    '<span field="epigrafe">sobre provisión de agua</span><span field="estado_documento">DEROGADO</span>'
+  assert.deepEqual(fichaSuin(html), {
+    tipo: 'LEY',
+    numero: '74',
+    anio: '1923',
+    epigrafe: 'sobre provisión de agua',
+    estado: 'DEROGADO',
+  })
+  // Sin estado la ficha sigue valiendo: callar la norma entera diría que no existe.
+  assert.equal(fichaSuin('<span field="tipo">LEY</span><span field="numero">9</span><span field="anio">1990</span>')?.estado, '')
+  assert.equal(fichaSuin('<html>una página cualquiera</html>'), null)
+  assert.equal(claveSuin('LEY', '0909', '2004'), 'ley 909 2004')
+})
+
+test('SUIN publica el estado, y el campo manda sobre la prosa', RED, async () => {
+  // La Ley 1541 de 2012 es el caso que obligó a cambiar de fuente de verdad: su
+  // texto visible dice "Vigente" y su campo dice "Vigencia en Estudio".
+  const r = await pedirHttp('https://www.suin-juriscol.gov.co/viewDocument.asp?id=1683108', 40_000)
+  assert.equal(r.status, 200)
+  const f = fichaSuin(r.cuerpo)
+  assert.deepEqual({ tipo: f?.tipo, numero: f?.numero, anio: f?.anio }, { tipo: 'LEY', numero: '1541', anio: '2012' })
+  assert.ok(f?.estado, 'sin este campo, la fuente pierde su única razón de estar')
+  assert.notEqual(f?.estado, textoDe(cargar(r.cuerpo), 'body').match(/ESTADO DE VIGENCIA:\s*([^\n[]+)/)?.[1]?.trim())
 })
 
 test('las stopwords se descartan: son las que inundan el resultado', () => {
@@ -195,6 +256,14 @@ test('los conceptos se filtran por año, que es lo único que trae el listado', 
   const r = await gestor.conceptosFp(undefined, 2024, 3)
   assert.ok(r.total > 100, `conceptos de 2024: ${r.total}`)
   assert.ok(r.items.every((c) => c.titulo.includes('2024')))
+  // Sin offset, ver la segunda mitad de una lista larga obliga a repedirla entera.
+  const dos = await gestor.conceptosFp(undefined, 2024, 3, 3)
+  assert.equal(dos.total, r.total)
+  assert.deepEqual(
+    dos.items.map((c) => c.id).filter((id) => r.items.some((p) => p.id === id)),
+    [],
+    'el segundo tramo no debe repetir el primero',
+  )
 })
 
 // --- Corte Constitucional ------------------------------------------------

@@ -82,7 +82,16 @@ test('el servidor entrega instrucciones de uso al conectarse', () => {
   // Es lo único que orienta la ELECCIÓN de herramienta, que ninguna prueba
   // puede verificar: si desaparecen, el servidor sigue verde y responde peor.
   assert.ok(instrucciones.length > 500, `instructions: ${instrucciones.length} caracteres`)
-  for (const regla of [/resolver_cita/, /buscar_por_tema/, /buscar_en_texto/, /NUNCA afirmes que una norma/, /temsubid/]) {
+  for (const regla of [
+    /resolver_cita/,
+    /buscar_por_tema/,
+    /buscar_en_texto/,
+    /NUNCA afirmes por tu cuenta que una norma/,
+    /Estado de vigencia según SUIN-Juriscol/, // la única excepción a la regla anterior
+    /no esté en el Gestor NO significa que no exista/,
+    /sin texto NO es un documento que no diga nada/,
+    /temsubid/,
+  ]) {
     assert.match(instrucciones, regla)
   }
 })
@@ -91,9 +100,9 @@ after(() => c?.cerrar())
 
 // --- contrato que ve el cliente -----------------------------------------
 
-test('las 11 herramientas se declaran con esquemas utilizables', CONTRATO, async () => {
+test('las 12 herramientas se declaran con esquemas utilizables', CONTRATO, async () => {
   const { tools } = await c.peticion('tools/list')
-  assert.equal(tools.length, 11, tools.map((t: any) => t.name).join(', '))
+  assert.equal(tools.length, 12, tools.map((t: any) => t.name).join(', '))
 
   const sinTipo: string[] = []
   for (const t of tools) {
@@ -107,6 +116,17 @@ test('las 11 herramientas se declaran con esquemas utilizables', CONTRATO, async
 
   const sentencia = tools.find((t: any) => t.name === 'obtener_sentencia')
   assert.deepEqual(sentencia.inputSchema.required, ['ruta'], 'lo obligatorio debe declararse obligatorio')
+
+  // Lo que el servidor exige en tiempo de ejecución tiene que verse en el
+  // esquema: un agente que solo lea el esquema decide con él.
+  const juris = tools.find((t: any) => t.name === 'buscar_jurisprudencia')
+  assert.deepEqual(juris.inputSchema.required, ['termino'])
+
+  // Listas largas: sin offset, ver el segundo tramo obliga a repedir la lista entera.
+  for (const nombre of ['listar_normas_fp', 'buscar_conceptos_fp']) {
+    const t = tools.find((x: any) => x.name === nombre)
+    assert.ok(t.inputSchema.properties.desde, `${nombre} necesita desde para paginar`)
+  }
 })
 
 test('los prompts se declaran y se resuelven', CONTRATO, async () => {
@@ -269,6 +289,40 @@ test('lo inexistente se informa como texto, no como fallo de herramienta', LENTO
   const prov = await c.tool('obtener_sentencia', { ruta: '2024/NO-EXISTE-99.htm' })
   assert.equal(prov.esError, false)
   assert.match(prov.texto, /No existe una providencia/)
+
+  // Una cita bien formada pero inventada sí tiene que reportarse como no hallada.
+  const falsa = await c.tool('resolver_cita', { cita: 'Ley 99999 de 2012' })
+  assert.match(falsa.texto, /No encontré la cita/)
+})
+
+test('buscar_en_suin busca, pagina y avisa de que su vigencia no es fiable', LENTO, async () => {
+  const r = await c.tool('buscar_en_suin', { texto: 'Buenaventura', limite: 3 })
+  assert.equal(r.esError, false)
+  assert.match(r.texto, /documento\(s\) en SUIN-Juriscol; se muestran 1–3/)
+  // El aviso no es decorativo: sin él, el modelo tomaría el campo por bueno.
+  assert.match(r.texto, /contradice la ficha del documento/)
+  assert.match(r.texto, /Vigencia SEGÚN EL BUSCADOR/)
+
+  const dos = await c.tool('buscar_en_suin', { texto: 'Buenaventura', limite: 3, desde: 3 })
+  assert.match(dos.texto, /se muestran 4–6/)
+
+  // Lo que el buscador NO puede hacer, y por eso resolver_cita sigue existiendo.
+  const cita = await c.tool('buscar_en_suin', { texto: 'LEY 909 DE 2004' })
+  assert.match(cita.texto, /No encontré|resolver_cita/)
+})
+
+test('una ley que el Gestor no tiene se resuelve contra SUIN', LENTO, async () => {
+  // El Gestor no cubre todo el país: la Ley 1541 de 2012 no está ahí y sí en
+  // SUIN. Antes se respondía "no encontré", que se lee como "no existe".
+  const r = await c.tool('resolver_cita', { cita: 'art. 3 de la Ley 1541 de 2012' })
+  assert.equal(r.esError, false)
+  if (/No encontré/.test(r.texto)) {
+    // Sin índice de SUIN la capacidad no existe; que se note en vez de fingir.
+    assert.fail('falta datos/indice-suin.json: genera el índice con npm run generar-indice-suin')
+  }
+  assert.match(r.texto, /SUIN-Juriscol sí la publica/)
+  assert.match(r.texto, /Estado de vigencia según SUIN/)
+  assert.match(r.texto, /--- Artículo 3 ---/)
 })
 
 // --- las herramientas que nadie había ejercitado ------------------------

@@ -6,6 +6,7 @@ import { z } from 'zod'
 import { idTipo, parsearCita } from './citas.ts'
 import {
   advertenciasVigencia,
+  avisoSinTexto,
   normalizarRotulo,
   articulo as extraerArticulo,
   fragmentos,
@@ -17,6 +18,7 @@ import { NoExisteError } from './parse.ts'
 import { VERSION } from './http.ts'
 import * as gestor from './fuentes/gestor.ts'
 import * as corte from './fuentes/corte.ts'
+import * as suin from './fuentes/suin.ts'
 
 
 const DESCARGO =
@@ -35,7 +37,9 @@ const vacio = (que: string, sugerencia: string) =>
 
 // --- índice temático empaquetado -----------------------------------------
 
-type Indice = { generado: string; filas: { t: string; s: string; ts: string; n: [string, string][] }[] }
+// El título solo viene en las ocho primeras normas de cada fila; ver
+// scripts/generar-indice.ts. Los ids están todos.
+type Indice = { generado: string; filas: { t: string; s: string; ts: string; n: [string, string?][] }[] }
 let indice: Indice | null | undefined
 
 function cargarIndice(): Indice | null {
@@ -87,13 +91,17 @@ Qué herramienta usar:
 - La pregunta es por materia ("¿qué normas hay sobre teletrabajo?") → buscar_por_tema. El buscador por palabras del portal solo indexa resúmenes y encuentra poquísimo: "teletrabajo" casa con 3 documentos cuando el subtema oficial tiene 55.
 - Hay que saber qué dice una norma sobre algo → obtener_norma con buscar_en_texto. Esa es la verdadera búsqueda de texto completo; el portal no la ofrece.
 - Sentencias y autos → buscar_jurisprudencia (Corte Constitucional, al día). El Gestor casi no tiene jurisprudencia reciente.
+- Normativa que el Gestor no tiene, o exploración por materia/sector del corpus histórico (desde 1844) → buscar_en_suin. NUNCA la uses para saber si algo está vigente: su campo de vigencia es del índice de búsqueda y contradice la ficha. La vigencia sale de resolver_cita.
 - Por qué una norma aplica a un tema → explicar_relacion_tema con el temsubid y el normid de la MISMA fila de buscar_por_tema.
 
 Reglas al responder:
 - Cita siempre el enlace y la fecha de consulta que devuelven las herramientas. Una afirmación normativa sin fuente verificable no sirve.
-- NUNCA afirmes que una norma o un artículo está vigente. Ninguna de las dos fuentes publica la vigencia como dato: solo hay marcas de "Derogado" y "Modificado por" dentro del texto. Traslada esas advertencias y di con claridad que no se puede confirmar.
+- NUNCA afirmes por tu cuenta que una norma o un artículo está vigente. El Gestor y la relatoría no publican la vigencia: solo hay marcas de "Derogado" y "Modificado por" dentro del texto. Traslada esas advertencias y di con claridad que no se puede confirmar.
+- La ÚNICA excepción: si resolver_cita devuelve un "Estado de vigencia según SUIN-Juriscol", cítalo con su fecha y su enlace, tal cual, sin traducirlo a un sí o un no ("Vigencia en Estudio" no es "vigente"). Si esa línea no aparece, es que no consta: vuelve a la regla anterior.
+- Que una norma no esté en el Gestor NO significa que no exista: su corpus no cubre todo el país. Si resolver_cita responde que la norma está en SUIN-Juriscol y no en el Gestor, esa es una respuesta completa, no un fallo; para un artículo concreto vuelve a preguntar citándolo ("art. 3 de la Ley 1541 de 2012").
 - El "extracto temático" que acompaña a cada resultado NO resume la norma: es el apunte de un tema al que está asociada. Para el objeto real usa obtener_norma.
 - Si una herramienta devuelve vacío, es que no se encontró; no completes con conocimiento propio.
+- Un documento sin texto NO es un documento que no diga nada. Si la respuesta avisa de que es un escaneo o de que el portal no publicó el texto, dilo así y remite al enlace; no concluyas nada sobre su contenido.
 - Nunca inventes números de norma, artículos ni sentencias. Si no aparecen en una respuesta, no existen para efectos de esta conversación.
 - Tres numeraciones distintas y no intercambiables: temsubid (solo de buscar_por_tema), subtemaid (de listar_subtemas, va en buscar_normas) y tema (de listar_catalogos).
 
@@ -137,12 +145,49 @@ server.registerTool(
 
     const r = await gestor.buscar({ tipo: idTipo(c.tipo) ?? c.tipo, numero: c.numero, anio: c.anio })
     if (!r.items.length) {
+      // Que el Gestor no la tenga no significa que no exista: su corpus no
+      // cubre todo el país. Antes de decir "no encontré" —que se lee como "esa
+      // norma no existe"— se pregunta a SUIN, que sí la puede registrar.
+      const v = c.anio ? await suin.vigencia(c.tipo, c.numero, c.anio).catch(() => null) : null
+      if (v) {
+        const arts = indiceArticulos(v.texto)
+        const art = c.articulo ? extraerArticulo(v.texto, c.articulo) : null
+        return txt(
+          `${cita} no está en el Gestor Normativo de Función Pública, pero SUIN-Juriscol sí la publica.\n` +
+            (v.epigrafe ? `${v.epigrafe}\n` : '') +
+            `Estado de vigencia según SUIN (índice del ${v.generado}): ` +
+            `${v.estado || 'SUIN no publica el estado de esta norma'}\n` +
+            `URL: ${v.url}\n` +
+            `Texto: ${v.texto.length} caracteres${arts.length ? `; artículos ${arts.join(', ')}` : ''}.` +
+            (art
+              ? `\n\n--- Artículo ${c.articulo} ---\n${art}\n${advertenciasVigencia(art).join('\n')}`
+              : `\n\nEl articulado no se devuelve entero: pide el artículo que necesitas en la cita ("art. 3 de ${cita}") o abre el enlace.`),
+        )
+      }
       return vacio(
         `la cita "${cita}"`,
         c.anio ? `Prueba sin el año, o verifica el número.` : `Prueba indicando el año.`,
       )
     }
     const n = r.items[0]!
+
+    // La vigencia solo la publica SUIN, y solo si el índice empaquetado tiene
+    // esta norma. Que falte no es un fallo: se calla y sigue mandando la regla
+    // de no afirmar vigencia.
+    let vig = ''
+    if (c.anio) {
+      try {
+        const v = await suin.vigencia(c.tipo, c.numero, c.anio)
+        if (v) {
+          vig =
+            `\nEstado de vigencia según SUIN-Juriscol (índice del ${v.generado}): ` +
+            `${v.estado || 'SUIN no publica el estado de esta norma'}\n  ${v.url}`
+        }
+      } catch {
+        /* SUIN es un complemento: si no responde, la cita se resuelve igual */
+      }
+    }
+
     let extra = ''
     if (c.articulo) {
       const norma = await gestor.obtenerNorma(n.id)
@@ -159,7 +204,7 @@ server.registerTool(
         (n.resumen
           ? `Extracto de un tema asociado (NO resume la norma; usa obtener_norma para su objeto y articulado): ${n.resumen}\n`
           : '') +
-        `URL: ${n.url}${extra}`,
+        `URL: ${n.url}${vig}${extra}`,
     )
   },
 )
@@ -338,11 +383,7 @@ server.registerTool(
     ].join('\n')
 
     if (n.texto.length < 200) {
-      return txt(
-        `${cab}\n\nEsta norma está registrada pero no tiene texto publicado en el Gestor Normativo ` +
-          `(se recibieron ${n.texto.length} caracteres). No significa que la norma no diga nada: ` +
-          `consúltala en el PDF o en la página oficial.`,
-      )
+      return txt(`${cab}\n\n${avisoSinTexto(n.texto.length, n.urlPdf, await gestor.pdfEscaneado(n.id))}`)
     }
 
     let cuerpo: string
@@ -442,7 +483,7 @@ server.registerTool(
       'Busca en la relatoría de la Corte Constitucional (49.409 providencias, actualizada a diario). ' +
       'Úsala para sentencias y autos: el Gestor Normativo tiene muy poca jurisprudencia reciente.',
     inputSchema: {
-      termino: z.string(),
+      termino: z.string().describe('Obligatorio. Términos a buscar en la relatoría, ej. "teletrabajo"'),
       desde: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional().describe('Fecha inicial AAAA-MM-DD (por defecto 1992-01-01)'),
       hasta: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional().describe('Fecha final AAAA-MM-DD'),
       tipos: z
@@ -491,10 +532,13 @@ server.registerTool(
   {
     title: 'Obtener el texto de una providencia',
     description:
-      'Texto completo de una sentencia o auto de la Corte Constitucional. Igual que las normas, no se devuelve ' +
-      'entero por defecto (la T-099/24 son 153.000 caracteres): usa buscar_en_texto o desde/limite_caracteres.',
+      'Texto completo de una sentencia o auto de la Corte Constitucional. Acepta tanto la ruta que devuelve ' +
+      'buscar_jurisprudencia ("2024/T-099-24.htm") como la cita corta ("T-099/24"). Igual que las normas, no se ' +
+      'devuelve entero por defecto (la T-099/24 son 153.000 caracteres): usa buscar_en_texto o desde/limite_caracteres.',
     inputSchema: {
-      ruta: z.string().describe('Ruta de la providencia, ej. "2024/T-099-24.htm"'),
+      ruta: z
+        .string()
+        .describe('Ruta de la providencia ("2024/T-099-24.htm") o su cita corta ("T-099/24"): ambas valen'),
       buscar_en_texto: z.string().optional(),
       desde: z.coerce.number().int().min(0).default(0),
       max_pasajes: z.coerce.number().int().positive().optional().describe('Máximo de pasajes con buscar_en_texto (por defecto 10)'),
@@ -517,10 +561,7 @@ server.registerTool(
       throw e
     }
     if (doc.texto.length < 200) {
-      return txt(
-        `La providencia ${ruta} existe pero su documento no trae texto legible (${doc.texto.length} caracteres). ` +
-          `Consúltala directamente en ${doc.url}`,
-      )
+      return txt(`Providencia ${ruta}\n\n${avisoSinTexto(doc.texto.length, doc.url)}`)
     }
     if (buscar_en_texto) {
       const f = fragmentos(doc.texto, buscar_en_texto, 400, max_pasajes ?? 10, tope)
@@ -537,6 +578,57 @@ server.registerTool(
       `Providencia ${ruta}\nTexto total: ${t.total} caracteres; se muestran ${t.texto.length} desde ${t.desde}` +
         (t.omitido > 0 ? `; quedan ${t.omitido}.` : '.') +
         `\n\n--- Texto ---\n${t.texto}\n\nURL: ${doc.url}`,
+    )
+  },
+)
+
+server.registerTool(
+  'buscar_en_suin',
+  {
+    title: 'Buscar en SUIN-Juriscol',
+    description:
+      'Busca en los 56.832 documentos de SUIN-Juriscol (MinJusticia) por título, epígrafe, materia o entidad ' +
+      'emisora. Cubre leyes, decretos y resoluciones desde 1844, incluidos documentos que el Gestor Normativo no ' +
+      'tiene. NO busca dentro del articulado y NO sirve para citas exactas ("LEY 909 DE 2004" no devuelve nada): ' +
+      'para una cita usa resolver_cita. El campo de vigencia que devuelve es el del buscador y NO es fiable: ' +
+      'contradice la ficha del propio documento; para el estado real usa resolver_cita.',
+    inputSchema: {
+      texto: z.string().describe('Palabras del título, epígrafe o materia. Ej.: "servicio militar", "Buenaventura"'),
+      vigencia: z
+        .enum(['Vigente', 'Vigencia en Estudio', 'Compilado', 'Derogado', 'No vigente', 'Declarado Inexequible', 'Sustituido'])
+        .optional()
+        .describe('Filtra por el estado que declara el BUSCADOR, que no siempre coincide con la ficha'),
+      sector: z.string().optional().describe('Sector administrativo, ej. "Hacienda y Crédito Público"'),
+      desde: z.coerce.number().int().min(0).default(0).describe('Cuántos saltarse antes de empezar'),
+      limite: z.coerce.number().int().min(1).max(50).default(15),
+    },
+  },
+  async ({ texto, vigencia, sector, desde, limite }) => {
+    const r = await suin.buscar({ texto, vigencia, sector, desde, limite })
+    if (!r.total) {
+      return vacio(
+        `documentos en SUIN para "${texto}"`,
+        'El buscador de SUIN solo indexa título, epígrafe, materia y entidad: no busca dentro del articulado, y las ' +
+          'citas exactas no funcionan ahí. Para una norma concreta usa resolver_cita.',
+      )
+    }
+    if (!r.items.length) {
+      return vacio(`documentos a partir de la posición ${desde}`, `La búsqueda reúne ${r.total}; pide un "desde" menor.`)
+    }
+    const fin = desde + r.items.length
+    return txt(
+      `${r.total} documento(s) en SUIN-Juriscol; se muestran ${desde + 1}–${fin}.\n\n` +
+        r.items
+          .map(
+            (d) =>
+              `- ${d.titulo} (${d.subtipo})\n  ${d.epigrafe || '(sin epígrafe)'}\n` +
+              `  Vigencia SEGÚN EL BUSCADOR: ${d.vigencia || '(sin dato)'}\n  ${d.url}`,
+          )
+          .join('\n') +
+        (fin < r.total ? `\n\nQuedan ${r.total - fin}: repite con desde=${fin}.` : '') +
+        `\n\nATENCIÓN: la vigencia de esta lista es la del índice de búsqueda y contradice la ficha del documento ` +
+        `(la Ley 74 de 1923 figura aquí como "Vigencia en Estudio" y su ficha dice DEROGADO). Para el estado real ` +
+        `de una norma, pídela por su cita con resolver_cita.`,
     )
   },
 )
@@ -610,21 +702,30 @@ server.registerTool(
     inputSchema: {
       numero: z.string().optional().describe('Número del concepto, como texto. Ej.: "036201"'),
       anio: z.coerce.string().regex(/^\d{4}$/).optional().describe('Año de cuatro dígitos, como texto. Ej.: "2004"'),
+      desde: z.coerce.number().int().min(0).default(0).describe('Cuántos saltarse antes de empezar: pide el siguiente tramo sin repetir los ya vistos'),
       limite: z.coerce.number().int().min(1).max(100).default(20),
     },
   },
-  async ({ numero, anio, limite }) => {
-    const r = await gestor.conceptosFp(numero, anio, limite)
-    if (!r.items.length) {
+  async ({ numero, anio, desde, limite }) => {
+    const r = await gestor.conceptosFp(numero, anio, limite, desde)
+    if (!r.total) {
       return vacio(
         'conceptos con ese número o año',
         'Recuerda que este listado solo filtra por número y año. Si buscas conceptos sobre un tema, usa buscar_normas con tipo_documento "Concepto".',
       )
     }
+    // Un "desde" pasado del final no es lo mismo que no haber encontrado nada.
+    if (!r.items.length) {
+      return vacio(
+        `conceptos a partir de la posición ${desde}`,
+        `El filtro reúne ${r.total} concepto(s); pide un "desde" menor.`,
+      )
+    }
+    const fin = desde + r.items.length
     return txt(
-      `${r.total} concepto(s) coinciden; se muestran ${r.items.length}.\n\n` +
+      `${r.total} concepto(s) coinciden; se muestran ${desde + 1}–${fin}.\n\n` +
         r.items.map((c) => `- ${c.titulo} (id ${c.id})\n  ${c.url}`).join('\n') +
-        ``,
+        (fin < r.total ? `\n\nQuedan ${r.total - fin}: repite con desde=${fin}.` : ''),
     )
   },
 )
@@ -639,21 +740,27 @@ server.registerTool(
       'de 1993 y leyes del Congreso. Es un listado corto y fijo; para buscar normativa usa buscar_normas.',
     inputSchema: {
       filtro: z.string().optional().describe('Texto para acotar por título, ej. "circular" o "1474"'),
+      desde: z.coerce.number().int().min(0).default(0).describe('Cuántas saltarse antes de empezar: pide el siguiente tramo sin repetir las ya vistas'),
       limite: z.coerce.number().int().min(1).max(150).default(40),
     },
   },
-  async ({ filtro, limite }) => {
+  async ({ filtro, desde, limite }) => {
     const todas = await gestor.normasFp()
     const q = filtro ? sinTildes(filtro).toLowerCase() : ''
     const items = todas.filter((i) => !q || sinTildes(`${i.titulo} ${i.resumen}`).toLowerCase().includes(q))
     if (!items.length) return vacio(`normativa de competencia del DAFP que coincida con "${filtro}"`, 'Prueba sin filtro para ver el listado completo.')
+    const tramo = items.slice(desde, desde + limite)
+    // Un "desde" pasado del final no es lo mismo que no haber encontrado nada.
+    if (!tramo.length) {
+      return vacio(`normativa a partir de la posición ${desde}`, `El listado reúne ${items.length} norma(s); pide un "desde" menor.`)
+    }
+    const fin = desde + tramo.length
     return txt(
-      `${items.length} de ${todas.length} norma(s) del listado.\n\n` +
-        items
-          .slice(0, limite)
+      `${items.length} de ${todas.length} norma(s) del listado; se muestran ${desde + 1}–${fin}.\n\n` +
+        tramo
           .map((i) => `- ${i.titulo} (id ${i.id})\n  Extracto temático: ${i.resumen || '(ninguno)'}\n  ${i.url}`)
           .join('\n') +
-        (items.length > limite ? `\n\nSe muestran ${limite} de ${items.length}.` : ''),
+        (fin < items.length ? `\n\nQuedan ${items.length - fin}: repite con desde=${fin}.` : ''),
     )
   },
 )

@@ -7,6 +7,7 @@ import {
   parseOpciones,
   parseResultados,
   parseTematica,
+  pdfEsEscaneo,
   limpiarTermino,
   sinTildes,
   tieneTildes,
@@ -255,6 +256,19 @@ export async function obtenerNorma(id: string | number): Promise<Norma> {
   return parseNorma(await traer(`${BASE_GESTOR}/norma.php?i=${n}`), n)
 }
 
+/**
+ * ¿El PDF de una norma es un escaneo? Solo se pregunta cuando el HTML no trajo
+ * texto: es una petición de más en un camino que ya iba a devolver poco, y a
+ * cambio distingue "no hay texto publicado" de "es una imagen".
+ */
+export async function pdfEscaneado(id: string | number): Promise<boolean> {
+  try {
+    return pdfEsEscaneo(await traer(`${BASE_GESTOR}/norma_pdf.php?i=${entero(id)}`))
+  } catch {
+    return false // sin PDF no hay nada que afirmar; se informa como "sin texto" a secas
+  }
+}
+
 export async function subtemas(temaId: string | number): Promise<{ id: string; nombre: string }[]> {
   const t = entero(temaId)
   if (!t) throw new Error(`Identificador de tema inválido: ${temaId}`)
@@ -300,7 +314,7 @@ const TTL_CONCEPTOS = 7 * 24 * 3600 * 1000
  * esto", que es justo la confusión que hay que evitar. Para buscar por materia,
  * `buscar` con tipo Concepto (7), que sí consulta los restrictores.
  */
-export async function conceptosFp(numero?: string | number, anio?: string | number, limite = 20) {
+export async function conceptosFp(numero?: string | number, anio?: string | number, limite = 20, desde = 0) {
   if (!cacheConceptos || Date.now() - cacheConceptos.cuando > TTL_CONCEPTOS) {
     const html = await traer(`${BASE_GESTOR}/conceptosfp.php`)
     const items = [...html.matchAll(/norma\.php\?i=(\d+)"[^>]*>([^<]+)</g)].map((m) => ({
@@ -317,5 +331,5 @@ export async function conceptosFp(numero?: string | number, anio?: string | numb
   const filtrados = cacheConceptos.items.filter(
     (c) => (!num || c.titulo.includes(num)) && (!a || c.titulo.includes(a)),
   )
-  return { total: filtrados.length, items: filtrados.slice(0, limite) }
+  return { total: filtrados.length, desde, items: filtrados.slice(desde, desde + limite) }
 }

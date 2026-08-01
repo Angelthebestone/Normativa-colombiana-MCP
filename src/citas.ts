@@ -59,7 +59,10 @@ const expandirAnio = (yy: string): string => {
 const RE_ARTICULO = /\bart(?:[íi]culo|\.)?\s*([\d]+(?:\.[\d]+)*[A-Za-z]?)/i
 // Admite "C-337/11", "C-351 de 2013" y "T-099-24": las tres formas circulan.
 const RE_SENTENCIA = /\b(C|T|SU|A)[\s.-]*(\d{1,4})\s*(?:[/-]|\s+de\s+)\s*(\d{2,4})\b/i
-const RE_TIPO_NUM = new RegExp(`\\b(${NOMBRES_TIPO})\\s*(?:n[ºo°.]?\\s*)?(\\d{1,5})(?:\\s*(?:de|del|/)\\s*(\\d{4}|\\d{2}))?`, 'i')
+// El número se toma entero, sin tope de dígitos: con `\d{1,5}` una cita como
+// "Ley 99999999 de 1800" se partía en "Ley 99999" y el año quedaba fuera, así
+// que el error acababa pidiendo un año que sí se había indicado.
+const RE_TIPO_NUM = new RegExp(`\\b(${NOMBRES_TIPO})\\s*(?:n[ºo°.]?\\s*)?(\\d+)(?:\\s*(?:de|del|/)\\s*(\\d{4}|\\d{2}))?`, 'i')
 
 export function parsearCita(texto: string): Cita | null {
   const art = texto.match(RE_ARTICULO)?.[1]
@@ -94,3 +97,15 @@ export function parsearCita(texto: string): Cita | null {
 
 /** Id de `tipdoc` para una cita; `undefined` si el nombre no está en la tabla. */
 export const idTipo = (tipo: string): number | undefined => TIPOS[normaliza(tipo)]
+
+/**
+ * Ruta de la relatoría para una cita de sentencia: "C-337/11" → "2011/C-337-11.htm".
+ * ponytail: se construye por convención de nombres, que es la que sigue el
+ * sitio; si alguna providencia se sale del patrón, obtenerTexto la reporta como
+ * inexistente y queda buscar_jurisprudencia, que devuelve la ruta literal.
+ */
+export function rutaDeSentencia(texto: string): string | null {
+  const c = parsearCita(texto)
+  if (!c?.sentencia || !c.anio) return null
+  return `${c.anio}/${c.sentencia.replace('/', '-')}.htm`
+}

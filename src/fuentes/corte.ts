@@ -10,6 +10,7 @@
  * 2024; aquí hay 49.409 providencias y se publican el mismo día.
  */
 import { cargar, limpiarTermino, textoDe } from '../parse.ts'
+import { rutaDeSentencia } from '../citas.ts'
 import { pedir as http } from '../http.ts'
 
 const BASE = 'https://www.corteconstitucional.gov.co/relatoria'
@@ -142,11 +143,17 @@ export async function ultimas(cantidad = 10): Promise<Providencia[]> {
   return lista.map(aProvidencia)
 }
 
-/** Texto completo de una providencia: acepta `2024/T-099-24.htm` o la URL entera. */
+/**
+ * Texto completo de una providencia. Acepta `2024/T-099-24.htm`, la URL entera
+ * o la cita corta `T-099/24`: obligar a copiar la ruta literal de una respuesta
+ * previa era fricción gratuita, porque el resto del sistema cita en corto.
+ */
 export async function obtenerTexto(ruta: string): Promise<{ url: string; texto: string }> {
   const limpia = ruta.replace(/^https?:\/\/[^/]+\/relatoria\//i, '').replace(/^\/+/, '')
   if (!/^[\w./-]+\.html?$/i.test(limpia)) {
-    throw new Error(`Ruta de providencia inválida: ${ruta}. Se espera algo como 2024/T-099-24.htm`)
+    const porCita = rutaDeSentencia(ruta)
+    if (porCita) return obtenerTexto(porCita)
+    throw new Error(`Ruta de providencia inválida: ${ruta}. Se espera "2024/T-099-24.htm" o la cita "T-099/24".`)
   }
   const url = `${BASE}/${limpia}`
   const html = await pedir(url)
