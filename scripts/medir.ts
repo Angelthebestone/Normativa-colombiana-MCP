@@ -10,17 +10,17 @@ import { performance } from 'node:perf_hooks'
 import { fileURLToPath } from 'node:url'
 
 const RAIZ = fileURLToPath(new URL('..', import.meta.url)).replace(/\\/g, '/').replace(/\/$/, '')
-const N = Number(process.env.N ?? 5)
+const N = Number(process.env['N'] ?? 5)
 
-const mediana = (xs) => {
+const mediana = (xs: number[]): number => {
   const s = [...xs].sort((a, b) => a - b)
-  return s[Math.floor(s.length / 2)]
+  return s[Math.floor(s.length / 2)] ?? 0
 }
-const ms = (x) => `${x.toFixed(1)} ms`
+const ms = (x: number): string => `${x.toFixed(1)} ms`
 
 // --- 1. arranque en frío: spawn → respuesta a initialize -------------------
 
-function arranque(peticionExtra) {
+function arranque(peticionExtra: object | null): Promise<{ init: number; extra: number }> {
   return new Promise((resolve) => {
     const t0 = performance.now()
     const p = spawn('node', [`${RAIZ}/server/index.js`], { stdio: ['pipe', 'pipe', 'ignore'] })
@@ -33,7 +33,7 @@ function arranque(peticionExtra) {
         const linea = buf.slice(0, i)
         buf = buf.slice(i + 1)
         if (!linea.trim()) continue
-        const m = JSON.parse(linea)
+        const m = JSON.parse(linea) as { id?: number }
         if (m.id === 1) {
           tInit = performance.now() - t0
           p.stdin.write(JSON.stringify({ jsonrpc: '2.0', method: 'notifications/initialized' }) + '\n')
@@ -63,8 +63,10 @@ function arranque(peticionExtra) {
 
 // --- 2. coste del índice temático y memoria -------------------------------
 
-function indices() {
-  const r = {}
+type Medida = { bytes: number; tLeer: number; tParse: number; entradas: number }
+
+function indices(): Record<string, Medida> {
+  const r: Record<string, Medida> = {}
   for (const f of ['indice-tematico.json', 'indice-suin.json']) {
     const ruta = `${RAIZ}/datos/${f}`
     const bytes = statSync(ruta).size
@@ -72,7 +74,7 @@ function indices() {
     const crudo = readFileSync(ruta, 'utf8')
     const tLeer = performance.now() - t0
     const t1 = performance.now()
-    const j = JSON.parse(crudo)
+    const j = JSON.parse(crudo) as { filas?: unknown[]; normas?: Record<string, string> }
     const tParse = performance.now() - t1
     r[f] = { bytes, tLeer, tParse, entradas: j.filas?.length ?? Object.keys(j.normas ?? {}).length }
   }
@@ -82,13 +84,13 @@ function indices() {
 // --- 3. funciones puras sobre un documento grande -------------------------
 
 async function puras() {
-  const P = await import(`file:///${RAIZ}/src/parse.ts`)
+  const P = (await import(`file:///${RAIZ}/src/parse.ts`)) as typeof import('../src/parse.ts')
   // Un documento del tamaño del Decreto 1083 (925k) para medir el caso peor real.
   const base = readFileSync(`${RAIZ}/src/index.ts`, 'utf8')
   const texto = base.repeat(Math.ceil(925_000 / base.length)).slice(0, 925_000)
 
-  const medir = (nombre, fn) => {
-    const t = []
+  const medir = (nombre: string, fn: () => unknown) => {
+    const t: number[] = []
     for (let i = 0; i < N; i++) {
       const t0 = performance.now()
       fn()
@@ -117,18 +119,18 @@ for (const [f, v] of Object.entries(idx)) {
   )
 }
 
-const fríos = []
+const fríos: number[] = []
 for (let i = 0; i < N; i++) fríos.push((await arranque(null)).init)
 console.log(`\narranque → initialize        mediana ${ms(mediana(fríos))}`)
 
-const conTema = []
+const conTema: number[] = []
 for (let i = 0; i < N; i++) {
   const r = await arranque({ method: 'tools/call', params: { name: 'buscar_por_tema', arguments: { texto: 'teletrabajo' } } })
   conTema.push(r.extra)
 }
 console.log(`primera buscar_por_tema     mediana ${ms(mediana(conTema))}   (incluye cargar el índice)`)
 
-const conLista = []
+const conLista: number[] = []
 for (let i = 0; i < N; i++) conLista.push((await arranque({ method: 'tools/list' })).extra)
 console.log(`tools/list                  mediana ${ms(mediana(conLista))}`)
 

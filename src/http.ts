@@ -105,11 +105,30 @@ export function decodificar(datos: Buffer, contentType = ''): string {
 
 type Cruda = { status: number; datos: Buffer; contentType: string; retryAfter: string }
 
-function crudo(url: string, timeout: number, accept: string, extra: Record<string, string>): Promise<Cruda> {
+function crudo(
+  url: string,
+  timeout: number,
+  accept: string,
+  extra: Record<string, string>,
+  cuerpo?: string,
+): Promise<Cruda> {
   return new Promise((resolve, reject) => {
     const req = request(
       url,
-      { ca: CA, timeout, headers: { 'User-Agent': UA, Accept: accept, 'Accept-Encoding': 'gzip, deflate', ...extra } },
+      {
+        ca: CA,
+        timeout,
+        method: cuerpo === undefined ? 'GET' : 'POST',
+        headers: {
+          'User-Agent': UA,
+          Accept: accept,
+          'Accept-Encoding': 'gzip, deflate',
+          ...(cuerpo === undefined
+            ? {}
+            : { 'Content-Type': 'application/json', 'Content-Length': String(Buffer.byteLength(cuerpo)) }),
+          ...extra,
+        },
+      },
       (res) => {
         const enc = String(res.headers['content-encoding'] ?? '')
         const flujo = enc === 'gzip' ? res.pipe(createGunzip()) : enc === 'deflate' ? res.pipe(createInflate()) : res
@@ -128,6 +147,7 @@ function crudo(url: string, timeout: number, accept: string, extra: Record<strin
     )
     req.on('timeout', () => req.destroy(new Error(`tiempo de espera agotado tras ${timeout} ms`)))
     req.on('error', reject)
+    if (cuerpo !== undefined) req.write(cuerpo)
     req.end()
   })
 }
@@ -149,11 +169,13 @@ export async function pedir(
   accept = 'text/html,*/*',
   /** Cabeceras extra; hoy solo la `api-key` que exige el buscador de SUIN. */
   extra: Record<string, string> = {},
+  /** Si viene, la petición es POST con este cuerpo JSON. */
+  cuerpo?: string,
 ): Promise<Respuesta> {
   const host = new URL(url).host
 
   for (let intento = 0; ; intento++) {
-    const r = await enCola(host, () => crudo(url, timeout, accept, extra))
+    const r = await enCola(host, () => crudo(url, timeout, accept, extra, cuerpo))
 
     // Si el portal pide calma, se le hace caso en vez de insistir al mismo ritmo.
     if ((r.status === 429 || r.status === 503) && intento === 0) {
@@ -170,5 +192,20 @@ export async function pedir(
     }
 
     return { status: r.status, cuerpo: decodificar(r.datos, r.contentType) }
+  }
+}
+
+/**
+ * POST de JSON y respuesta JSON, para las fuentes que hablan GraphQL. Comparte
+ * el ritmo, la serialización por dominio y la cadena TLS de `pedir`.
+ */
+export async function pedirJson<T>(url: string, cuerpo: unknown, timeout = 40_000): Promise<T> {
+  const r = await pedir(url, timeout, 'application/json', {}, JSON.stringify(cuerpo))
+  // Un backend que responde 200 con una página de mantenimiento es real: la
+  // Corte Suprema lo hace. Por eso se valida que sea JSON, no el código HTTP.
+  try {
+    return JSON.parse(r.cuerpo) as T
+  } catch {
+    throw new Error(`${new URL(url).host} respondió algo que no es JSON (estado ${r.status}).`)
   }
 }

@@ -100,9 +100,9 @@ after(() => c?.cerrar())
 
 // --- contrato que ve el cliente -----------------------------------------
 
-test('las 12 herramientas se declaran con esquemas utilizables', CONTRATO, async () => {
+test('las 15 herramientas se declaran con esquemas utilizables', CONTRATO, async () => {
   const { tools } = await c.peticion('tools/list')
-  assert.equal(tools.length, 12, tools.map((t: any) => t.name).join(', '))
+  assert.equal(tools.length, 15, tools.map((t: any) => t.name).join(', '))
 
   const sinTipo: string[] = []
   for (const t of tools) {

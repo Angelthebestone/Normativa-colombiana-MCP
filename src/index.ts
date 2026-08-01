@@ -7,6 +7,8 @@ import { idTipo, parsearCita } from './citas.ts'
 import {
   advertenciasVigencia,
   avisoSinTexto,
+  cargar,
+  textoDe,
   normalizarRotulo,
   articulo as extraerArticulo,
   fragmentos,
@@ -15,10 +17,12 @@ import {
   sinTildes,
 } from './parse.ts'
 import { NoExisteError } from './parse.ts'
-import { VERSION } from './http.ts'
+import { VERSION, pedir as pedirHttp } from './http.ts'
 import * as gestor from './fuentes/gestor.ts'
 import * as corte from './fuentes/corte.ts'
 import * as suin from './fuentes/suin.ts'
+import * as dian from './fuentes/normograma.ts'
+import * as suprema from './fuentes/cortesuprema.ts'
 
 
 const DESCARGO =
@@ -84,7 +88,7 @@ function frescura(generado: string): string {
  * así que aquí van las reglas de enrutamiento y las trampas del portal, no una
  * descripción del producto. Conviene que sea corto: ocupa contexto siempre.
  */
-const INSTRUCCIONES = `Fuentes oficiales de normativa colombiana: Gestor Normativo de Función Pública y relatoría de la Corte Constitucional.
+const INSTRUCCIONES = `Fuentes oficiales de normativa colombiana: Gestor Normativo de Función Pública, Corte Constitucional, Corte Suprema, SUIN-Juriscol (MinJusticia) y normograma de la DIAN.
 
 Qué herramienta usar:
 - La pregunta menciona una norma concreta ("Ley 909 de 2004", "Decreto 1083", "C-337/11", "el art. 6 de la Ley 1221") → resolver_cita. Es exacta; el buscador por palabras no.
@@ -92,6 +96,8 @@ Qué herramienta usar:
 - Hay que saber qué dice una norma sobre algo → obtener_norma con buscar_en_texto. Esa es la verdadera búsqueda de texto completo; el portal no la ofrece.
 - Sentencias y autos → buscar_jurisprudencia (Corte Constitucional, al día). El Gestor casi no tiene jurisprudencia reciente.
 - Normativa que el Gestor no tiene, o exploración por materia/sector del corpus histórico (desde 1844) → buscar_en_suin. NUNCA la uses para saber si algo está vigente: su campo de vigencia es del índice de búsqueda y contradice la ficha. La vigencia sale de resolver_cita.
+- Impuestos, aduanas o cambios (retención, IVA, renta, importación) → buscar_normativa_tributaria y obtener_documento_dian. Ninguna otra herramienta cubre esa materia.
+- Jurisprudencia de la Corte SUPREMA (casación civil, laboral, penal y sus tutelas) → buscar_jurisprudencia_suprema. Es un tribunal DISTINTO de la Corte Constitucional: no las mezcles. Exige indicar sala, y cada resultado trae las normas que cita, que puedes resolver con resolver_cita.
 - Por qué una norma aplica a un tema → explicar_relacion_tema con el temsubid y el normid de la MISMA fila de buscar_por_tema.
 
 Reglas al responder:
@@ -578,6 +584,133 @@ server.registerTool(
       `Providencia ${ruta}\nTexto total: ${t.total} caracteres; se muestran ${t.texto.length} desde ${t.desde}` +
         (t.omitido > 0 ? `; quedan ${t.omitido}.` : '.') +
         `\n\n--- Texto ---\n${t.texto}\n\nURL: ${doc.url}`,
+    )
+  },
+)
+
+server.registerTool(
+  'buscar_normativa_tributaria',
+  {
+    title: 'Buscar normativa tributaria, aduanera y cambiaria (DIAN)',
+    description:
+      'Busca en el normograma de la DIAN: decretos, resoluciones, conceptos y circulares en materia tributaria, ' +
+      'aduanera y cambiaria. Es lo que ninguna otra herramienta de este MCP cubre. Devuelve el extracto donde ' +
+      'aparece el término y el enlace al texto completo. Para leer el documento usa obtener_documento_dian.',
+    inputSchema: {
+      texto: z.string().describe('Términos a buscar, ej. "retención en la fuente", "declaración de importación"'),
+      desde: z.coerce.number().int().min(0).default(0).describe('Cuántos saltarse antes de empezar'),
+      limite: z.coerce.number().int().min(1).max(50).default(15),
+    },
+  },
+  async ({ texto, desde, limite }) => {
+    const r = await dian.buscar(texto, limite, desde)
+    if (!r.total) {
+      return vacio(`normativa de la DIAN sobre "${texto}"`, 'Prueba con menos palabras o con el término técnico exacto.')
+    }
+    const items = r.items
+    if (!items.length) return vacio(`resultados a partir de la posición ${desde}`, `La búsqueda reúne ${r.total}; pide un "desde" menor.`)
+    const fin = desde + items.length
+    return txt(
+      `${r.total} documento(s) en el normograma de la DIAN; se muestran ${desde + 1}–${fin}.\n\n` +
+        items
+          .map(
+            (d) =>
+              `- ${d.nombre}${d.tipo ? ` (${d.tipo}${d.anio ? `, ${d.anio}` : ''})` : ''}\n` +
+              `  ${d.epigrafe || '(sin epígrafe)'}\n` +
+              (d.entidad ? `  Entidad: ${d.entidad}\n` : '') +
+              (d.extracto ? `  «…${d.extracto.slice(0, 240)}…»\n` : '') +
+              `  link para obtener_documento_dian: ${d.link}`,
+          )
+          .join('\n') +
+        (fin < r.total ? `\n\nQuedan ${r.total - fin}: repite con desde=${fin}.` : ''),
+    )
+  },
+)
+
+server.registerTool(
+  'obtener_documento_dian',
+  {
+    title: 'Obtener el texto de un documento de la DIAN',
+    description:
+      'Texto de un documento del normograma de la DIAN por su "link" (el que devuelve buscar_normativa_tributaria). ' +
+      'Nunca devuelve el documento entero: el Decreto 1625 de 2016 son 6,5 MB. Usa buscar_en_texto o ' +
+      'desde/limite_caracteres, igual que en obtener_norma.',
+    inputSchema: {
+      link: z.string().describe('Nombre del archivo, ej. "decreto_1625_2016.htm"'),
+      buscar_en_texto: z.string().optional().describe('Devuelve solo los fragmentos que mencionan este término'),
+      desde: z.coerce.number().int().min(0).default(0),
+      max_pasajes: z.coerce.number().int().positive().optional(),
+      limite_caracteres: z.coerce.number().int().positive().default(8000).describe('Tope del TEXTO devuelto; se ajusta al rango 200–40.000'),
+    },
+  },
+  async ({ link, buscar_en_texto, desde, max_pasajes, limite_caracteres }) => {
+    const tope = Math.min(Math.max(limite_caracteres, 200), 40_000)
+    const url = dian.urlDocumento(link)
+    const r = await pedirHttp(url, 90_000)
+    if (r.status !== 200) return vacio(`el documento "${link}" en el normograma de la DIAN`, 'Verifica el link con buscar_normativa_tributaria.')
+    const texto = textoDe(cargar(r.cuerpo), 'body')
+    if (texto.length < 200) return txt(`${link}\n\n${avisoSinTexto(texto.length, url)}`)
+
+    if (buscar_en_texto) {
+      const f = fragmentos(texto, buscar_en_texto, 400, max_pasajes ?? 10, tope)
+      if (!f.total) return txt(`El término "${buscar_en_texto}" no aparece en ${link} (${texto.length} caracteres revisados).\nURL: ${url}`)
+      return txt(
+        `${link}\n${f.total} aparición(es) de "${buscar_en_texto}" en ${f.pasajes} pasaje(s); se muestran ${f.mostrados}.\n` +
+          `${advertenciasVigencia(f.trozos.join(' ')).join('\n')}\n\n${f.trozos.join('\n\n---\n\n')}\n\nURL: ${url}`,
+      )
+    }
+    const t = trocear(texto, desde, tope)
+    return txt(
+      `${link}\nTexto total: ${t.total} caracteres; se muestran ${t.texto.length} desde ${t.desde}` +
+        (t.omitido > 0 ? `; quedan ${t.omitido} (usa desde/limite_caracteres o buscar_en_texto).` : '.') +
+        `\n${advertenciasVigencia(t.texto).join('\n')}\n\n--- Texto ---\n${t.texto}\n\nURL: ${url}`,
+    )
+  },
+)
+
+server.registerTool(
+  'buscar_jurisprudencia_suprema',
+  {
+    title: 'Buscar jurisprudencia de la Corte Suprema de Justicia',
+    description:
+      'Busca providencias de la Corte Suprema por sala: Tutelas, Civil, Laboral o Penal, desde 1991. Complementa a ' +
+      'buscar_jurisprudencia, que es de la Corte CONSTITUCIONAL: son tribunales distintos. Cada resultado trae las ' +
+      'NORMAS QUE CITA, que puedes resolver después con resolver_cita. No devuelve el texto: las providencias son ' +
+      'archivos .docx y esta extensión no los lee.',
+    inputSchema: {
+      texto: z.string().describe('Términos a buscar, ej. "despido sin justa causa"'),
+      sala: z.enum(suprema.SALAS).default('Tutelas').describe('Sala de la Corte. Obligatoria: sin ella el buscador no responde.'),
+      anio: z.string().regex(/^\d{4}$/).optional().describe('Año de cuatro dígitos'),
+      magistrado: z.string().optional().describe('Nombre del magistrado ponente'),
+      exacto: z.boolean().default(false).describe('Buscar la frase exacta'),
+      desde: z.coerce.number().int().min(0).default(0).describe('Cuántas saltarse antes de empezar'),
+    },
+  },
+  async ({ texto, sala, anio, magistrado, exacto, desde }) => {
+    const r = await suprema.buscar({ texto, sala, anio, magistrado, exacto, desde })
+    if (!r.items.length) {
+      return vacio(
+        `providencias de la sala ${sala} sobre "${texto}"`,
+        'Prueba otra sala (Tutelas, Civil, Laboral, Penal), un término más general o quita el año.',
+      )
+    }
+    const fin = desde + r.items.length
+    return txt(
+      `${r.total} providencia(s) en la sala ${sala}; se muestran ${desde + 1}–${fin}.\n\n` +
+        r.items
+          .map(
+            (p) =>
+              `- ${p.titulo} (${p.clase || 'providencia'}, ${p.fecha})\n` +
+              (p.magistrado ? `  Ponente: ${p.magistrado}\n` : '') +
+              (p.normasCitadas.length
+                ? `  Normas citadas (resolubles con resolver_cita): ${p.normasCitadas.slice(0, 8).join(' · ')}` +
+                  (p.normasCitadas.length > 8 ? ` … y ${p.normasCitadas.length - 8} más` : '')
+                : '  (no declara normas citadas)'),
+          )
+          .join('\n') +
+        (fin < r.total ? `\n\nQuedan ${r.total - fin}: repite con desde=${fin}.` : '') +
+        `\n\nEl texto completo no se puede entregar aquí: la Corte Suprema publica las providencias en .docx y esta ` +
+        `extensión no lee ese formato. Búscalas por su número en cortesuprema.gov.co.`,
     )
   },
 )

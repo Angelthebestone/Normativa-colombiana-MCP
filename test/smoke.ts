@@ -10,6 +10,8 @@ import test from 'node:test'
 
 import { parsearCita, idTipo, rutaDeSentencia } from '../src/citas.ts'
 import { claveSuin, fichaSuin } from '../src/fuentes/suin.ts'
+import * as dian from '../src/fuentes/normograma.ts'
+import * as suprema from '../src/fuentes/cortesuprema.ts'
 import { pedir as pedirHttp } from '../src/http.ts'
 import {
   CanarioError,
@@ -312,4 +314,26 @@ test('la relatoría está al día: hay providencias recientes', RED, async () =>
   const masReciente = u.map((p) => p.publicacion).sort().at(-1)!
   const dias = (Date.now() - Date.parse(masReciente)) / 86_400_000
   assert.ok(dias < 120, `la publicación más reciente es de hace ${Math.round(dias)} días`)
+})
+
+// --- fuentes añadidas en la 1.3.0 ----------------------------------------
+
+test('la DIAN devuelve normativa tributaria con enlace al texto', RED, async () => {
+  const r = await dian.buscar('retención en la fuente', 3)
+  assert.ok(r.total > 100, `resultados: ${r.total}`)
+  assert.equal(r.items.length, 3)
+  const d = r.items[0]!
+  assert.ok(d.nombre && d.link, 'sin nombre y link no hay nada que consultar')
+  assert.match(d.url, /normograma\.dian\.gov\.co\/dian\/compilacion\/docs\//)
+  // El buscador devuelve el resaltado con <b> y entidades; llegan limpios.
+  assert.doesNotMatch(d.extracto, /<b>|&#\d+;/)
+})
+
+test('la Corte Suprema exige sala y trae las normas que cita', RED, async () => {
+  const r = await suprema.buscar({ texto: 'teletrabajo', sala: 'Tutelas' })
+  assert.ok(r.total > 0, `total: ${r.total}`)
+  const p = r.items[0]!
+  assert.ok(p.titulo && p.fecha, 'una providencia sin título ni fecha no es citable')
+  // Es su mejor argumento: encadena con resolver_cita.
+  assert.ok(r.items.some((x) => x.normasCitadas.length > 0), 'ninguna providencia declaró normas citadas')
 })
