@@ -9,7 +9,7 @@
     "generar-indice": "node scripts/generar-indice.ts",
     "generar-indice-suin": "node scripts/generar-indice-suin.ts",
     "test": "node --test test/smoke.ts",
-    "pack": "npm run build && npx @anthropic-ai/mcpb pack",
+    "pack": "npm run build && npx @anthropic-ai/mcpb pack . normativa-colombia.mcpb",
     "medir": "npm run build && node scripts/medir.ts",
     "typecheck": "tsc --noEmit",
     "lint": "oxlint src scripts test",
