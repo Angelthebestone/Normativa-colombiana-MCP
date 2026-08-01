@@ -3,6 +3,18 @@
 Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/).
 Este proyecto sigue [versionado semántico](https://semver.org/lang/es/).
 
+## [1.4.0] — 2026-08-01
+
+### Añadido
+
+- **`obtener_sentencia` con `seccion`.** Devuelve solo los antecedentes, las consideraciones o la decisión. La T-099/24 pasa de 140.162 caracteres a 39.906, y la C-337/11 de 134.223 a 8.312 empezando por el RESUELVE. Antes había que adivinar qué `buscar_en_texto` pedir para llegar al fallo.
+
+  Dos trampas que costaron una corrección cada una: el encabezado debe ocupar su propio renglón y estar en mayúsculas, porque «Decisión frente a la cual presentó recurso…» —prosa a mitad de la sentencia— pasaba por encabezado y devolvía el trozo equivocado, que parece la respuesta; y una sección no se corta con su propio encabezado, porque tras «III. DECISIÓN» viene «RESUELVE» y cortar ahí dejaba la fórmula de cortesía sin la parte resolutiva.
+
+- **`obtener_norma` con `historial`.** Reconstruye qué normas modificaron, adicionaron o derogaron una norma o un artículo, a partir de las notas que el propio portal incrusta en el texto. El Decreto 1083 trae 99 cambios distintos, 96 con la norma identificada.
+
+  Se devuelve **siempre la nota literal** junto a los campos sueltos, y lo que la nota no dice queda vacío en vez de completarse. Tampoco se ordenan por fecha ni se deduce cuál rige hoy: eso exigiría interpretar, y aquí interpretar mal es afirmar algo falso sobre derecho vigente.
+
 ## [1.3.3] — 2026-08-01
 
 ### Corregido

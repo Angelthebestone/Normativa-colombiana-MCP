@@ -20,6 +20,9 @@ import {
   avisoSinTexto,
   fragmentos,
   indiceArticulos,
+  historial,
+  seccion,
+  seccionesPresentes,
   limpiarTermino,
   pdfEsEscaneo,
   cargar,
@@ -356,4 +359,37 @@ test('la Corte Suprema no repite la misma providencia ni ignora el límite', RED
 
   const corto = await suprema.buscar({ texto: 'despido sin justa causa', sala: 'Penal', limite: 3 })
   assert.ok(corto.items.length <= 3, `limite=3 devolvió ${corto.items.length}`)
+})
+
+test('el historial se reconstruye de las notas, sin inventar lo que no dicen', () => {
+  const texto =
+    'ARTÍCULO 1.1.1.1 Objeto. (Modificado por el art. 1 Decreto 666 de 2017)\n' +
+    'ARTÍCULO 2. (Adicionado por el Art. 1 del Decreto 400 de 2021)\n' +
+    'ARTÍCULO 3. (Derogado por una norma que la nota no identifica)'
+  const h = historial(texto)
+  assert.equal(h.length, 3)
+  assert.deepEqual({ accion: h[0]!.accion, norma: h[0]!.norma, anio: h[0]!.anio, articulo: h[0]!.articulo }, {
+    accion: 'modificado',
+    norma: 'Decreto 666',
+    anio: '2017',
+    articulo: '1',
+  })
+  // Lo que la nota no dice queda vacío, nunca completado.
+  assert.equal(h[2]!.norma, '')
+  assert.equal(h[2]!.anio, '')
+  // Y la nota literal siempre viaja, que es lo único citable.
+  assert.ok(h.every((c) => c.literal.length > 10))
+})
+
+test('las secciones de una providencia se cortan por encabezado, no por prosa', () => {
+  const texto =
+    'Preámbulo cualquiera.\nANTECEDENTES\nLos hechos.\nII. CONSIDERACIONES\nEl análisis.\n' +
+    'Decisión frente a la cual presentó recurso el actor.\nIII. DECISIÓN\nEn mérito.\nRESUELVE\nPrimero: confirmar.'
+  assert.deepEqual(seccionesPresentes(texto), ['antecedentes', 'consideraciones', 'decision'])
+  // La prosa "Decisión frente a la cual..." no es un encabezado.
+  const d = seccion(texto, 'decision')!
+  assert.match(d, /^III\. DECISIÓN/)
+  // Y RESUELVE es continuación de la decisión, no otra sección: no debe cortar.
+  assert.match(d, /Primero: confirmar/)
+  assert.equal(seccion('un texto sin estructura', 'decision'), null)
 })

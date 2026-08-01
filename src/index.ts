@@ -13,6 +13,9 @@ import {
   articulo as extraerArticulo,
   fragmentos,
   indiceArticulos,
+  historial,
+  seccion as seccionDe,
+  seccionesPresentes,
   trocear,
   sinTildes,
 } from './parse.ts'
@@ -98,6 +101,8 @@ Qué herramienta usar:
 - Normativa que el Gestor no tiene, o exploración por materia/sector del corpus histórico (desde 1844) → buscar_en_suin. NUNCA la uses para saber si algo está vigente: su campo de vigencia es del índice de búsqueda y contradice la ficha. La vigencia sale de resolver_cita.
 - Impuestos, aduanas o cambios (retención, IVA, renta, importación) → buscar_normativa_tributaria y obtener_documento_dian. Ninguna otra herramienta cubre esa materia.
 - Jurisprudencia de la Corte SUPREMA (casación civil, laboral, penal y sus tutelas) → buscar_jurisprudencia_suprema. Es un tribunal DISTINTO de la Corte Constitucional: no las mezcles. Exige indicar sala, y cada resultado trae las normas que cita, que puedes resolver con resolver_cita.
+- Qué le pasó a una norma o a un artículo (quién lo modificó, adicionó o derogó) → obtener_norma con historial=true. Devuelve las notas literales del portal, sin ordenarlas ni deducir cuál rige hoy.
+- El fallo de una sentencia, sin leerla entera → obtener_sentencia con seccion="decision": trae el RESUELVE. La T-099/24 pasa de 140.162 a 39.906 caracteres.
 - Por qué una norma aplica a un tema → explicar_relacion_tema con el temsubid y el normid de la MISMA fila de buscar_por_tema.
 
 Reglas al responder:
@@ -394,6 +399,13 @@ server.registerTool(
       id: z.coerce.string().regex(/^\d+$/).describe('id numérico de la norma, como texto. Ej.: "31431"'),
       buscar_en_texto: z.string().optional().describe('Devuelve solo los fragmentos que mencionan este término'),
       articulo: z.string().optional().describe('Número de artículo, ej. "6" o "2.2.5.1.5"'),
+      historial: z
+        .boolean()
+        .default(false)
+        .describe(
+          'En vez del texto, devuelve qué normas modificaron, adicionaron o derogaron la norma —o el artículo, si ' +
+            'se indica— reconstruido de las notas del propio portal. El Decreto 1083 trae 99 cambios distintos.',
+        ),
       desde: z.coerce.number().int().min(0).default(0),
       max_pasajes: z.coerce.number().int().positive().optional().describe('Máximo de pasajes con buscar_en_texto (por defecto 10)'),
       limite_caracteres: z.coerce
@@ -404,7 +416,7 @@ server.registerTool(
         .describe('Tope de caracteres del TEXTO devuelto; se aplica también con buscar_en_texto. La respuesta añade encabezado y temas asociados. Se ajusta al rango 200–40.000.'),
     },
   },
-  async ({ id, buscar_en_texto, articulo, desde, limite_caracteres, max_pasajes }) => {
+  async ({ id, buscar_en_texto, articulo, historial: pedirHistorial, desde, limite_caracteres, max_pasajes }) => {
     const tope = Math.min(Math.max(limite_caracteres, 200), 40_000)
     let n: Awaited<ReturnType<typeof gestor.obtenerNorma>>
     try {
@@ -422,6 +434,33 @@ server.registerTool(
 
     if (n.texto.length < 200) {
       return txt(`${cab}\n\n${avisoSinTexto(n.texto.length, n.urlPdf, await gestor.pdfEscaneado(n.id))}`)
+    }
+
+    if (pedirHistorial) {
+      const ambito = articulo ? extraerArticulo(n.texto, articulo) : n.texto
+      if (articulo && !ambito) {
+        return txt(`${cab}\n\nNo encontré el artículo ${articulo}. Artículos detectados: ${indiceArticulos(n.texto).join(', ') || '(ninguno)'}`)
+      }
+      const cambios = historial(ambito!)
+      const donde = articulo ? `el artículo ${articulo}` : 'esta norma'
+      if (!cambios.length) {
+        return txt(
+          `${cab}\n\nLas notas del Gestor no registran cambios sobre ${donde}. Eso NO equivale a que siga intacto: ` +
+            `el portal no siempre anota las reformas, y la vigencia se consulta con resolver_cita.`,
+        )
+      }
+      return txt(
+        `${cab}\n\n${cambios.length} cambio(s) anotados sobre ${donde}, en el orden en que aparecen en el documento:\n\n` +
+          cambios
+            .map(
+              (c) =>
+                `- ${c.accion.toUpperCase()}${c.norma ? ` por ${c.norma} de ${c.anio}` : ''}` +
+                `${c.articulo ? `, artículo ${c.articulo}` : ''}\n  Nota literal: «${c.literal}»`,
+            )
+            .join('\n') +
+          `\n\nSon las notas que el propio portal incrusta en el texto, citadas tal cual. No están ordenadas por ` +
+          `fecha ni se deduce cuál rige hoy: para eso hay que leer el artículo y comprobar la vigencia.`,
+      )
     }
 
     let cuerpo: string
@@ -583,6 +622,13 @@ server.registerTool(
       ruta: z
         .string()
         .describe('Ruta de la providencia ("2024/T-099-24.htm") o su cita corta ("T-099/24"): ambas valen'),
+      seccion: z
+        .enum(['antecedentes', 'consideraciones', 'decision'])
+        .optional()
+        .describe(
+          'Devuelve solo esa parte. "decision" trae el RESUELVE, que es lo que casi siempre se busca: en la ' +
+            'T-099/24 son 39.906 caracteres en vez de 140.162.',
+        ),
       buscar_en_texto: z.string().optional(),
       desde: z.coerce.number().int().min(0).default(0),
       max_pasajes: z.coerce.number().int().positive().optional().describe('Máximo de pasajes con buscar_en_texto (por defecto 10)'),
@@ -594,7 +640,7 @@ server.registerTool(
         .describe('Tope de caracteres del TEXTO devuelto; se aplica también con buscar_en_texto. La respuesta añade encabezado y temas asociados. Se ajusta al rango 200–40.000.'),
     },
   },
-  async ({ ruta, buscar_en_texto, desde, limite_caracteres, max_pasajes }) => {
+  async ({ ruta, seccion: cual, buscar_en_texto, desde, limite_caracteres, max_pasajes }) => {
     const tope = Math.min(Math.max(limite_caracteres, 200), 40_000)
     let doc: Awaited<ReturnType<typeof corte.obtenerTexto>>
     try {
@@ -607,6 +653,29 @@ server.registerTool(
     if (doc.texto.length < 200) {
       return txt(`Providencia ${ruta}\n\n${avisoSinTexto(doc.texto.length, doc.url)}`)
     }
+
+    // El texto de la sección se trocea igual que el resto: la decisión de una
+    // tutela de revisión puede pasar de 39.000 caracteres.
+    const cuerpo = cual ? seccionDe(doc.texto, cual) : null
+    if (cual) {
+      const hay = seccionesPresentes(doc.texto)
+      if (!cuerpo) {
+        return vacio(
+          `la sección "${cual}" en ${ruta}`,
+          hay.length
+            ? `Esta providencia trae: ${hay.join(', ')}. Las providencias no siguen todas la misma estructura.`
+            : 'No se reconoció ninguna sección con encabezado propio; pide el texto completo o usa buscar_en_texto.',
+        )
+      }
+      const t = trocear(cuerpo, desde, tope)
+      return txt(
+        `Providencia ${ruta} — sección "${cual}" (${t.total} caracteres de ${doc.texto.length} del documento).\n` +
+          `Secciones disponibles: ${hay.join(', ')}.` +
+          (t.omitido > 0 ? ` Se muestran ${t.texto.length} desde ${t.desde}; quedan ${t.omitido}.` : '') +
+          `\n\n--- ${cual} ---\n${t.texto}\n\nURL: ${doc.url}`,
+      )
+    }
+
     if (buscar_en_texto) {
       const f = fragmentos(doc.texto, buscar_en_texto, 400, max_pasajes ?? 10, tope)
       if (!f.total) {

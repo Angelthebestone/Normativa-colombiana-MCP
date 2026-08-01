@@ -241,6 +241,106 @@ export function advertenciasVigencia(texto: string): string[] {
   return avisos
 }
 
+// --- historial de cambios de un artículo ---------------------------------
+
+export type Cambio = {
+  accion: string
+  /** Norma que introdujo el cambio, tal como la nombra la nota. */
+  norma: string
+  anio: string
+  /** Artículo de la norma modificadora, si la nota lo dice. */
+  articulo: string
+  /** La nota completa, palabra por palabra. Es lo que hay que poder citar. */
+  literal: string
+}
+
+/**
+ * Reconstruye qué le pasó a un artículo a partir de las notas que el propio
+ * portal incrusta en el texto ("Modificado por el Art. 1 del Decreto 226 de
+ * 2026"). El Decreto 1083 trae 324.
+ *
+ * Se devuelve SIEMPRE la nota literal junto a los campos sueltos. La tentación
+ * aquí es completar lo que la nota no dice; en materia legal eso convierte una
+ * laguna en una afirmación falsa, así que lo que no consta va vacío y la nota
+ * queda para que alguien la lea.
+ *
+ * ponytail: no se ordena cronológicamente ni se decide cuál cambio "gana". Las
+ * notas no siempre traen fecha completa y encadenarlas exigiría interpretar;
+ * se entregan en el orden en que aparecen, que es el del propio documento.
+ */
+export function historial(texto: string): Cambio[] {
+  const re =
+    /(Modificad[oa]|Adicionad[oa]|Derogad[oa]|Sustituid[oa]|Subrogad[oa]|Compilad[oa]|Corregid[oa])\s+por\s+([^\n)]{0,160})/gi
+  const cambios: Cambio[] = []
+  const vistos = new Set<string>()
+
+  for (const m of texto.matchAll(re)) {
+    const literal = `${m[1]} por ${m[2]}`.replace(/\s+/g, ' ').trim().replace(/[,.;]$/, '')
+    if (vistos.has(literal)) continue // el portal repite la misma nota en varios apartes
+    vistos.add(literal)
+
+    const detalle = m[2] ?? ''
+    const norma = detalle.match(
+      /\b(Ley|Decreto(?:\s+Ley)?|Resoluci[óo]n|Acuerdo|Circular|Acto\s+Legislativo)\s+(\d[\d.]*)\s+de\s+(\d{4})/i,
+    )
+    cambios.push({
+      accion: (m[1] ?? '').replace(/a$/i, 'o').toLowerCase(),
+      norma: norma ? `${norma[1]} ${norma[2]}` : '',
+      anio: norma?.[3] ?? '',
+      articulo: detalle.match(/\bart[íi]?c?u?l?o?\.?\s*(\d+[\w.]*)/i)?.[1] ?? '',
+      literal,
+    })
+  }
+  return cambios
+}
+
+// --- secciones de una providencia ----------------------------------------
+
+/**
+ * Las providencias siguen una estructura fija, y en la T-099/24 —140.000
+ * caracteres— cada encabezado aparece exactamente una vez. Poder pedir "el
+ * resuelve" evita que quien consulta tenga que adivinar qué buscar_en_texto
+ * pedir para llegar a la decisión.
+ */
+/**
+ * El encabezado tiene que ocupar su propio renglón y estar en mayúsculas. Sin
+ * las dos condiciones, "Decisión frente a la cual presentó recurso…" —prosa a
+ * mitad de la sentencia— pasaba por el encabezado de la decisión y devolvía el
+ * trozo equivocado, que es el peor resultado posible: parece la respuesta.
+ */
+export const SECCIONES = {
+  antecedentes: /\n[ \t]*(?:[IVX]+\.?[ \t]*)?ANTECEDENTES[ \t]*\.?[ \t]*(?=\n)/,
+  consideraciones: /\n[ \t]*(?:[IVX]+\.?[ \t]*)?CONSIDERACIONES[^\n]{0,40}(?=\n)/,
+  decision: /\n[ \t]*(?:[IVX]+\.?[ \t]*)?(?:DECISI[ÓO]N|RESUELVE|FALLA)[ \t]*\.?[ \t]*(?=\n)/,
+} as const
+
+export type NombreSeccion = keyof typeof SECCIONES
+
+/**
+ * Devuelve la sección pedida desde su encabezado hasta el final del documento,
+ * o `null` si no aparece. Se corta al siguiente encabezado conocido cuando lo
+ * hay, para no devolver el resto de la providencia entera.
+ */
+export function seccion(texto: string, cual: NombreSeccion): string | null {
+  const m = texto.match(SECCIONES[cual])
+  if (!m || m.index === undefined) return null
+  const desde = m.index
+  // Se corta en el siguiente encabezado de OTRA sección, no de la misma: tras
+  // "III. DECISIÓN" viene "RESUELVE", que es su continuación, y cortar ahí
+  // devolvía la fórmula de cortesía sin la parte resolutiva.
+  const resto = texto.slice(desde + m[0].length)
+  const siguientes = (Object.keys(SECCIONES) as NombreSeccion[])
+    .filter((k) => k !== cual)
+    .map((k) => resto.search(SECCIONES[k]))
+    .filter((i) => i >= 0)
+  const fin = siguientes.length ? desde + m[0].length + Math.min(...siguientes) : texto.length
+  return texto.slice(desde, fin).trim()
+}
+
+/** Qué secciones trae el documento, para poder ofrecerlas. */
+export const seccionesPresentes = (texto: string): NombreSeccion[] =>
+  (Object.keys(SECCIONES) as NombreSeccion[]).filter((k) => SECCIONES[k].test(texto))
+
 // --- documentos sin texto extraíble --------------------------------------
 
 /**
