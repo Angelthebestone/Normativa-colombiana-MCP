@@ -3,6 +3,16 @@
 Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/).
 Este proyecto sigue [versionado semántico](https://semver.org/lang/es/).
 
+## [1.3.3] — 2026-08-01
+
+### Corregido
+
+- **El aviso de baja pertinencia de `buscar_jurisprudencia` culpaba siempre al filtro de fechas**, incluso cuando no se había enviado ninguno: mandaba a quitar un `desde/hasta` que quien consultaba nunca puso. Ahora la causa que sugiere corresponde a lo que se pidió, y si la búsqueda se restringió a autos propone no restringirla, porque suelen ser de trámite.
+
+### Verificado, no era un fallo
+
+- **El filtro `entidad` de `buscar_normas` sí se aplica.** Con `palabras="encargo"`: 10 resultados sin filtro, 5 con Función Pública y **0 con Corte Constitucional**. Que coincidieran los resultados con y sin filtro en una prueba concreta era porque esos conceptos ya eran todos de esa entidad.
+
 ## [1.3.2] — 2026-08-01
 
 Todo lo de esta versión salió de dos sesiones de uso real en Claude Desktop. Ninguna prueba lo habría encontrado.

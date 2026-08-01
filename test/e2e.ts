@@ -366,3 +366,19 @@ test('un tipo de norma equivocado no devuelve otra norma distinta', LENTO, async
   assert.match(dl.texto, /Decreto Ley 1567 de 1998/)
   assert.match(dl.texto, /el tipo oficial es/)
 })
+
+test('el aviso de baja pertinencia no culpa a un filtro que no se usó', LENTO, async () => {
+  // Culpaba al filtro de fechas siempre, incluso sin desde/hasta: mandaba a
+  // quitar algo que quien consulta nunca puso.
+  const sinFechas = await c.tool('buscar_jurisprudencia', { termino: 'teletrabajo', tipos: ['A'], limite: 3 })
+  if (/Atención:/.test(sinFechas.texto)) {
+    assert.doesNotMatch(sinFechas.texto, /sin desde\/hasta/, 'culpa a las fechas sin que se hayan enviado')
+  }
+  const conFechas = await c.tool('buscar_jurisprudencia', {
+    termino: 'teletrabajo',
+    desde: '2024-01-01',
+    hasta: '2025-01-01',
+    limite: 3,
+  })
+  if (/Atención:/.test(conFechas.texto)) assert.match(conFechas.texto, /acotar por fechas/)
+})

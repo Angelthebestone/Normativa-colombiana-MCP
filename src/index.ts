@@ -553,10 +553,16 @@ server.registerTool(
           `  ruta: ${p.ruta}\n  ${p.url}`,
       )
       .join('\n')
+    // La causa que se sugiere tiene que corresponder a lo que realmente se pidió:
+    // culpar al filtro de fechas cuando no se envió ninguno manda a quien
+    // consulta a quitar algo que no puso.
+    const porFechas = Boolean(desde || hasta)
     const aviso = flojas.length
       ? `\n\nAtención: ${flojas.join(', ')} no mencionan "${termino}" en su tema ni en su síntesis. ` +
-        `El buscador de la relatoría pierde precisión al acotar por fechas; si buscas doctrina sobre la materia, ` +
-        `prueba sin desde/hasta.`
+        (porFechas
+          ? `El buscador de la relatoría pierde precisión al acotar por fechas: prueba sin desde/hasta.`
+          : `El buscador de la relatoría indexa el texto completo, así que devuelve providencias donde el término ` +
+            `aparece de pasada. Prueba un término más específico${tipos?.length === 1 && tipos[0] === 'A' ? ', o sin restringir a autos, que suelen ser de trámite' : ''}.`)
       : ''
     return txt(
       `${r.total} providencia(s) coinciden; se muestran ${r.items.length}.\n\n${lista}${aviso}\n\n` +
