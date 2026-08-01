@@ -13,6 +13,7 @@ import { claveSuin, fichaSuin } from '../src/fuentes/suin.ts'
 import { mereceAviso } from '../src/actualizacion.ts'
 import * as dian from '../src/fuentes/normograma.ts'
 import * as suprema from '../src/fuentes/cortesuprema.ts'
+import * as consejo from '../src/fuentes/consejoestado.ts'
 import { pedir as pedirHttp } from '../src/http.ts'
 import {
   CanarioError,
@@ -403,4 +404,20 @@ test('el aviso de versión no molesta: solo cambios que importan', () => {
   assert.equal(mereceAviso('1.4.0', '1.4.0'), false)
   // Y nunca hacia atrás.
   assert.equal(mereceAviso('1.4.0', '1.3.9'), false)
+})
+
+test('el Consejo de Estado devuelve providencias citables, no texto suelto', RED, async () => {
+  const r = await consejo.buscar('liquidación del contrato', 2)
+  assert.ok(r.paginas > 100, `páginas: ${r.paginas}`)
+  assert.equal(r.items.length, 2)
+  for (const p of r.items) {
+    // Sin radicado y fecha no se puede citar, que es para lo que existe.
+    assert.match(p.radicado, /^\d{15,25}$/, `radicado raro: ${p.radicado}`)
+    assert.ok(p.fecha && p.sala, `falta fecha o sala en ${p.radicado}`)
+    // La respuesta al problema no puede colarse como si fuera otro problema.
+    assert.ok(
+      p.titulaciones.every((t) => !/^Respuesta al problema/i.test(t.problema)),
+      'una respuesta se leyó como problema jurídico',
+    )
+  }
 })

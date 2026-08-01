@@ -27,6 +27,7 @@ import * as corte from './fuentes/corte.ts'
 import * as suin from './fuentes/suin.ts'
 import * as dian from './fuentes/normograma.ts'
 import * as suprema from './fuentes/cortesuprema.ts'
+import * as consejo from './fuentes/consejoestado.ts'
 
 
 const DESCARGO =
@@ -92,7 +93,7 @@ function frescura(generado: string): string {
  * así que aquí van las reglas de enrutamiento y las trampas del portal, no una
  * descripción del producto. Conviene que sea corto: ocupa contexto siempre.
  */
-const INSTRUCCIONES = `Fuentes oficiales de normativa colombiana: Gestor Normativo de Función Pública, Corte Constitucional, Corte Suprema, SUIN-Juriscol (MinJusticia) y normograma de la DIAN.
+const INSTRUCCIONES = `Fuentes oficiales de normativa colombiana: Gestor Normativo de Función Pública, Corte Constitucional, Corte Suprema, Consejo de Estado, SUIN-Juriscol (MinJusticia) y normograma de la DIAN.
 
 Qué herramienta usar:
 - La pregunta menciona una norma concreta ("Ley 909 de 2004", "Decreto 1083", "C-337/11", "el art. 6 de la Ley 1221") → resolver_cita. Es exacta; el buscador por palabras no.
@@ -104,6 +105,7 @@ Qué herramienta usar:
 - Jurisprudencia de la Corte SUPREMA (casación civil, laboral, penal y sus tutelas) → buscar_jurisprudencia_suprema. Es un tribunal DISTINTO de la Corte Constitucional: no las mezcles. Exige indicar sala, y cada resultado trae las normas que cita, que puedes resolver con resolver_cita.
 - Qué le pasó a una norma o a un artículo (quién lo modificó, adicionó o derogó) → obtener_norma con historial=true. Devuelve las notas literales del portal, sin ordenarlas ni deducir cuál rige hoy.
 - El fallo de una sentencia, sin leerla entera → obtener_sentencia con seccion="decision": trae el RESUELVE. La T-099/24 pasa de 140.162 a 39.906 caracteres.
+- Jurisprudencia del CONSEJO DE ESTADO (contencioso administrativo: nulidad y restablecimiento, contratación estatal, nulidad electoral, reparación directa) → buscar_jurisprudencia_consejo_estado. Tercer tribunal distinto de los otros dos; cada resultado trae el problema jurídico y su respuesta.
 - Por qué una norma aplica a un tema → explicar_relacion_tema con el temsubid y el normid de la MISMA fila de buscar_por_tema.
 
 Reglas al responder:
@@ -854,6 +856,51 @@ server.registerTool(
         (fin < r.total ? `\n\nQuedan ${r.total - fin}: repite con desde=${fin}.` : '') +
         `\n\nEl texto completo no se puede entregar aquí: la Corte Suprema publica las providencias en .docx y esta ` +
         `extensión no lee ese formato. Búscalas por su número en cortesuprema.gov.co.`,
+    )
+  },
+)
+
+server.registerTool(
+  'buscar_jurisprudencia_consejo_estado',
+  {
+    title: 'Buscar jurisprudencia del Consejo de Estado',
+    description:
+      'Busca providencias tituladas del Consejo de Estado, el tribunal supremo de lo contencioso administrativo: ' +
+      'nulidad y restablecimiento, contratación estatal, nulidad electoral, reparación directa y conceptos de la ' +
+      'Sala de Consulta. Es un tribunal DISTINTO de la Corte Constitucional y de la Corte Suprema. Cada resultado ' +
+      'trae el problema jurídico que la Sala se planteó y su respuesta, que es lo que de verdad sirve para ' +
+      'orientarse. No devuelve el texto completo: para eso está el enlace.',
+    inputSchema: {
+      texto: z.string().describe('Términos a buscar, ej. "nulidad electoral", "liquidación del contrato"'),
+      limite: z.coerce.number().int().min(1).max(9).default(5).describe('El buscador entrega páginas de 9 como máximo'),
+    },
+  },
+  async ({ texto, limite }) => {
+    const r = await consejo.buscar(texto, limite)
+    if (!r.items.length) {
+      return vacio(`providencias del Consejo de Estado sobre "${texto}"`, 'Prueba con un término más general.')
+    }
+    return txt(
+      `${r.paginas} página(s) de resultados en el Consejo de Estado; se muestran ${r.items.length}.\n\n` +
+        r.items
+          .map((p) => {
+            const cabecera = [
+              `- ${p.radicado}${p.clase ? ` (${p.clase})` : ''}`,
+              p.fecha ? `  Fecha: ${p.fecha}` : '',
+              p.sala ? `  Sala: ${p.sala}` : '',
+              p.ponente ? `  Ponente: ${p.ponente}` : '',
+              p.actor || p.demandado ? `  ${p.actor} contra ${p.demandado || '(sin demandado)'}` : '',
+            ].filter(Boolean)
+            const tesis = p.titulaciones.map(
+              (t) =>
+                `  · Problema jurídico: ${t.problema.slice(0, 400)}` +
+                (t.respuesta ? `\n    Respuesta: ${t.respuesta}` : '') +
+                (t.nota ? `\n    Nota de relatoría: ${t.nota.slice(0, 300)}` : ''),
+            )
+            return [...cabecera, ...tesis].join('\n')
+          })
+          .join('\n\n') +
+        `\n\nEl texto completo no se entrega aquí; consúltalo en ${r.items[0]!.url} buscando el radicado.`,
     )
   },
 )

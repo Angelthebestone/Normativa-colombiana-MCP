@@ -73,7 +73,7 @@ function enCola<T>(host: string, fn: () => Promise<T>): Promise<T> {
 
 // --- decodificación ------------------------------------------------------
 
-export type Respuesta = { status: number; cuerpo: string }
+export type Respuesta = { status: number; cuerpo: string; cookies: string }
 
 /**
  * Decodifica según lo que declare el documento. La relatoría de la Corte sirve
@@ -103,7 +103,7 @@ export function decodificar(datos: Buffer, contentType = ''): string {
 
 // --- petición ------------------------------------------------------------
 
-type Cruda = { status: number; datos: Buffer; contentType: string; retryAfter: string }
+type Cruda = { status: number; datos: Buffer; contentType: string; retryAfter: string; cookies: string }
 
 function crudo(
   url: string,
@@ -123,6 +123,8 @@ function crudo(
           'User-Agent': UA,
           Accept: accept,
           'Accept-Encoding': 'gzip, deflate',
+          // El tipo del cuerpo se puede sobrescribir desde `extra`: SAMAI exige
+          // un formulario, no JSON.
           ...(cuerpo === undefined
             ? {}
             : { 'Content-Type': 'application/json', 'Content-Length': String(Buffer.byteLength(cuerpo)) }),
@@ -140,6 +142,7 @@ function crudo(
             datos: Buffer.concat(trozos),
             contentType: String(res.headers['content-type'] ?? ''),
             retryAfter: String(res.headers['retry-after'] ?? ''),
+            cookies: (res.headers['set-cookie'] ?? []).map((c) => c.split(';')[0]).join('; '),
           }),
         )
         flujo.on('error', reject)
@@ -191,7 +194,7 @@ export async function pedir(
       )
     }
 
-    return { status: r.status, cuerpo: decodificar(r.datos, r.contentType) }
+    return { status: r.status, cuerpo: decodificar(r.datos, r.contentType), cookies: r.cookies }
   }
 }
 

@@ -3,6 +3,24 @@
 Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/).
 Este proyecto sigue [versionado semántico](https://semver.org/lang/es/).
 
+## [1.6.0] — 2026-08-01
+
+### Añadido
+
+- **Consejo de Estado** (`buscar_jurisprudencia_consejo_estado`), con lo que se completan **las tres altas cortes**. Contencioso administrativo: nulidad y restablecimiento, contratación estatal, nulidad electoral, reparación directa y conceptos de la Sala de Consulta. Cada resultado trae radicado, fecha, sala, ponente, las partes y —lo que de verdad orienta— **el problema jurídico que la Sala se planteó y su respuesta**.
+
+  Es la única fuente sin API: su buscador es ASP.NET WebForms. Tres cosas costaron averiguarse y quedan escritas en el módulo porque ninguna es evidente:
+
+  - **La búsqueda no es un botón.** Es un LinkButton que dispara `__doPostBack('ctl00$MainContent$BusquedaRapidaLinkButton')`. Sin ese `__EVENTTARGET` el portal responde 200 con la misma página sin haber buscado nada, y eso se parece tantísimo a «no hay resultados» que estuvo a punto de quedar documentado como un límite del portal cuando era un error de lectura.
+  - **No hay asistente de tres pasos.** Las pestañas son `slideUp/slideDown` en el navegador: todos los campos viven en el mismo formulario y basta una petición.
+  - **El `__VIEWSTATE` se reutiliza** entre búsquedas, así que el formulario se pide una vez por proceso.
+
+  El canario cuenta providencias y nunca mira el código HTTP —aquí un 200 no significa nada— y distingue dos fallos: que el postback no llegara a ser una búsqueda, y el traicionero, que el buscador sí buscara pero el marcado cambiara y no se pudiera leer ninguna fila.
+
+### Nota sobre un error evitado
+
+El primer parser emparejaba el radicado con la tesis **por cercanía en el HTML**. Con diez bloques de texto y solo siete radicados separados por decenas de miles de caracteres, eso habría atribuido la tesis de una providencia a otra: una cita falsa, con toda la apariencia de ser correcta. Se corrigió leyendo cada campo por su id indexado antes de que llegara a publicarse.
+
 ## [1.5.0] — 2026-08-01
 
 ### Añadido

@@ -1,6 +1,6 @@
 {
   "name": "normativa-colombia-mcp",
-  "version": "1.5.0",
+  "version": "1.6.0",
   "description": "MCP para consultar la normativa y la jurisprudencia colombiana: Gestor Normativo de Función Pública, Corte Constitucional, Corte Suprema, SUIN-Juriscol (vigencia) y normograma de la DIAN",
   "license": "MIT",
   "type": "module",
