@@ -2,8 +2,8 @@
   "manifest_version": "0.2",
   "name": "normativa-colombia",
   "display_name": "Normativa Colombia",
-  "version": "1.3.0",
-  "description": "Consulta la normativa y la jurisprudencia colombiana desde Claude: Gestor Normativo de Función Pública y relatoría de la Corte Constitucional.",
+  "version": "1.3.1",
+  "description": "Consulta la normativa y la jurisprudencia colombiana desde Claude: Gestor Normativo, Corte Constitucional, Corte Suprema, SUIN-Juriscol (estado de vigencia) y normograma de la DIAN.",
   "long_description": "Conecta Claude con dos fuentes oficiales colombianas.\n\n**Gestor Normativo** del Departamento Administrativo de la Función Pública: leyes, decretos, resoluciones, circulares y conceptos aplicables al sector público, con su consulta temática y los restrictores que explican por qué cada norma aplica a un tema.\n\n**Relatoría de la Corte Constitucional**: 49.000 sentencias y autos, actualizados a diario.\n\nIncluye un índice temático empaquetado (12.054 subtemas) que responde al instante y sigue funcionando aunque el portal esté caído. Toda respuesta cita el enlace oficial y la fecha de consulta.\n\nNo sustituye asesoría jurídica: verifica siempre en la fuente antes de tomar una decisión.",
   "author": {
     "name": "Angel Peña",
@@ -32,47 +32,63 @@
   "tools": [
     {
       "name": "resolver_cita",
-      "description": "Resuelve una cita como \"Ley 909 de 2004\", \"Decreto 1083\" o \"C-337/11\" al documento exacto."
+      "description": "Ruta rápida y exacta para citas como \"Ley 909 de 2004\", \"Decreto 1083\", \"C-337/11\", \"T-099/24\" o \"artículo 6 de la Ley 1221 de 2008\"."
     },
     {
       "name": "buscar_normas",
-      "description": "Busca normas en el Gestor Normativo por palabras, tipo, número, año, entidad o tema."
+      "description": "Busca leyes, decretos, resoluciones, conceptos y sentencias del sector público colombiano."
     },
     {
       "name": "buscar_por_tema",
-      "description": "Consulta temática oficial: temas, subtemas y las normas asociadas."
+      "description": "Consulta temática oficial: devuelve tema, subtema y las normas, sentencias y conceptos asociados."
     },
     {
       "name": "obtener_norma",
-      "description": "Texto de una norma, troceado y con búsqueda dentro del articulado."
+      "description": "Trae metadatos y texto de una norma por su id."
     },
     {
       "name": "listar_catalogos",
-      "description": "Valores válidos para filtrar: tipos, años, entidades y temas."
+      "description": "Valores válidos para los filtros de buscar_normas: tipos de documento (29), años, entidades (89) y temas (2.509)."
     },
     {
       "name": "buscar_jurisprudencia",
-      "description": "Busca sentencias y autos en la relatoría de la Corte Constitucional."
+      "description": "Busca en la relatoría de la Corte Constitucional (49.409 providencias, actualizada a diario)."
     },
     {
       "name": "obtener_sentencia",
-      "description": "Texto completo de una providencia de la Corte Constitucional."
+      "description": "Texto completo de una sentencia o auto de la Corte Constitucional."
+    },
+    {
+      "name": "buscar_normativa_tributaria",
+      "description": "Busca en el normograma de la DIAN: decretos, resoluciones, conceptos y circulares en materia tributaria, aduanera y cambiaria."
+    },
+    {
+      "name": "obtener_documento_dian",
+      "description": "Texto de un documento del normograma de la DIAN por su \"link\" (el que devuelve buscar_normativa_tributaria)."
+    },
+    {
+      "name": "buscar_jurisprudencia_suprema",
+      "description": "Busca providencias de la Corte Suprema por sala: Tutelas, Civil, Laboral o Penal, desde 1991."
+    },
+    {
+      "name": "buscar_en_suin",
+      "description": "Busca en los 56.832 documentos de SUIN-Juriscol (MinJusticia) por título, epígrafe, materia o entidad emisora."
     },
     {
       "name": "listar_subtemas",
-      "description": "Subtemas activos de un tema del catálogo."
+      "description": "Subtemas de un tema del CATÁLOGO DE BÚSQUEDA, cuyos ids van en el parámetro subtema de buscar_normas."
     },
     {
       "name": "explicar_relacion_tema",
-      "description": "Explica por qué una norma aplica a un subtema (restrictor)."
+      "description": "Devuelve el \"restrictor\": el extracto que explica por qué esa norma es pertinente para ESE subtema en concreto."
     },
     {
       "name": "buscar_conceptos_fp",
-      "description": "Localiza conceptos de Función Pública por número o año (no busca por materia)."
+      "description": "Lista los 21.759 conceptos emitidos por Función Pública, filtrando por NÚMERO o AÑO únicamente."
     },
     {
       "name": "listar_normas_fp",
-      "description": "Listado curado de la normativa que le compete al Departamento Administrativo de la Función Pública."
+      "description": "Listado curado por el portal con la normativa que rige o le compete al Departamento Administrativo de la Función Pública."
     }
   ],
   "prompts": [

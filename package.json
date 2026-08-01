@@ -1,7 +1,7 @@
 {
   "name": "normativa-colombia-mcp",
-  "version": "1.3.0",
-  "description": "MCP para consultar el Gestor Normativo de Función Pública y la jurisprudencia de la Corte Constitucional de Colombia",
+  "version": "1.3.1",
+  "description": "MCP para consultar la normativa y la jurisprudencia colombiana: Gestor Normativo de Función Pública, Corte Constitucional, Corte Suprema, SUIN-Juriscol (vigencia) y normograma de la DIAN",
   "license": "MIT",
   "type": "module",
   "scripts": {
@@ -18,12 +18,12 @@
     "prepublishOnly": "npm run check && npm run build"
   },
   "devDependencies": {
+    "@modelcontextprotocol/sdk": "^1.12.0",
     "@types/node": "^26.1.2",
-    "esbuild": "^0.24.0",
+    "cheerio": "^1.0.0",
+    "esbuild": "^0.28.1",
     "oxlint": "^1.76.0",
     "typescript": "^5.6.0",
-    "@modelcontextprotocol/sdk": "^1.12.0",
-    "cheerio": "^1.0.0",
     "zod": "^3.23.8"
   },
   "repository": {
@@ -56,6 +56,11 @@
     "normativa",
     "jurisprudencia",
     "legaltech",
-    "derecho"
+    "derecho",
+    "dian",
+    "vigencia",
+    "tributario",
+    "suin",
+    "corte-suprema"
   ]
 }

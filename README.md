@@ -6,10 +6,13 @@
 
 Consulta la normativa y la jurisprudencia colombiana desde cualquier asistente de IA que hable [Model Context Protocol](https://modelcontextprotocol.io), sin abrir el navegador ni pelear con formularios.
 
-Conecta dos fuentes oficiales:
+Conecta cinco fuentes oficiales:
 
 - **Gestor Normativo** del Departamento Administrativo de la Función Pública — leyes, decretos, resoluciones, circulares y conceptos del sector público, con la consulta temática y los *restrictores* que explican por qué cada norma aplica a un tema.
 - **Relatoría de la Corte Constitucional** — 49.000 sentencias y autos, actualizados a diario.
+- **SUIN-Juriscol** del Ministerio de Justicia — **el estado de vigencia**, que ninguna otra fuente del país publica, y 11.599 leyes de 1844 a 2026, muchas de las cuales el Gestor no tiene.
+- **Corte Suprema de Justicia** — providencias de las salas de Tutelas, Civil, Laboral y Penal, cada una con las normas que cita.
+- **Normograma de la DIAN** — normativa tributaria, aduanera y cambiaria.
 
 Es un servidor MCP estándar que se comunica por **stdio**, así que sirve en Claude Desktop, Claude Code, Cursor, VS Code, Windsurf, Zed, Continue, LM Studio, agentes propios hechos con los SDK de MCP y cualquier cliente que aparezca después.
 
@@ -113,7 +116,16 @@ Después se apunta el cliente a `node /ruta/absoluta/a/Normativa-colombiana-MCP/
 
 ### Qué recibe el cliente
 
-Al conectarse, el servidor entrega **11 herramientas**, **4 prompts** y sus **propias instrucciones de uso**: a qué tipo de pregunta corresponde cada herramienta, que debe citarse siempre la fuente y que nunca debe afirmarse que una norma está vigente. Los clientes que respetan el campo `instructions` del protocolo lo aprovechan sin configurar nada.
+Al conectarse, el servidor entrega **15 herramientas**, **4 prompts** y sus **propias instrucciones de uso**: a qué tipo de pregunta corresponde cada herramienta, que debe citarse siempre la fuente y que nunca debe afirmarse por cuenta propia que una norma está vigente. Los clientes que respetan el campo `instructions` del protocolo lo aprovechan sin configurar nada.
+
+| Fuente | Herramientas |
+| --- | --- |
+| Cualquiera (punto de entrada) | `resolver_cita` — cita exacta → norma o sentencia, con su vigencia si consta |
+| Gestor Normativo | `buscar_normas`, `buscar_por_tema`, `obtener_norma`, `listar_catalogos`, `listar_subtemas`, `explicar_relacion_tema`, `buscar_conceptos_fp`, `listar_normas_fp` |
+| Corte Constitucional | `buscar_jurisprudencia`, `obtener_sentencia` |
+| Corte Suprema | `buscar_jurisprudencia_suprema` |
+| SUIN-Juriscol | `buscar_en_suin` |
+| DIAN | `buscar_normativa_tributaria`, `obtener_documento_dian` |
 
 ## Qué puedes preguntar
 
@@ -122,6 +134,9 @@ Al conectarse, el servidor entrega **11 herramientas**, **4 prompts** y sus **pr
 - «¿Qué dice el Decreto 1083 sobre encargos?»
 - «Búscame jurisprudencia reciente de la Corte Constitucional sobre estabilidad laboral reforzada.»
 - «¿La Ley 909 de 2004 sigue vigente?»
+- «¿Qué dice la DIAN sobre la retención en la fuente por servicios?»
+- «Búscame tutelas de la Corte Suprema sobre teletrabajo y dime qué normas citan.»
+- «¿Existe la Ley 74 de 1923 y sigue vigente?» — está derogada, y ni el Gestor la tiene.
 
 El servidor incluye además cuatro prompts listos, que los clientes que los soportan muestran como comandos: *¿Qué normas aplican sobre un tema?*, *¿Esta norma sigue vigente?*, *Explícame esta norma en lenguaje sencillo* y *Compara dos normas*.
 
@@ -129,7 +144,15 @@ El servidor incluye además cuatro prompts listos, que los clientes que los sopo
 
 **Esto no es asesoría jurídica.** Es un buscador que le da a un asistente de IA acceso a fuentes oficiales. Verifica siempre en el enlace que acompaña cada respuesta.
 
-**La vigencia no es un dato del portal.** Ni el Gestor ni la relatoría tienen un campo que diga «esta norma está derogada»: las derogatorias van escritas dentro del texto. El servidor avisa cuando detecta marcas de «Derogado» o «Modificado por», pero no puede garantizar que un artículo siga vigente. El Decreto 1083 de 2015, por ejemplo, contiene 155 notas de modificación.
+**La vigencia viene de SUIN, y solo de SUIN.** Ni el Gestor ni la relatoría tienen un campo que diga «esta norma está derogada»: las derogatorias van escritas dentro del texto, y el servidor se limita a avisar cuando detecta marcas de «Derogado» o «Modificado por» (el Decreto 1083 de 2015 contiene 155 notas de modificación). SUIN-Juriscol, del Ministerio de Justicia, sí publica el estado como dato, y es la única fuente del país que lo hace: cuando la norma está en el índice empaquetado, `resolver_cita` devuelve ese estado con su enlace.
+
+Tres advertencias sobre ese dato, todas comprobadas:
+
+- **Se entrega literal, nunca traducido a un sí o un no.** SUIN distingue «Vigente», «DEROGADO», «Vigencia en Estudio», «Compilado», «Declarado Inexequible» y «Norma no vigente porque agotó su objeto». «Vigencia en Estudio» no significa vigente.
+- **El estado se lee del registro del documento, no de su prosa.** Donde aparecen los dos se contradicen: la Ley 1541 de 2012 muestra «Vigente» en pantalla y «Vigencia en Estudio» en su campo.
+- **El buscador de SUIN no sirve para esto.** `buscar_en_suin` devuelve un campo de vigencia que viene de su índice de búsqueda y contradice la ficha —la Ley 74 de 1923 figura allí como «Vigencia en Estudio» y su ficha dice DEROGADO—, así que se marca como no fiable en cada respuesta.
+
+Y la regla de fondo no cambia: **verifica en el enlace antes de actuar.**
 
 **El buscador del Gestor no busca en el texto completo**, solo en los resúmenes temáticos, y une los términos con OR. Su índice de palabras además es muy pobre: «teletrabajo» casa con 3 documentos en todo el portal, y con ninguno de los 43 conceptos que sí están clasificados bajo ese subtema. El servidor compensa de tres formas: quita las palabras vacías antes de consultar, reintenta por el subtema oficial cuando la búsqueda por palabras rinde poco, y busca dentro del articulado en tu computador cuando pides una norma concreta.
 
@@ -137,18 +160,27 @@ El servidor incluye además cuatro prompts listos, que los clientes que los sopo
 
 **Privacidad.** Cada consulta viaja a servidores del Estado colombiano, que registran las peticiones y tu dirección IP, igual que si navegaras el sitio. No se envía nada a ningún otro servidor, no hay analítica y no se recoge información tuya. Tenlo en cuenta si vas a consultar sobre un asunto propio.
 
-**Datos empaquetados.** Se incluye un índice temático (12.054 subtemas) para responder al instante y seguir sirviendo si el portal se cae. Ese índice tiene fecha: si supera los tres meses, el servidor te lo advierte.
+**Datos empaquetados.** Se incluyen dos índices, ambos con fecha de generación:
+
+- El **temático** (12.063 subtemas) responde al instante y sigue sirviendo si el portal se cae. Si supera los tres meses, el servidor te lo advierte.
+- El de **SUIN** (11.599 leyes, de 1844 a 2026) traduce una cita a su documento, porque SUIN no tiene buscador utilizable. La vigencia se consulta en vivo; el índice solo dice dónde mirar.
+
+**Cobertura de la búsqueda tributaria.** La primera consulta de cada término a la DIAN tarda unos 20 segundos: su portal devuelve el resultado completo y no admite límite. Las páginas siguientes del mismo término son instantáneas, así que conviene paginar en lugar de repetir búsquedas.
+
+**Las providencias de la Corte Suprema no traen texto.** Se publican como `.docx` y esta extensión no lee ese formato: se entregan la referencia, el ponente, la fecha y las normas que cita cada una, que sí se pueden resolver con `resolver_cita`.
 
 ## Para desarrolladores
 
 ```bash
 npm install
-npm run check             # typecheck + lint + 30 pruebas de biblioteca + 18 de extremo a extremo
-npm run generar-indice    # regenera datos/indice-tematico.json (~20 MB de descarga)
-npm run pack              # produce normativa-colombia.mcpb
+npm run check              # typecheck + lint + 36 pruebas de biblioteca + 25 de extremo a extremo
+npm run medir              # métricas: tamaño del bundle, arranque, coste de los índices
+npm run generar-indice     # regenera datos/indice-tematico.json (~20 MB de descarga)
+npm run generar-indice-suin # regenera datos/indice-suin.json (~45 min; reanudable)
+npm run pack               # produce normativa-colombia.mcpb
 ```
 
-`datos/indice-tematico.json` no está versionado por su tamaño: genéralo antes de empaquetar.
+`datos/` **sí está versionado**: sin él un clon limpio no pasa las pruebas, y el índice de SUIN cuesta 45 minutos de peticiones a un servicio público. Regenéralos solo cuando quieras actualizarlos.
 
 Las pruebas consultan los portales oficiales. `SIN_RED=1 npm test` corre solo la lógica pura, útil para iterar rápido o sin conexión.
 
@@ -162,8 +194,12 @@ Estructura:
 | `src/parse.ts` | Extracción y limpieza de HTML, troceado, canario anti-rotura |
 | `src/citas.ts` | Parser de citas normativas colombianas |
 | `src/http.ts` | Cliente HTTP con la cadena TLS completa |
-| `src/fuentes/gestor.ts` | Gestor Normativo (HTML) |
+| `src/fuentes/gestor.ts` | Gestor Normativo (HTML raspado, con canarios) |
 | `src/fuentes/corte.ts` | Relatoría de la Corte Constitucional (JSON) |
+| `src/fuentes/suin.ts` | SUIN-Juriscol: ficha, vigencia e índice empaquetado |
+| `src/fuentes/cortesuprema.ts` | Corte Suprema (GraphQL) |
+| `src/fuentes/normograma.ts` | Normograma de la DIAN (JSON) |
+| `scripts/medir.ts` | Banco de métricas, para que optimizar no sea a ojo |
 | `test/smoke.ts` | Pruebas de biblioteca contra las fuentes reales |
 | `test/e2e.ts` | Arranca el servidor y le habla por stdio, como cualquier cliente MCP |
 
@@ -171,7 +207,8 @@ Las instrucciones de uso que recibe el modelo están en `INSTRUCCIONES`, en `src
 
 Dos notas para quien vaya a tocar esto:
 
-- **El portal envía una cadena TLS incompleta.** Su certificado lo emite «Sectigo RSA Organization Validation», pero el servidor manda el intermedio de «Domain Validation». `curl` lo tolera porque su bundle ya trae ese certificado; Node no. `src/ca.ts` incluye el intermedio correcto para completar la cadena **sin desactivar la verificación**. No lo cambies por `rejectUnauthorized: false`.
+- **Dos portales envían la cadena TLS incompleta.** `funcionpublica.gov.co` presenta un certificado de «Sectigo RSA Organization Validation» pero manda el intermedio de Domain Validation; `suin-juriscol.gov.co` omite directamente el suyo. `curl` lo tolera porque su bundle ya los trae; Node no. `src/ca.ts` incluye ambos intermedios para completar la cadena **sin desactivar la verificación**: las raíces que los firman sí vienen con Node. No lo cambies por `rejectUnauthorized: false`.
+- **Los códigos HTTP mienten en dos fuentes.** El backend de la Corte Suprema responde 200 con una página de mantenimiento ante rutas inventadas, y la relatoría de la Constitucional devuelve el armazón de su SPA en vez de un 404. Por eso los canarios validan la forma de la respuesta y nunca el código de estado.
 - **El canario.** Si el HTML del portal cambia, los parsers lanzan `CanarioError` en vez de devolver listas vacías. Es deliberado: una lista vacía silenciosa se lee como «no existe esa norma», y en materia legal esa confusión es el peor fallo posible.
 
 ## Contribuir
