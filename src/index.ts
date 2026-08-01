@@ -103,6 +103,7 @@ Qué herramienta usar:
 Reglas al responder:
 - Cita siempre el enlace y la fecha de consulta que devuelven las herramientas. Una afirmación normativa sin fuente verificable no sirve.
 - NUNCA afirmes por tu cuenta que una norma o un artículo está vigente. El Gestor y la relatoría no publican la vigencia: solo hay marcas de "Derogado" y "Modificado por" dentro del texto. Traslada esas advertencias y di con claridad que no se puede confirmar.
+- La vigencia solo existe para LEYES: el índice de SUIN cubre 11.585 leyes y casi ningún decreto, porque los sitemaps de decretos del portal devuelven 404. Que no aparezca para un decreto NO significa que esté derogado ni vigente: significa que no consta.
 - La ÚNICA excepción: si resolver_cita devuelve un "Estado de vigencia según SUIN-Juriscol", cítalo con su fecha y su enlace, tal cual, sin traducirlo a un sí o un no ("Vigencia en Estudio" no es "vigente"). Si esa línea no aparece, es que no consta: vuelve a la regla anterior.
 - Que una norma no esté en el Gestor NO significa que no exista: su corpus no cubre todo el país. Si resolver_cita responde que la norma está en SUIN-Juriscol y no en el Gestor, esa es una respuesta completa, no un fallo; para un artículo concreto vuelve a preguntar citándolo ("art. 3 de la Ley 1541 de 2012").
 - El "extracto temático" que acompaña a cada resultado NO resume la norma: es el apunte de un tema al que está asociada. Para el objeto real usa obtener_norma.
@@ -149,7 +150,34 @@ server.registerTool(
       }
     }
 
-    const r = await gestor.buscar({ tipo: idTipo(c.tipo) ?? c.tipo, numero: c.numero, anio: c.anio })
+    let r = await gestor.buscar({ tipo: idTipo(c.tipo) ?? c.tipo, numero: c.numero, anio: c.anio })
+
+    /**
+     * El tipo escrito casi nunca es el tipo oficial: "Decreto 1567 de 1998" no
+     * existe, pero "Decreto Ley 1567 de 1998" sí. Se reintenta sin filtrar por
+     * tipo, PERO solo se acepta si el tipo oficial contiene al escrito: número y
+     * año no identifican una norma —existen a la vez la Ley 1541 de 2012 y el
+     * Decreto 1541 de 2012—, y devolver el otro sería peor que no encontrar
+     * nada, porque nadie sospecharía del cambio.
+     */
+    let tipoCorregido = ''
+    let otroTipo = ''
+    if (!r.items.length && c.anio) {
+      const sinTipo = await gestor.buscar({ numero: c.numero, anio: c.anio })
+      const real = sinTipo.items[0]?.titulo.match(/^(.+?)\s+\d/)?.[1]?.trim()
+      const escrito = sinTildes(c.tipo).toLowerCase()
+      if (real && new RegExp(`\\b${escrito}\\b`, 'i').test(sinTildes(real).toLowerCase())) {
+        r = sinTipo
+        tipoCorregido = `\nNo existe un «${c.tipo} ${c.numero} de ${c.anio}»; el tipo oficial es «${real}».\n`
+      } else if (real) {
+        // No se corta aquí: la norma puede existir en SUIN aunque el Gestor solo
+        // tenga la homónima de otro tipo. La pista se guarda para el vacío.
+        otroTipo =
+          ` Con ese número y año el Gestor sí tiene «${sinTipo.items[0]!.titulo}», que es de otro tipo: si te referías` +
+          ` a esa, pídela con su tipo exacto.`
+      }
+    }
+
     if (!r.items.length) {
       // Que el Gestor no la tenga no significa que no exista: su corpus no
       // cubre todo el país. Antes de decir "no encontré" —que se lee como "esa
@@ -172,7 +200,7 @@ server.registerTool(
       }
       return vacio(
         `la cita "${cita}"`,
-        c.anio ? `Prueba sin el año, o verifica el número.` : `Prueba indicando el año.`,
+        (c.anio ? `Prueba sin el año, o verifica el número.` : `Prueba indicando el año.`) + otroTipo,
       )
     }
     const n = r.items[0]!
@@ -180,10 +208,14 @@ server.registerTool(
     // La vigencia solo la publica SUIN, y solo si el índice empaquetado tiene
     // esta norma. Que falte no es un fallo: se calla y sigue mandando la regla
     // de no afirmar vigencia.
+    // Si la cita vino sin año ("Decreto 1083"), se toma el del título que
+    // resolvió el Gestor: sin esto la vigencia se perdía justo en las citas
+    // cómodas, que son las que la gente escribe.
+    const anio = c.anio ?? n.titulo.match(/\bde\s+(\d{4})\b/i)?.[1]
     let vig = ''
-    if (c.anio) {
+    if (anio) {
       try {
-        const v = await suin.vigencia(c.tipo, c.numero, c.anio)
+        const v = await suin.vigencia(c.tipo, c.numero, anio)
         if (v) {
           vig =
             `\nEstado de vigencia según SUIN-Juriscol (índice del ${v.generado}): ` +
@@ -203,7 +235,7 @@ server.registerTool(
         : `\n\nNo encontré un "artículo ${c.articulo}" en el texto. Usa obtener_norma con buscar_en_texto.`
     }
     return txt(
-      `${n.titulo}\nid: ${n.id}\n` +
+      `${n.titulo}\n${tipoCorregido}id: ${n.id}\n` +
         // No es un resumen de la norma: el Gestor no publica uno. Es el extracto
         // de UN tema al que está asociada, y en normas compiladoras como el
         // Decreto 1083 describe una porción mínima del contenido.
@@ -679,18 +711,34 @@ server.registerTool(
       'Busca providencias de la Corte Suprema por sala: Tutelas, Civil, Laboral o Penal, desde 1991. Complementa a ' +
       'buscar_jurisprudencia, que es de la Corte CONSTITUCIONAL: son tribunales distintos. Cada resultado trae las ' +
       'NORMAS QUE CITA, que puedes resolver después con resolver_cita. No devuelve el texto: las providencias son ' +
-      'archivos .docx y esta extensión no los lee.',
+      'archivos .docx y esta extensión no los lee. ' +
+      'CÓMO BUSCA: sobre el texto completo de la providencia y sin descartar palabras comunes, así que "de" solo ' +
+      'devuelve 69.454 resultados y una frase encuentra documentos que contienen sus palabras en cualquier parte. ' +
+      'Usa exacto=true para la frase, y términos distintivos en vez de frases largas.',
     inputSchema: {
       texto: z.string().describe('Términos a buscar, ej. "despido sin justa causa"'),
       sala: z.enum(suprema.SALAS).default('Tutelas').describe('Sala de la Corte. Obligatoria: sin ella el buscador no responde.'),
       anio: z.string().regex(/^\d{4}$/).optional().describe('Año de cuatro dígitos'),
       magistrado: z.string().optional().describe('Nombre del magistrado ponente'),
-      exacto: z.boolean().default(false).describe('Buscar la frase exacta'),
+      exacto: z
+        .boolean()
+        .default(false)
+        .describe(
+          'Buscar la frase exacta. MUY recomendable con frases: sin esto el buscador une las palabras con OR y ' +
+            '"despido sin justa causa" devuelve 176.012 providencias contra 20.233 con exacto=true.',
+        ),
       desde: z.coerce.number().int().min(0).default(0).describe('Cuántas saltarse antes de empezar'),
+      limite: z.coerce
+        .number()
+        .int()
+        .min(1)
+        .max(10)
+        .default(10)
+        .describe('Cuántas mostrar. El buscador entrega páginas de 10 como máximo; para ver más, usa desde.'),
     },
   },
-  async ({ texto, sala, anio, magistrado, exacto, desde }) => {
-    const r = await suprema.buscar({ texto, sala, anio, magistrado, exacto, desde })
+  async ({ texto, sala, anio, magistrado, exacto, desde, limite }) => {
+    const r = await suprema.buscar({ texto, sala, anio, magistrado, exacto, desde, limite })
     if (!r.items.length) {
       return vacio(
         `providencias de la sala ${sala} sobre "${texto}"`,
@@ -698,8 +746,24 @@ server.registerTool(
       )
     }
     const fin = desde + r.items.length
+    // El backend cuenta con OR entre las palabras sueltas, así que su total se
+    // acerca al tamaño del corpus de la sala, no a los resultados pertinentes.
+    // Darlo como "coinciden" hace creer que hay una precisión que no existe.
+    const recuento = r.exacto
+      ? `${r.total} providencia(s) contienen la frase exacta`
+      : `~${r.total} providencia(s) con alguna de las palabras (el buscador las une con OR, así que este número ` +
+        `NO mide pertinencia; repite con exacto=true para contar la frase)`
+    // El índice repite el mismo fallo por cada archivo (.docx, .pdf, grafías
+    // distintas del ponente). Callarlo haría creer que "quedan N" son N
+    // documentos nuevos, cuando buena parte son copias.
+    const repetidas =
+      r.brutos > r.items.length
+        ? `\n\nEsta página del buscador traía ${r.brutos} entradas y solo ${r.items.length} providencia(s) distintas: ` +
+          `su índice guarda una entrada por ARCHIVO (.docx y .pdf, y a veces el ponente escrito de dos formas). ` +
+          `Por eso avanzar con desde rinde menos documentos nuevos de lo que sugiere el total.`
+        : ''
     return txt(
-      `${r.total} providencia(s) en la sala ${sala}; se muestran ${desde + 1}–${fin}.\n\n` +
+      `${recuento}, sala ${sala}; se muestran ${desde + 1}–${fin}.${repetidas}\n\n` +
         r.items
           .map(
             (p) =>
@@ -727,7 +791,10 @@ server.registerTool(
       'emisora. Cubre leyes, decretos y resoluciones desde 1844, incluidos documentos que el Gestor Normativo no ' +
       'tiene. NO busca dentro del articulado y NO sirve para citas exactas ("LEY 909 DE 2004" no devuelve nada): ' +
       'para una cita usa resolver_cita. El campo de vigencia que devuelve es el del buscador y NO es fiable: ' +
-      'contradice la ficha del propio documento; para el estado real usa resolver_cita.',
+      'contradice la ficha del propio documento; para el estado real usa resolver_cita. ' +
+      'SU ÍNDICE TIENE HUECOS: "Teletrabajo" devuelve cero pese a estar en el título de la Ley 1221 de 2008, y una ' +
+      'frase larga empareja por sus palabras comunes y devuelve resultados sin relación. Si buscas por materia y ' +
+      'no aparece lo esperado, NO concluyas que no existe: prueba buscar_por_tema o resolver_cita.',
     inputSchema: {
       texto: z.string().describe('Palabras del título, epígrafe o materia. Ej.: "servicio militar", "Buenaventura"'),
       vigencia: z

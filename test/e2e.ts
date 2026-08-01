@@ -354,3 +354,15 @@ test('buscar_por_tema responde con temsubid y rótulos normalizados', LENTO, asy
   assert.match(texto, /temsubid \d+/)
   assert.doesNotMatch(texto, /PROVISIóN/, 'el rótulo debe salir normalizado')
 })
+
+test('un tipo de norma equivocado no devuelve otra norma distinta', LENTO, async () => {
+  // Existen a la vez la Ley 1541 de 2012 y el Decreto 1541 de 2012. Aceptar el
+  // otro sería peor que no encontrar nada: nadie sospecharía del cambiazo.
+  const ley = await c.tool('resolver_cita', { cita: 'Ley 1541 de 2012' })
+  assert.doesNotMatch(ley.texto, /Decreto 1541 de 2012\nid:/, 'devolvió el decreto en lugar de la ley')
+
+  // Pero un tipo incompleto sí se corrige: "Decreto 1567" es "Decreto Ley 1567".
+  const dl = await c.tool('resolver_cita', { cita: 'Decreto 1567 de 1998' })
+  assert.match(dl.texto, /Decreto Ley 1567 de 1998/)
+  assert.match(dl.texto, /el tipo oficial es/)
+})

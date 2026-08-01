@@ -194,10 +194,18 @@ export function fragmentos(
   return { total, trozos, pasajes: ventanas.length, mostrados: trozos.length }
 }
 
-/** Índice de artículos, para que Claude sepa qué pedir sin traerse la norma entera. */
+/**
+ * Índice de artículos, para que Claude sepa qué pedir sin traerse la norma entera.
+ *
+ * El encabezado tiene que abrir renglón. Sin esa exigencia, las referencias
+ * cruzadas dentro de las notas —"modificado por el artículo 21 de la Ley 1955"—
+ * entraban como artículos propios, y en el Decreto 1083 de 2015, que numera
+ * 2.2.1.3.1, aparecían "21", "5" y "19" mezclados con la numeración real.
+ * Es la misma regla que ya usaba `articulo()` para no cortar por una nota.
+ */
 export function indiceArticulos(texto: string, max = 60): string[] {
   const vistos = new Set<string>()
-  const re = /\b(?:ART[IÍ]CULO|Art[ií]culo)\s+([\d.]+[A-Za-z]?)/g
+  const re = /(?:^|\n)\s*(?:ART[IÍ]CULO|Art[ií]culo)\s+([\d.]+[A-Za-z]?)/g
   let m: RegExpExecArray | null
   while ((m = re.exec(texto)) && vistos.size < max) vistos.add(m[1]!.replace(/\.$/, ''))
   return [...vistos]

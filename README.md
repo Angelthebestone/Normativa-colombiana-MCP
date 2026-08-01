@@ -163,7 +163,7 @@ Y la regla de fondo no cambia: **verifica en el enlace antes de actuar.**
 **Datos empaquetados.** Se incluyen dos índices, ambos con fecha de generación:
 
 - El **temático** (12.063 subtemas) responde al instante y sigue sirviendo si el portal se cae. Si supera los tres meses, el servidor te lo advierte.
-- El de **SUIN** (11.599 leyes, de 1844 a 2026) traduce una cita a su documento, porque SUIN no tiene buscador utilizable. La vigencia se consulta en vivo; el índice solo dice dónde mirar.
+- El de **SUIN** (11.599 documentos, de 1844 a 2026) traduce una cita a su documento, porque SUIN no tiene buscador utilizable. La vigencia se consulta en vivo; el índice solo dice dónde mirar. **Cubre leyes, no decretos**: los sitemaps de decretos del portal devuelven 404, así que para un decreto la vigencia normalmente no consta —lo que no significa ni que esté vigente ni que esté derogado.
 
 **Cobertura de la búsqueda tributaria.** La primera consulta de cada término a la DIAN tarda unos 20 segundos: su portal devuelve el resultado completo y no admite límite. Las páginas siguientes del mismo término son instantáneas, así que conviene paginar en lugar de repetir búsquedas.
 

@@ -53,6 +53,38 @@ type Cruda = {
   leyesOArticulos?: string[]
 }
 
+/**
+ * Número de providencia, sin extensión ni ruta: "STP9317-2025.docx" y
+ * "STP9317-2025.pdf" son el mismo fallo publicado en dos formatos.
+ */
+const numeroProvidencia = (titulo: string): string =>
+  titulo
+    .replace(/\.(docx?|pdf|html?)$/i, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .toUpperCase()
+
+/**
+ * El índice de la Corte tiene una entrada por ARCHIVO, no por providencia: el
+ * mismo auto aparece en .docx y .pdf, y a veces con el ponente escrito de dos
+ * formas ("Myriam Avila" y "Myriam Ávila Roldán"). Sin deduplicar, una página
+ * de diez resultados podía traer cinco veces el mismo AP430-2023.
+ *
+ * Se conserva la variante con el nombre del ponente más completo, que es la
+ * que sirve para citar.
+ */
+function deduplicar(items: Providencia[]): Providencia[] {
+  const porNumero = new Map<string, Providencia>()
+  for (const p of items) {
+    const clave = numeroProvidencia(p.titulo)
+    const previa = porNumero.get(clave)
+    if (!previa || p.magistrado.length > previa.magistrado.length) {
+      porNumero.set(clave, { ...p, titulo: clave })
+    }
+  }
+  return [...porNumero.values()]
+}
+
 export async function buscar(opts: {
   texto: string
   sala?: Sala | undefined
@@ -60,7 +92,8 @@ export async function buscar(opts: {
   magistrado?: string | undefined
   exacto?: boolean | undefined
   desde?: number | undefined
-}): Promise<{ total: number; items: Providencia[] }> {
+  limite?: number | undefined
+}): Promise<{ total: number; items: Providencia[]; exacto: boolean; brutos: number }> {
   const texto = opts.texto.trim()
   if (!texto) throw new Error('Indica un término para buscar en la Corte Suprema.')
   const sala = opts.sala ?? 'Tutelas'
@@ -95,10 +128,9 @@ export async function buscar(opts: {
   }
   if (!Array.isArray(r.searchResults)) throw new CanarioError('la respuesta de la Corte Suprema no trae la lista de providencias')
 
-  return {
-    total: typeof r.numOfResults === 'number' ? r.numOfResults : r.searchResults.length,
-    items: r.searchResults.map((p) => ({
-      titulo: (p.title ?? '').replace(/\.docx?$/i, ''),
+  const items = deduplicar(
+    r.searchResults.map((p) => ({
+      titulo: p.title ?? '',
       sala,
       clase: p.autoSentencia ?? '',
       magistrado: (p.doctor ?? '').replace(/^Dr[a]?\.\s*/i, ''),
@@ -107,5 +139,16 @@ export async function buscar(opts: {
       ruta: p.onlinePath ?? '',
       normasCitadas: Array.isArray(p.leyesOArticulos) ? p.leyesOArticulos : [],
     })),
+  )
+
+  const limite = opts.limite ?? items.length
+  return {
+    total: typeof r.numOfResults === 'number' ? r.numOfResults : items.length,
+    items: items.slice(0, Math.max(1, limite)),
+    exacto: opts.exacto ?? false,
+    // Cuántas entradas traía la página antes de deduplicar. Importa: el índice
+    // repite tanto que una página de diez puede quedar en dos providencias, y
+    // si no se dice, "quedan N resultados" promete documentos que no existen.
+    brutos: r.searchResults.length,
   }
 }

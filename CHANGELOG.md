@@ -3,6 +3,24 @@
 Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/).
 Este proyecto sigue [versionado semántico](https://semver.org/lang/es/).
 
+## [1.3.2] — 2026-08-01
+
+Todo lo de esta versión salió de dos sesiones de uso real en Claude Desktop. Ninguna prueba lo habría encontrado.
+
+### Corregido
+
+- **`buscar_jurisprudencia_suprema` no respetaba el límite.** Más exactamente: el parámetro no existía y el backend pagina de diez en diez, así que `limite=1` y `limite=25` devolvían los mismos 10. Ahora hay un `limite` real.
+- **Providencias duplicadas, el fallo más grave.** El índice de la Corte guarda una entrada por ARCHIVO, no por providencia: el mismo auto en `.docx` y `.pdf`, y a veces con el ponente escrito de dos formas («Myriam Avila» y «Myriam Ávila Roldán»). Una página de diez podía traer solo dos documentos distintos repetidos cinco veces cada uno, y al paginar buena parte de lo prometido eran copias. Se deduplica por número de providencia conservando la grafía más completa del ponente, **y la respuesta dice cuántas entradas traía la página frente a cuántas providencias distintas quedaron**, porque si no «quedan N» sigue prometiendo documentos que no existen.
+- **El recuento era engañoso.** El buscador de la Corte Suprema hace texto completo sobre la providencia entera y no descarta palabras comunes: `"de"` solo devuelve 69.454 resultados y «despido sin justa causa» daba 176.012 frente a 20.233 con `exacto=true`. Ese número se presentaba como «coinciden». Ahora se rotula como coincidencia parcial, se remite a `exacto=true` y la descripción de la herramienta explica el mecanismo.
+- **«Artículos detectados» inventaba artículos en decretos compilados.** Las referencias cruzadas de las notas entraban como encabezados: en el Decreto 1083 aparecían «21», «5» y «19» entre 2.2.1.3.1, y en el Decreto 1072 un «2.2.2.47.7» fuera de secuencia. Ahora el encabezado debe abrir renglón, la misma regla que ya usaba la extracción de un artículo suelto.
+- **El tipo de norma mal escrito no daba ninguna pista.** «Decreto 1567 de 1998» no existe —es «Decreto Ley»— y la respuesta era un «no encontré» sin salida. Ahora se reintenta sin filtrar por tipo y se nombra el tipo oficial.
+- **La vigencia se perdía en las citas sin año.** «Decreto 1083» no traía el bloque de SUIN; ahora el año se toma del título que resolvió el Gestor.
+
+### Documentación
+
+- **La vigencia solo cubre leyes.** El índice tiene 11.585 leyes y 11 decretos porque los sitemaps de decretos de SUIN devuelven 404. Que no conste para un decreto no significa ni vigente ni derogado, y así se advierte en las instrucciones y en el README.
+- **`buscar_en_suin` tiene huecos de índice.** «Teletrabajo» devuelve cero pese a estar en el título de la Ley 1221 de 2008, y una frase larga empareja por sus palabras comunes y trae normas de 1877 sin relación. La descripción lo advierte y remite a `buscar_por_tema` o `resolver_cita`.
+
 ## [1.3.1] — 2026-08-01
 
 ### Corregido

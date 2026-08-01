@@ -19,6 +19,7 @@ import {
   articulo,
   avisoSinTexto,
   fragmentos,
+  indiceArticulos,
   limpiarTermino,
   pdfEsEscaneo,
   cargar,
@@ -336,4 +337,23 @@ test('la Corte Suprema exige sala y trae las normas que cita', RED, async () => 
   assert.ok(p.titulo && p.fecha, 'una providencia sin título ni fecha no es citable')
   // Es su mejor argumento: encadena con resolver_cita.
   assert.ok(r.items.some((x) => x.normasCitadas.length > 0), 'ninguna providencia declaró normas citadas')
+})
+
+test('el índice de artículos no confunde una referencia cruzada con un artículo', () => {
+  // En el Decreto 1083, que numera 2.2.1.3.1, las notas citan "artículo 21 de
+  // la Ley 1955" y aparecían "21", "5" y "19" mezclados con la numeración real.
+  const texto = 'ARTÍCULO 2.2.1.3.1 Uno.\n\nNOTA: modificado por el artículo 21 de la Ley 1955 de 2019.\n\nARTÍCULO 2.2.1.3.2 Dos.'
+  assert.deepEqual(indiceArticulos(texto), ['2.2.1.3.1', '2.2.1.3.2'])
+})
+
+test('la Corte Suprema no repite la misma providencia ni ignora el límite', RED, async () => {
+  // Su índice tiene una entrada por ARCHIVO: el mismo auto en .docx y .pdf, y
+  // con el ponente escrito de dos formas. Una página traía cinco AP430-2023.
+  const r = await suprema.buscar({ texto: 'despido sin justa causa', sala: 'Penal' })
+  const numeros = r.items.map((p) => p.titulo)
+  assert.deepEqual([...new Set(numeros)], numeros, `providencias repetidas: ${numeros.join(', ')}`)
+  assert.ok(numeros.every((t) => !/\.(docx?|pdf|html?)$/i.test(t)), 'el número no debe llevar extensión')
+
+  const corto = await suprema.buscar({ texto: 'despido sin justa causa', sala: 'Penal', limite: 3 })
+  assert.ok(corto.items.length <= 3, `limite=3 devolvió ${corto.items.length}`)
 })
