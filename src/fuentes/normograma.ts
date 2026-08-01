@@ -60,14 +60,30 @@ type Crudo = {
 export const urlDocumento = (link: string): string => `${DOCS}/${link.replace(/^\/+/, '')}`
 
 /**
- * Busca en el normograma de la DIAN. La respuesta no admite tope: una consulta
- * amplia son 3 MB, así que se recorta aquí después de leerla.
+ * ponytail: caché por término, sin expiración, mientras viva el proceso.
+ *
+ * El endpoint devuelve SIEMPRE el resultado completo —3,16 MB y ~20 s para
+ * "retención"— y no admite tope: se probaron max, top, limite, rows, pagina/tam
+ * y start/count, y los siete devuelven los mismos 6.651 elementos. Sin caché,
+ * pedir la segunda página volvía a bajar los 3 MB.
+ *
+ * Un proceso MCP vive lo que la conversación, así que no hace falta TTL. Si
+ * alguna vez corre como servicio largo, aquí es donde va.
+ */
+const cache = new Map<string, DocDian[]>()
+
+/**
+ * Busca en el normograma de la DIAN. La respuesta no admite tope, así que se
+ * recorta aquí después de leerla.
  */
 export async function buscar(texto: string, limite = 15, desde = 0): Promise<{ total: number; items: DocDian[] }> {
   const q = texto.trim()
   if (!q) throw new Error('Indica un término para buscar en el normograma de la DIAN.')
 
-  const r = await pedir(`${BUSCADOR}?texto=${encodeURIComponent(q)}`, 60_000, 'application/json,*/*')
+  const guardado = cache.get(q.toLowerCase())
+  if (guardado) return { total: guardado.length, items: guardado.slice(desde, desde + limite) }
+
+  const r = await pedir(`${BUSCADOR}?texto=${encodeURIComponent(q)}`, 90_000, 'application/json,*/*')
   if (r.status !== 200) throw new CanarioError(`el buscador de la DIAN respondió ${r.status}`)
 
   let j: unknown
@@ -84,18 +100,18 @@ export async function buscar(texto: string, limite = 15, desde = 0): Promise<{ t
     throw new CanarioError('los resultados de la DIAN ya no traen nombre y link')
   }
 
-  return {
-    total: items.length,
-    items: items.slice(desde, desde + limite).map((d) => ({
-      nombre: limpio(d.nombre),
-      epigrafe: limpio(d.epigrafe),
-      entidad: limpio(d.entidad),
-      tipo: limpio(d.tipo),
-      anio: limpio(d.year),
-      numero: limpio(d.numero),
-      extracto: limpio(d.texto),
-      link: d.link ?? '',
-      url: urlDocumento(d.link ?? ''),
-    })),
-  }
+  const limpios: DocDian[] = items.map((d) => ({
+    nombre: limpio(d.nombre),
+    epigrafe: limpio(d.epigrafe),
+    entidad: limpio(d.entidad),
+    tipo: limpio(d.tipo),
+    anio: limpio(d.year),
+    numero: limpio(d.numero),
+    extracto: limpio(d.texto),
+    link: d.link ?? '',
+    url: urlDocumento(d.link ?? ''),
+  }))
+
+  cache.set(q.toLowerCase(), limpios)
+  return { total: limpios.length, items: limpios.slice(desde, desde + limite) }
 }

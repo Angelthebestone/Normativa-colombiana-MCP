@@ -595,7 +595,10 @@ server.registerTool(
     description:
       'Busca en el normograma de la DIAN: decretos, resoluciones, conceptos y circulares en materia tributaria, ' +
       'aduanera y cambiaria. Es lo que ninguna otra herramienta de este MCP cubre. Devuelve el extracto donde ' +
-      'aparece el término y el enlace al texto completo. Para leer el documento usa obtener_documento_dian.',
+      'aparece el término y el enlace al texto completo. Para leer el documento usa obtener_documento_dian. ' +
+      'AVISO: la primera búsqueda de cada término tarda ~20 s porque el portal devuelve el resultado completo y no ' +
+      'admite tope; las páginas siguientes del MISMO término son instantáneas, así que pagina con desde en vez de ' +
+      'lanzar búsquedas nuevas.',
     inputSchema: {
       texto: z.string().describe('Términos a buscar, ej. "retención en la fuente", "declaración de importación"'),
       desde: z.coerce.number().int().min(0).default(0).describe('Cuántos saltarse antes de empezar'),
