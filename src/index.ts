@@ -21,6 +21,7 @@ import {
 } from './parse.ts'
 import { NoExisteError } from './parse.ts'
 import { VERSION, pedir as pedirHttp } from './http.ts'
+import { avisoVersion } from './actualizacion.ts'
 import * as gestor from './fuentes/gestor.ts'
 import * as corte from './fuentes/corte.ts'
 import * as suin from './fuentes/suin.ts'
@@ -35,7 +36,7 @@ const hoy = () => new Date().toISOString().slice(0, 10)
 
 /** Toda respuesta sale fechada y con el descargo: es la fuente lo que la hace útil. */
 const txt = (s: string) => ({
-  content: [{ type: 'text' as const, text: `${s}\n\nConsulta del ${hoy()}. ${DESCARGO}` }],
+  content: [{ type: 'text' as const, text: `${s}\n\nConsulta del ${hoy()}. ${DESCARGO}${avisoVersion()}` }],
 })
 
 /** Nunca se devuelve una lista vacía a secas: el vacío se explica. */

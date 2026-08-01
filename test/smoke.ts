@@ -10,6 +10,7 @@ import test from 'node:test'
 
 import { parsearCita, idTipo, rutaDeSentencia } from '../src/citas.ts'
 import { claveSuin, fichaSuin } from '../src/fuentes/suin.ts'
+import { mereceAviso } from '../src/actualizacion.ts'
 import * as dian from '../src/fuentes/normograma.ts'
 import * as suprema from '../src/fuentes/cortesuprema.ts'
 import { pedir as pedirHttp } from '../src/http.ts'
@@ -392,4 +393,14 @@ test('las secciones de una providencia se cortan por encabezado, no por prosa', 
   // Y RESUELVE es continuación de la decisión, no otra sección: no debe cortar.
   assert.match(d, /Primero: confirmar/)
   assert.equal(seccion('un texto sin estructura', 'decision'), null)
+})
+
+test('el aviso de versión no molesta: solo cambios que importan', () => {
+  assert.equal(mereceAviso('1.4.0', '1.5.0'), true)
+  assert.equal(mereceAviso('1.4.0', '2.0.0'), true)
+  // Un parche no interrumpe a nadie: se recoge cuando actualice por otra razón.
+  assert.equal(mereceAviso('1.4.0', '1.4.1'), false)
+  assert.equal(mereceAviso('1.4.0', '1.4.0'), false)
+  // Y nunca hacia atrás.
+  assert.equal(mereceAviso('1.4.0', '1.3.9'), false)
 })

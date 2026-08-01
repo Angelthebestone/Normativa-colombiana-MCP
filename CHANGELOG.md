@@ -3,6 +3,18 @@
 Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/).
 Este proyecto sigue [versionado semántico](https://semver.org/lang/es/).
 
+## [1.5.0] — 2026-08-01
+
+### Añadido
+
+- **Aviso de versión nueva, diseñado para no molestar.** Se publican versiones cada pocos días y quien instaló el `.mcpb` no se entera, pero un recordatorio en cada respuesta compite con el texto de la norma por la atención de quien lee. Por eso: una consulta al registro **por proceso** y solo después de la primera petición —nunca en el arranque—, **un aviso por sesión** y nunca más, silencio definitivo si el registro no contesta en tres segundos, y **solo versiones mayores o menores**: un parche no interrumpe a nadie. El texto distingue las dos formas de instalación, porque quien usa el `.mcpb` no se actualiza solo.
+
+### Explorado y no implementado
+
+- **SAMAI (Consejo de Estado).** Mapeado entero: su buscador de jurisprudencia es **WebForms puro**, sin ScriptManager ni servicios web; el manejador genérico `.ashx?Servicio=` solo alimenta widgets de la interfaz, y la relatoría anterior es JSF. El postback real devuelve **200, 447.531 caracteres y cero radicados**: la búsqueda es un asistente de tres pasos que arrastra 53 KB de estado opaco por petición.
+
+  Lo decisivo no es el peso sino que **un postback rechazado responde 200 con la misma página**, indistinguible de «no hay resultados» — justo el vacío silencioso que este proyecto tiene prohibido. Implementarlo exige tres postbacks encadenados y un canario que cuente radicados en vez de mirar el código HTTP.
+
 ## [1.4.0] — 2026-08-01
 
 ### Añadido
