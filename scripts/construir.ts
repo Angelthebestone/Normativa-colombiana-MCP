@@ -104,13 +104,13 @@ if (!herramientas.length) throw new Error('el servidor no declaró ninguna herra
 const actual = JSON.parse(readFileSync(RUTA_MANIFIESTO, 'utf8')) as {
   tools: { name: string; description: string }[]
 }
-if (JSON.stringify(actual.tools) !== JSON.stringify(herramientas)) {
-  // La descripción del manifiesto es un rótulo de escaparate, más corta que la
-  // que ve el modelo; se recorta a la primera frase.
-  const rotulo = herramientas.map((t) => ({
-    name: t.name,
-    description: `${t.description.split('. ')[0]}.`.replace(/\.\.$/, '.'),
-  }))
+// La descripción del manifiesto es un rótulo de escaparate, más corta que la
+// que ve el modelo; se recorta a la primera frase.
+const rotulo = herramientas.map((t) => ({
+  name: t.name,
+  description: `${t.description.split('. ')[0]}.`.replace(/\.\.$/, '.'),
+}))
+if (JSON.stringify(actual.tools) !== JSON.stringify(rotulo)) {
   writeFileSync(RUTA_MANIFIESTO, JSON.stringify({ ...actual, tools: rotulo }, null, 2) + '\n')
   console.log(`manifest.json: ${actual.tools.length} → ${rotulo.length} herramientas`)
 }
