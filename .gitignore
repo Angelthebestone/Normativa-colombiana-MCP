@@ -13,3 +13,6 @@ PLAN.md
 # pasa las pruebas (se comprobó: dos e2e fallan). Además el índice de SUIN
 # cuesta 45 min de peticiones a un servicio público; regenerarlo en cada clon
 # no tiene sentido.
+
+# Configuración local de command-code
+.commandcode/

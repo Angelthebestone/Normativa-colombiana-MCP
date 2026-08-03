@@ -1,16 +1,16 @@
 import { request } from 'node:https'
 import { rootCertificates } from 'node:tls'
 import { createGunzip, createInflate } from 'node:zlib'
-import { SECTIGO_EV, SECTIGO_OV } from './ca.ts'
+import { GLOBALSIGN_OV, SECTIGO_EV, SECTIGO_OV } from './ca.ts'
 
 /**
- * Raíces de Node más los intermedios que funcionpublica.gov.co y
- * suin-juriscol.gov.co omiten. La verificación del certificado sigue ACTIVA:
- * solo se completa una cadena que el servidor envía incompleta. Nunca usar
- * rejectUnauthorized:false — este MCP entrega información legal y la
- * autenticidad de la fuente es parte del producto.
+ * Raíces de Node más los intermedios que funcionpublica.gov.co,
+ * suin-juriscol.gov.co y sic.gov.co omiten. La verificación del certificado
+ * sigue ACTIVA: solo se completa una cadena que el servidor envía incompleta.
+ * Nunca usar rejectUnauthorized:false — este MCP entrega información legal y
+ * la autenticidad de la fuente es parte del producto.
  */
-const CA = [...rootCertificates, SECTIGO_OV, SECTIGO_EV]
+const CA = [...rootCertificates, SECTIGO_OV, SECTIGO_EV, GLOBALSIGN_OV]
 
 /** esbuild la sustituye desde package.json; sin empaquetar no existe. */
 declare const __VERSION__: string | undefined
@@ -73,7 +73,13 @@ function enCola<T>(host: string, fn: () => Promise<T>): Promise<T> {
 
 // --- decodificación ------------------------------------------------------
 
-export type Respuesta = { status: number; cuerpo: string; cookies: string }
+export type Respuesta = {
+  status: number
+  cuerpo: string
+  cookies: string
+  /** Cabeceras en minúscula; la UPME publica el total en `x-wp-total`. */
+  cabeceras: Record<string, string>
+}
 
 /**
  * Decodifica según lo que declare el documento. La relatoría de la Corte sirve
@@ -103,7 +109,15 @@ export function decodificar(datos: Buffer, contentType = ''): string {
 
 // --- petición ------------------------------------------------------------
 
-type Cruda = { status: number; datos: Buffer; contentType: string; retryAfter: string; cookies: string }
+type Cruda = {
+  status: number
+  datos: Buffer
+  contentType: string
+  retryAfter: string
+  cookies: string
+  /** Cabeceras de respuesta: UPME publica el total de resultados en `x-wp-total`. */
+  cabeceras: Record<string, string>
+}
 
 function crudo(
   url: string,
@@ -143,6 +157,9 @@ function crudo(
             contentType: String(res.headers['content-type'] ?? ''),
             retryAfter: String(res.headers['retry-after'] ?? ''),
             cookies: (res.headers['set-cookie'] ?? []).map((c) => c.split(';')[0]).join('; '),
+            cabeceras: Object.fromEntries(
+              Object.entries(res.headers).map(([k, v]) => [k, Array.isArray(v) ? v.join(', ') : String(v ?? '')]),
+            ),
           }),
         )
         flujo.on('error', reject)
@@ -194,7 +211,12 @@ export async function pedir(
       )
     }
 
-    return { status: r.status, cuerpo: decodificar(r.datos, r.contentType), cookies: r.cookies }
+    return {
+      status: r.status,
+      cuerpo: decodificar(r.datos, r.contentType),
+      cookies: r.cookies,
+      cabeceras: r.cabeceras,
+    }
   }
 }
 

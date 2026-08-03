@@ -171,6 +171,16 @@ function cargarIndice(): Indice | null {
   return indice
 }
 
+/**
+ * Qué cubre el índice empaquetado, para poder declararlo en vez de prometerlo.
+ * `null` cuando el índice no viaja con la instalación: entonces esta fuente no
+ * opina, y eso hay que poder decirlo también.
+ */
+export function coberturaIndice(): { generado: string; leyes: number } | null {
+  const idx = cargarIndice()
+  return idx ? { generado: idx.generado, leyes: Object.keys(idx.normas).length } : null
+}
+
 export type Vigencia = Ficha & { url: string; generado: string; texto: string }
 
 /**

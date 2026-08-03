@@ -28,6 +28,12 @@ import * as suin from './fuentes/suin.ts'
 import * as dian from './fuentes/normograma.ts'
 import * as suprema from './fuentes/cortesuprema.ts'
 import * as consejo from './fuentes/consejoestado.ts'
+import * as anh from './fuentes/anh.ts'
+import * as upme from './fuentes/upme.ts'
+import * as creg from './fuentes/creg.ts'
+import * as anla from './fuentes/anla.ts'
+import * as sectorial from './fuentes/sectorial.ts'
+import './fuentes/sectorial/registro.ts'
 
 
 const DESCARGO =
@@ -107,6 +113,9 @@ Qué herramienta usar:
 - El fallo de una sentencia, sin leerla entera → obtener_sentencia con seccion="decision": trae el RESUELVE. La T-099/24 pasa de 140.162 a 39.906 caracteres.
 - Jurisprudencia del CONSEJO DE ESTADO (contencioso administrativo: nulidad y restablecimiento, contratación estatal, nulidad electoral, reparación directa) → buscar_jurisprudencia_consejo_estado. Tercer tribunal distinto de los otros dos; cada resultado trae el problema jurídico y su respuesta.
 - Por qué una norma aplica a un tema → explicar_relacion_tema con el temsubid y el normid de la MISMA fila de buscar_por_tema.
+- Antes de decirle a alguien que una norma "no existe", o para saber si el índice de vigencia sigue fresco → describir_fuentes. Declara qué cubre cada fuente y qué NO, sin consultar la red.
+- Energía, gas, tarifas o conexión → buscar_resoluciones_creg (y obtener_resolucion_creg para el texto). Hidrocarburos, regalías o contratos E&P → buscar_normativa_anh. Planeación minero energética → buscar_normativa_upme. Qué normas aplican a un tema ambiental → listar_normativa_ambiental_anla, y resuelve cada cita con resolver_cita.
+- Solo hay CUATRO reguladores sectoriales: CREG, ANH, UPME y ANLA. Para la SIC, la Superfinanciera, la CRC o la Superservicios este MCP no tiene nada, y un vacío no prueba que la norma no exista.
 
 Reglas al responder:
 - Cita siempre el enlace y la fecha de consulta que devuelven las herramientas. Una afirmación normativa sin fuente verificable no sirve.
@@ -116,6 +125,7 @@ Reglas al responder:
 - Que una norma no esté en el Gestor NO significa que no exista: su corpus no cubre todo el país. Si resolver_cita responde que la norma está en SUIN-Juriscol y no en el Gestor, esa es una respuesta completa, no un fallo; para un artículo concreto vuelve a preguntar citándolo ("art. 3 de la Ley 1541 de 2012").
 - El "extracto temático" que acompaña a cada resultado NO resume la norma: es el apunte de un tema al que está asociada. Para el objeto real usa obtener_norma.
 - Si una herramienta devuelve vacío, es que no se encontró; no completes con conocimiento propio.
+- Si resolver_cita responde que la cita es AMBIGUA, no escojas tú: el mismo número existe en varios años ("Decreto 1072" son cuatro decretos distintos). Pregunta el año o presenta los candidatos.
 - Un documento sin texto NO es un documento que no diga nada. Si la respuesta avisa de que es un escaneo o de que el portal no publicó el texto, dilo así y remite al enlace; no concluyas nada sobre su contenido.
 - Nunca inventes números de norma, artículos ni sentencias. Si no aparecen en una respuesta, no existen para efectos de esta conversación.
 - Tres numeraciones distintas y no intercambiables: temsubid (solo de buscar_por_tema), subtemaid (de listar_subtemas, va en buscar_normas) y tema (de listar_catalogos).
@@ -211,6 +221,34 @@ server.registerTool(
         (c.anio ? `Prueba sin el año, o verifica el número.` : `Prueba indicando el año.`) + otroTipo,
       )
     }
+    /**
+     * Sin año, el número NO identifica una norma. "Decreto 1072" existe en 2025
+     * (tarifas de energía), 2015 (Único Reglamentario del Sector Trabajo), 2004
+     * y 1999, y el Gestor devuelve primero el más reciente. Entregar ese como si
+     * fuera "el" Decreto 1072 es el error caro de esta herramienta: acierta la
+     * forma —es un decreto real con ese número— y falla el fondo, sin que nada
+     * en la respuesta invite a sospecharlo. Se devuelven los candidatos y se
+     * pide el año, igual que ya se hace cuando el tipo no coincide.
+     */
+    if (!c.anio) {
+      const conAnio = r.items
+        .map((i) => ({ i, anio: i.titulo.match(/\bde\s+(\d{4})\b/i)?.[1] ?? '' }))
+        .filter((x) => x.anio)
+      if (new Set(conAnio.map((x) => x.anio)).size > 1) {
+        return txt(
+          `La cita "${cita}" es ambigua: el Gestor tiene ${conAnio.length} normas con ese tipo y número, de años ` +
+            `distintos. No se elige una por ti.\n\n` +
+            conAnio
+              .sort((a, b) => Number(b.anio) - Number(a.anio))
+              .map(({ i }) => `- ${i.titulo} (id ${i.id})\n  ${i.url}`)
+              .join('\n') +
+            `\n\nRepite la cita con el año ("${c.tipo} ${c.numero} de ${conAnio[0]!.anio}")` +
+            (c.articulo ? `, conservando el artículo ("art. ${c.articulo} de …")` : '') +
+            `. Si no sabes cuál es, díselo a quien pregunta en vez de escoger: el número solo no identifica la norma.`,
+        )
+      }
+    }
+
     const n = r.items[0]!
 
     // La vigencia solo la publica SUIN, y solo si el índice empaquetado tiene
@@ -222,15 +260,30 @@ server.registerTool(
     const anio = c.anio ?? n.titulo.match(/\bde\s+(\d{4})\b/i)?.[1]
     let vig = ''
     if (anio) {
-      try {
-        const v = await suin.vigencia(c.tipo, c.numero, anio)
-        if (v) {
+      // Tres silencios distintos que antes se veían iguales: que la capacidad no
+      // esté instalada, que la fuente no responda y que la norma no conste en el
+      // índice. Solo el tercero se sigue callando —la regla general ya cubre "no
+      // consta"—; los otros dos son estados del sistema, no respuestas sobre la
+      // norma, y presentarlos como ausencia de dato induce a concluir de más.
+      if (!suin.coberturaIndice()) {
+        vig =
+          `\nEstado de vigencia: NO SE PUEDE CONSULTAR en esta instalación, porque el índice de SUIN no viaja con ` +
+          `ella. Es una capacidad ausente, no un dato negativo: no concluyas nada sobre la vigencia.`
+      } else {
+        try {
+          const v = await suin.vigencia(c.tipo, c.numero, anio)
+          if (v) {
+            vig =
+              `\nEstado de vigencia según SUIN-Juriscol (índice del ${v.generado}): ` +
+              `${v.estado || 'SUIN no publica el estado de esta norma'}\n  ${v.url}`
+          }
+        } catch {
+          // SUIN es un complemento y la cita se resuelve igual, pero que se haya
+          // caído no puede parecerse a que la norma no tenga estado publicado.
           vig =
-            `\nEstado de vigencia según SUIN-Juriscol (índice del ${v.generado}): ` +
-            `${v.estado || 'SUIN no publica el estado de esta norma'}\n  ${v.url}`
+            `\nEstado de vigencia: SUIN-Juriscol no respondió en esta consulta. Vuelve a intentarlo antes de ` +
+            `afirmar nada; no es que esta norma carezca de estado.`
         }
-      } catch {
-        /* SUIN es un complemento: si no responde, la cita se resuelve igual */
       }
     }
 
@@ -312,10 +365,22 @@ server.registerTool(
     }
 
     if (!r.items.length) {
+      // El filtro de entidad se resuelve bien y aun así devuelve cero, porque el
+      // Gestor no cataloga por emisor: "Ley"+1993+"Congreso de la República"
+      // (id 48) da 0, y el mismo par con "Nivel Nacional" (id 7) da 39, con la
+      // Ley 100 de 1993 entre ellas. Un "no existe esa combinación" a secas
+      // manda a dudar de la norma cuando el equivocado era el filtro.
+      const porEntidad =
+        entidad && !/nivel\s+nacional/i.test(entidad)
+          ? ` AVISO SOBRE LA ENTIDAD: el Gestor clasifica la mayoría de la normativa nacional bajo la entidad` +
+            ` "Nivel Nacional", no bajo quien la expidió; las leyes del Congreso aparecen así. Repite con` +
+            ` entidad="Nivel Nacional" o sin entidad antes de concluir que la norma no existe.`
+          : ''
       return vacio(
         'normas con esos filtros',
         `Filtros aplicados: ${r.aplicados.join(', ') || '(ninguno)'}.` +
           (r.nota ? ` ${r.nota}` : '') +
+          porEntidad +
           ' Si los filtros se resolvieron bien, es que no existe esa combinación en el Gestor: prueba quitando el año' +
           ' o la entidad. Si buscaste por palabras, recuerda que el portal solo indexa los resúmenes temáticos:' +
           ' usa buscar_por_tema.',
@@ -532,7 +597,11 @@ server.registerTool(
     title: 'Listar catálogos de búsqueda',
     description:
       'Valores válidos para los filtros de buscar_normas: tipos de documento (29), años, entidades (89) y temas (2.509). ' +
-      'En temas el filtro es obligatorio por volumen.',
+      'En temas el filtro es obligatorio por volumen. ' +
+      'OJO CON EL ALCANCE: estos catálogos son SOLO del Gestor Normativo de Función Pública y solo sirven en ' +
+      'buscar_normas. No cubren la DIAN (que tiene su propio normograma, con buscar_normativa_tributaria), ni ' +
+      'SUIN-Juriscol, ni las tres altas cortes. Que "DIAN" no aparezca en el catálogo de entidades no significa ' +
+      'que no haya normativa de la DIAN: significa que el Gestor no la cataloga como entidad emisora.',
     inputSchema: {
       catalogo: z.enum(['tipos', 'anios', 'entidades', 'temas']),
       filtro: z.string().optional().describe('Texto para filtrar; obligatorio en "temas"'),
@@ -789,10 +858,9 @@ server.registerTool(
       'Busca providencias de la Corte Suprema por sala: Tutelas, Civil, Laboral o Penal, desde 1991. Complementa a ' +
       'buscar_jurisprudencia, que es de la Corte CONSTITUCIONAL: son tribunales distintos. Cada resultado trae las ' +
       'NORMAS QUE CITA, que puedes resolver después con resolver_cita. No devuelve el texto: las providencias son ' +
-      'archivos .docx y esta extensión no los lee. ' +
+      'archivos .docx y esta extensión no los lee, pero sí el número con el que se pide en el portal. ' +
       'CÓMO BUSCA: sobre el texto completo de la providencia y sin descartar palabras comunes, así que "de" solo ' +
-      'devuelve 69.454 resultados y una frase encuentra documentos que contienen sus palabras en cualquier parte. ' +
-      'Usa exacto=true para la frase, y términos distintivos en vez de frases largas.',
+      'devuelve 69.454 resultados. Por eso busca la FRASE EXACTA por defecto; usa términos distintivos.',
     inputSchema: {
       texto: z.string().describe('Términos a buscar, ej. "despido sin justa causa"'),
       sala: z.enum(suprema.SALAS).default('Tutelas').describe('Sala de la Corte. Obligatoria: sin ella el buscador no responde.'),
@@ -800,10 +868,12 @@ server.registerTool(
       magistrado: z.string().optional().describe('Nombre del magistrado ponente'),
       exacto: z
         .boolean()
-        .default(false)
+        .default(true)
         .describe(
-          'Buscar la frase exacta. MUY recomendable con frases: sin esto el buscador une las palabras con OR y ' +
-            '"despido sin justa causa" devuelve 176.012 providencias contra 20.233 con exacto=true.',
+          'Buscar la frase exacta; viene activado. Con exacto=false el buscador une las palabras con OR y ' +
+            '"despido sin justa causa" devuelve 176.012 providencias contra 20.233 con la frase: en la sala Penal ' +
+            'ese modo llega a 33.607 resultados y es inservible. Ponlo en false solo para ampliar a propósito una ' +
+            'búsqueda que quedó corta.',
         ),
       desde: z.coerce.number().int().min(0).default(0).describe('Cuántas saltarse antes de empezar'),
       limite: z.coerce
@@ -816,11 +886,23 @@ server.registerTool(
     },
   },
   async ({ texto, sala, anio, magistrado, exacto, desde, limite }) => {
-    const r = await suprema.buscar({ texto, sala, anio, magistrado, exacto, desde, limite })
+    let r = await suprema.buscar({ texto, sala, anio, magistrado, exacto, desde, limite })
+
+    // Escalera de precisión: la frase exacta primero y, solo si no devuelve
+    // nada, se amplía a OR — y se dice que se amplió. Sin esto, poner exacto
+    // por defecto convierte "no existe esa frase" en "no hay nada sobre esto",
+    // que son cosas distintas y la segunda es falsa.
+    let ampliada = false
+    if (!r.items.length && exacto && texto.trim().split(/\s+/).length > 1) {
+      r = await suprema.buscar({ texto, sala, anio, magistrado, exacto: false, desde, limite })
+      ampliada = r.items.length > 0
+    }
+
     if (!r.items.length) {
       return vacio(
         `providencias de la sala ${sala} sobre "${texto}"`,
-        'Prueba otra sala (Tutelas, Civil, Laboral, Penal), un término más general o quita el año.',
+        (exacto ? 'Se buscó la frase exacta y también, al no haber nada, uniendo las palabras con OR. ' : '') +
+          'Prueba otra sala (Tutelas, Civil, Laboral, Penal), un término más general o quita el año.',
       )
     }
     const fin = desde + r.items.length
@@ -840,8 +922,14 @@ server.registerTool(
           `su índice guarda una entrada por ARCHIVO (.docx y .pdf, y a veces el ponente escrito de dos formas). ` +
           `Por eso avanzar con desde rinde menos documentos nuevos de lo que sugiere el total.`
         : ''
+    // Una búsqueda ampliada no puede presentarse como si fuera la que se pidió.
+    const aviso = ampliada
+      ? `AVISO: la frase exacta "${texto}" no aparece en ninguna providencia de esta sala. Lo que sigue es una ` +
+        `búsqueda AMPLIADA, con las palabras unidas por OR, así que puede incluir providencias que solo comparten ` +
+        `alguna palabra suelta. Verifica la pertinencia de cada una antes de citarla.\n\n`
+      : ''
     return txt(
-      `${recuento}, sala ${sala}; se muestran ${desde + 1}–${fin}.${repetidas}\n\n` +
+      `${aviso}${recuento}, sala ${sala}; se muestran ${desde + 1}–${fin}.${repetidas}\n\n` +
         r.items
           .map(
             (p) =>
@@ -855,7 +943,9 @@ server.registerTool(
           .join('\n') +
         (fin < r.total ? `\n\nQuedan ${r.total - fin}: repite con desde=${fin}.` : '') +
         `\n\nEl texto completo no se puede entregar aquí: la Corte Suprema publica las providencias en .docx y esta ` +
-        `extensión no lee ese formato. Búscalas por su número en cortesuprema.gov.co.`,
+        `extensión no lee ese formato. Lo que sí se puede pegar en https://cortesuprema.gov.co/consulta-providencias/ ` +
+        `es el número de cada una, tal cual:\n` +
+        r.items.map((p) => `  ${p.titulo}`).join('\n'),
     )
   },
 )
@@ -869,19 +959,37 @@ server.registerTool(
       'nulidad y restablecimiento, contratación estatal, nulidad electoral, reparación directa y conceptos de la ' +
       'Sala de Consulta. Es un tribunal DISTINTO de la Corte Constitucional y de la Corte Suprema. Cada resultado ' +
       'trae el problema jurídico que la Sala se planteó y su respuesta, que es lo que de verdad sirve para ' +
-      'orientarse. No devuelve el texto completo: para eso está el enlace.',
+      'orientarse. No devuelve el texto completo, pero sí el enlace a la ficha del proceso en SAMAI. ' +
+      'CÓMO BUSCA: une los términos con OR, así que el número de páginas mide el tamaño del corpus, no la ' +
+      'pertinencia. Usa términos distintivos y avanza con pagina.',
     inputSchema: {
       texto: z.string().describe('Términos a buscar, ej. "nulidad electoral", "liquidación del contrato"'),
-      limite: z.coerce.number().int().min(1).max(9).default(5).describe('El buscador entrega páginas de 9 como máximo'),
+      pagina: z.coerce
+        .number()
+        .int()
+        .min(1)
+        .default(1)
+        .describe(
+          'Página de resultados, desde 1. SAMAI pagina en bloques de ~10 y no admite un desplazamiento libre, ' +
+            'por eso aquí se pide la página y no el "desde" del resto de herramientas.',
+        ),
+      limite: z.coerce.number().int().min(1).max(10).default(5).describe('Cuántas mostrar de la página (hasta 10)'),
     },
   },
-  async ({ texto, limite }) => {
-    const r = await consejo.buscar(texto, limite)
+  async ({ texto, pagina, limite }) => {
+    const r = await consejo.buscar(texto, limite, pagina)
     if (!r.items.length) {
-      return vacio(`providencias del Consejo de Estado sobre "${texto}"`, 'Prueba con un término más general.')
+      return vacio(
+        `providencias del Consejo de Estado sobre "${texto}" en la página ${r.pagina}`,
+        r.paginas > 0
+          ? `La búsqueda tiene ${r.paginas} página(s): pide una entre 1 y ${r.paginas}.`
+          : 'Prueba con un término más general.',
+      )
     }
     return txt(
-      `${r.paginas} página(s) de resultados en el Consejo de Estado; se muestran ${r.items.length}.\n\n` +
+      `Página ${r.pagina} de ${r.paginas} en el Consejo de Estado; se muestran ${r.items.length} providencia(s).\n` +
+        `El buscador une los términos con OR, así que ese número de páginas NO mide pertinencia: mide cuántas ` +
+        `providencias contienen alguna de las palabras.\n\n` +
         r.items
           .map((p) => {
             const cabecera = [
@@ -890,6 +998,7 @@ server.registerTool(
               p.sala ? `  Sala: ${p.sala}` : '',
               p.ponente ? `  Ponente: ${p.ponente}` : '',
               p.actor || p.demandado ? `  ${p.actor} contra ${p.demandado || '(sin demandado)'}` : '',
+              `  Ficha del proceso: ${p.url}`,
             ].filter(Boolean)
             const tesis = p.titulaciones.map(
               (t) =>
@@ -900,7 +1009,10 @@ server.registerTool(
             return [...cabecera, ...tesis].join('\n')
           })
           .join('\n\n') +
-        `\n\nEl texto completo no se entrega aquí; consúltalo en ${r.items[0]!.url} buscando el radicado.`,
+        (r.pagina < r.paginas ? `\n\nHay más: repite con pagina=${r.pagina + 1}.` : '') +
+        `\n\nEl texto completo de la providencia no se entrega aquí. Cada ficha de proceso enlaza arriba; para ` +
+        `buscarla a mano, el número que se pega en ${consejo.BUSCADOR} es el radicado: ` +
+        r.items.map((p) => p.radicado).join(' · '),
     )
   },
 )
@@ -1033,6 +1145,16 @@ server.registerTool(
     },
   },
   async ({ numero, anio, desde, limite }) => {
+    // Sin filtro esto devolvía los 21.759 conceptos: una respuesta enorme y sin
+    // ninguna utilidad, porque el listado no trae el asunto de cada concepto.
+    // buscar_normas y buscar_jurisprudencia ya rechazan la llamada vacía.
+    if (!numero && !anio) {
+      throw new Error(
+        'Indica al menos numero o anio. Este listado solo trae el número y el año de cada concepto, así que sin ' +
+          'filtro devuelve los 21.759 sin decir de qué tratan. Si buscas conceptos SOBRE UN TEMA, usa buscar_normas ' +
+          'con tipo_documento "Concepto".',
+      )
+    }
     const r = await gestor.conceptosFp(numero, anio, limite, desde)
     if (!r.total) {
       return vacio(
@@ -1087,6 +1209,375 @@ server.registerTool(
           .map((i) => `- ${i.titulo} (id ${i.id})\n  Extracto temático: ${i.resumen || '(ninguno)'}\n  ${i.url}`)
           .join('\n') +
         (fin < items.length ? `\n\nQuedan ${items.length - fin}: repite con desde=${fin}.` : ''),
+    )
+  },
+)
+
+// --- reguladores sectoriales --------------------------------------------
+
+server.registerTool(
+  'buscar_normativa_anh',
+  {
+    title: 'Buscar normativa de la ANH (hidrocarburos)',
+    description:
+      'Resoluciones, acuerdos y circulares de la Agencia Nacional de Hidrocarburos: contratos de exploración y ' +
+      'producción, regalías, derechos económicos, fiscalización y reservas. Son 785 documentos. ' +
+      'NO devuelve el texto: la ANH publica en PDF; se entrega el epígrafe completo y el enlace. ' +
+      'Por defecto OCULTA los actos de personal (nombramientos y encargos), que son dos de cada tres.',
+    inputSchema: {
+      texto: z.string().optional().describe('Palabra clave, ej. "regalías", "fiscalización"'),
+      tipo: z.enum(Object.keys(anh.TIPOS) as [anh.TipoAnh, ...anh.TipoAnh[]]).optional(),
+      numero: z.coerce.string().regex(/^\d+$/).optional().describe('Número del acto, como texto'),
+      desde: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional().describe('Fecha inicial AAAA-MM-DD'),
+      hasta: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional().describe('Fecha final AAAA-MM-DD'),
+      pagina: z.coerce.number().int().min(1).max(40).default(1).describe('Página de 20; hay 40 en total sin filtros'),
+      incluir_administrativos: z
+        .boolean()
+        .default(false)
+        .describe('Incluir nombramientos, encargos y demás actos de personal. Por defecto se ocultan.'),
+    },
+  },
+  async ({ texto, tipo, numero, desde, hasta, pagina, incluir_administrativos }) => {
+    const r = await anh.buscar({ texto, tipo, numero, desde, hasta, pagina })
+    const ocultos = incluir_administrativos ? [] : r.items.filter((d) => anh.ES_ADMINISTRATIVO(d.categoria))
+    const items = incluir_administrativos ? r.items : r.items.filter((d) => !anh.ES_ADMINISTRATIVO(d.categoria))
+
+    if (!items.length) {
+      return vacio(
+        `normativa de la ANH en la página ${r.pagina}`,
+        ocultos.length
+          ? `Las ${ocultos.length} de esta página son actos de personal y se ocultaron; pide incluir_administrativos=true para verlos, o avanza de página.`
+          : 'Prueba otra página, otro tipo o quita los filtros.',
+      )
+    }
+    return txt(
+      `${items.length} documento(s) de la ANH en la página ${r.pagina}` +
+        (ocultos.length ? ` (se ocultaron ${ocultos.length} actos de personal)` : '') +
+        `.\n\n` +
+        items
+          .map(
+            (d) =>
+              `- ${d.tipo} ${d.numero} (${d.fecha})${d.categoria ? ` — ${d.categoria}` : ''}\n` +
+              `  ${d.epigrafe || '(sin epígrafe)'}\n` +
+              (d.urlPdf ? `  PDF: ${d.urlPdf}\n` : '') +
+              `  Ficha: ${d.urlFicha}`,
+          )
+          .join('\n') +
+        `\n\nEl texto completo no se puede leer aquí: la ANH publica en PDF y esta extensión no extrae su texto. ` +
+        `El epígrafe de arriba es el del propio portal, citable tal cual.`,
+    )
+  },
+)
+
+server.registerTool(
+  'buscar_normativa_upme',
+  {
+    title: 'Buscar circulares y resoluciones de la UPME',
+    description:
+      'Circulares y resoluciones de la Unidad de Planeación Minero Energética: convocatorias de transmisión y de ' +
+      'gas, planes de expansión y actos administrativos. NO devuelve el texto: son PDF. ' +
+      'OJO CON LAS FECHAS: la fecha que publica su portal es la de PUBLICACIÓN EN LA WEB, no la de la norma — la ' +
+      '"Resolución 1163 de 2024" figura publicada en 2025. El número y el año reales están en el título.',
+    inputSchema: {
+      texto: z.string().optional().describe('Términos a buscar, ej. "transmisión", "plan de expansión"'),
+      pagina: z.coerce.number().int().min(1).default(1),
+      limite: z.coerce.number().int().min(1).max(50).default(10),
+      incluir_administrativos: z
+        .boolean()
+        .default(false)
+        .describe('Incluir nombramientos y demás actos de personal. Por defecto se ocultan.'),
+    },
+  },
+  async ({ texto, pagina, limite, incluir_administrativos }) => {
+    const r = await upme.buscar({ texto, pagina, limite })
+    const ocultos = incluir_administrativos ? [] : r.items.filter((d) => upme.esActoDePersonal(d.epigrafe))
+    const items = incluir_administrativos ? r.items : r.items.filter((d) => !upme.esActoDePersonal(d.epigrafe))
+
+    if (!items.length) {
+      return vacio(
+        `circulares o resoluciones de la UPME${texto ? ` sobre "${texto}"` : ''}`,
+        ocultos.length
+          ? `Las ${ocultos.length} de esta página son actos de personal y se ocultaron; usa incluir_administrativos=true.`
+          : `El buscador de la UPME es el de WordPress y solo indexa el título y el resumen. Prueba un término más general.`,
+      )
+    }
+    return txt(
+      `${r.total} documento(s) en la UPME (${r.paginas} página(s)); se muestran ${items.length} de la página ${pagina}` +
+        (ocultos.length ? `, ocultando ${ocultos.length} acto(s) de personal` : '') +
+        `.\n\n` +
+        items
+          .map(
+            (d) =>
+              `- ${d.titulo}${d.anio ? '' : ' (el título no trae año)'}\n` +
+              `  ${d.epigrafe || '(sin resumen)'}\n` +
+              `  Publicado en el portal: ${d.publicado} — NO es la fecha de la norma\n` +
+              `  PDF: ${d.url}`,
+          )
+          .join('\n') +
+        (pagina < r.paginas ? `\n\nHay más: repite con pagina=${pagina + 1}.` : ''),
+    )
+  },
+)
+
+server.registerTool(
+  'buscar_resoluciones_creg',
+  {
+    title: 'Buscar resoluciones de la CREG (energía y gas)',
+    description:
+      'Resoluciones de la Comisión de Regulación de Energía y Gas, donde vive la regulación operativa del sector: ' +
+      'tarifas, conexión, comercialización, plantas solares, gas natural. ' +
+      'Es la ÚNICA fuente sectorial cuyo texto se puede leer aquí (usa obtener_resolucion_creg con la ruta). ' +
+      'Y la única que publica una señal de vigencia: la CREG mantiene compilaciones separadas de resoluciones ' +
+      'no derogadas y derogadas. Esa señal se traslada literal; no la conviertas en un sí o un no.',
+    inputSchema: {
+      texto: z.string().optional().describe('Filtra por número, año o epígrafe. Ej.: "solar", "gas natural", "101-104"'),
+      compilacion: z
+        .enum(['vigentes', 'derogadas', 'todas'])
+        .default('vigentes')
+        .describe('"vigentes" = las que la CREG lista como no derogadas expresamente ni anuladas'),
+      anio: z
+        .string()
+        .regex(/^\d{4}$/)
+        .optional()
+        .describe('Año de cuatro dígitos, desde 1994. SIN ÉL solo se mira el año en curso, que trae muy pocas.'),
+      limite: z.coerce.number().int().min(1).max(50).default(15),
+    },
+  },
+  async ({ texto, compilacion, anio, limite }) => {
+    const r = await creg.buscar(compilacion, texto, limite, anio)
+    if (!r.items.length) {
+      return vacio(
+        `resoluciones de la CREG${texto ? ` que coincidan con "${texto}"` : ''} en la compilación "${compilacion}"` +
+          ` del año ${anio ?? new Date().getFullYear()}`,
+        'La CREG publica una compilación POR AÑO y sin el parámetro anio solo se mira el año en curso, que apenas ' +
+          'trae unas decenas. Repite indicando el año (desde 1994). La búsqueda es sobre número, año y epígrafe: ' +
+          'la CREG no ofrece búsqueda dentro del texto.',
+      )
+    }
+    return txt(
+      `${r.total} resolución(es) en la compilación "${compilacion}" de la CREG (${r.pagina}); ` +
+        `se muestran ${r.items.length}.\n\n` +
+        r.items
+          .map(
+            (x) =>
+              `- Resolución CREG ${x.numero} de ${x.anio}\n` +
+              `  ${x.epigrafe || '(sin epígrafe)'}\n` +
+              `  Estado: ${x.estadoSegunCompilacion}\n` +
+              `  Texto completo: obtener_resolucion_creg con ruta="${x.ruta}"`,
+          )
+          .join('\n') +
+        `\n\nEse "Estado" es la clasificación de la propia compilación de la CREG, no un campo de vigencia por norma: ` +
+        `dilo como lo que es y verifica en el texto si el aparte que te interesa sigue rigiendo.` +
+        (anio ? '' : `\nSe consultó solo el año en curso: indica anio para buscar en años anteriores.`),
+    )
+  },
+)
+
+server.registerTool(
+  'obtener_resolucion_creg',
+  {
+    title: 'Obtener el texto de una resolución de la CREG',
+    description:
+      'Texto completo de una resolución de la CREG por su ruta (la que devuelve buscar_resoluciones_creg). ' +
+      'Es el único articulado sectorial legible en esta extensión. No se devuelve entero por defecto: usa ' +
+      'buscar_en_texto o desde/limite_caracteres, igual que en obtener_norma.',
+    inputSchema: {
+      ruta: z.string().describe('Ej.: "docs/resolucion_creg_101-104_2026.htm"'),
+      buscar_en_texto: z.string().optional().describe('Devuelve solo los fragmentos que mencionan este término'),
+      desde: z.coerce.number().int().min(0).default(0),
+      max_pasajes: z.coerce.number().int().positive().optional(),
+      limite_caracteres: z.coerce.number().int().positive().default(8000).describe('Tope del TEXTO devuelto; rango 200–40.000'),
+    },
+  },
+  async ({ ruta, buscar_en_texto, desde, max_pasajes, limite_caracteres }) => {
+    const tope = Math.min(Math.max(limite_caracteres, 200), 40_000)
+    const d = await creg.obtenerTexto(ruta)
+    if (d.texto.length < 200) return txt(`${ruta}\n\n${avisoSinTexto(d.texto.length, d.url)}`)
+
+    if (buscar_en_texto) {
+      const f = fragmentos(d.texto, buscar_en_texto, 400, max_pasajes ?? 10, tope)
+      if (!f.total) {
+        return txt(`El término "${buscar_en_texto}" no aparece en ${ruta} (${d.texto.length} caracteres revisados).\nURL: ${d.url}`)
+      }
+      return txt(
+        `${ruta}\n${f.total} aparición(es) de "${buscar_en_texto}" en ${f.pasajes} pasaje(s); se muestran ${f.mostrados}.\n` +
+          `${advertenciasVigencia(f.trozos.join(' ')).join('\n')}\n\n${f.trozos.join('\n\n---\n\n')}\n\nURL: ${d.url}`,
+      )
+    }
+    const t = trocear(d.texto, desde, tope)
+    return txt(
+      `${ruta}\nTexto total: ${t.total} caracteres; se muestran ${t.texto.length} desde ${t.desde}` +
+        (t.omitido > 0 ? `; quedan ${t.omitido}.` : '.') +
+        `\n${advertenciasVigencia(t.texto).join('\n')}\n\n--- Texto ---\n${t.texto}\n\nURL: ${d.url}`,
+    )
+  },
+)
+
+server.registerTool(
+  'listar_normativa_ambiental_anla',
+  {
+    title: 'Normativa ambiental clasificada por la ANLA',
+    description:
+      'La ANLA mantiene en su sistema "Eureka" una CURADURÍA de la normativa nacional que aplica al licenciamiento ' +
+      'ambiental, agrupada por tema. Lo que aporta es la CLASIFICACIÓN, no documentos nuevos: casi todo lo que ' +
+      'lista son leyes y decretos que resolver_cita ya resuelve mejor, con texto completo y con vigencia. ' +
+      'Úsala para descubrir QUÉ normas aplican a un tema ambiental, y resuelve cada una con resolver_cita.',
+    inputSchema: {
+      seccion: z.enum(Object.keys(anla.SECCIONES) as [anla.SeccionAnla, ...anla.SeccionAnla[]]).default('leyes'),
+      texto: z.string().optional().describe('Filtra las entradas de esa sección por título o resumen'),
+      desde: z.coerce.number().int().min(0).default(0).describe('Eureka pagina de 10 en 10'),
+    },
+  },
+  async ({ seccion, texto, desde }) => {
+    const r = await anla.listar(seccion, desde)
+    const items = texto ? anla.filtrar(r.items, texto) : r.items
+    if (!items.length) {
+      return vacio(
+        `entradas en la sección "${seccion}" de Eureka${texto ? ` que mencionen "${texto}"` : ''}`,
+        r.items.length
+          ? `La página trae ${r.items.length} entradas pero ninguna coincide: Eureka no tiene buscador propio y el filtro se aplica aquí, solo sobre esta página.`
+          : 'Prueba con desde=0 o con otra sección.',
+      )
+    }
+    return txt(
+      `${items.length} entrada(s) en "${seccion}" (Eureka, ANLA), desde la posición ${r.desde}.\n\n` +
+        items
+          .map(
+            (x) =>
+              `- ${x.titulo}\n` +
+              (x.cita ? `  Cita resoluble con resolver_cita: ${x.cita}\n` : '') +
+              (x.resumen ? `  ${x.resumen.slice(0, 220)}\n` : '') +
+              `  ${x.url}`,
+          )
+          .join('\n') +
+        (r.hayMas ? `\n\nHay más: repite con desde=${r.desde + 10}.` : '') +
+        `\n\nEsto es la clasificación temática de la ANLA, no su normativa propia. Para el texto y la vigencia de ` +
+        `cada norma, pásala por resolver_cita.`,
+    )
+  },
+)
+
+server.registerTool(
+  'buscar_normativa_sectorial',
+  {
+    title: 'Buscar normativa de un regulador sectorial',
+    description:
+      'Actos administrativos —resoluciones, circulares, acuerdos— de los reguladores y ministerios sectoriales que ' +
+      'el Gestor Normativo NO cataloga. Elige la entidad con el parámetro `entidad`; cada una declara su sector y ' +
+      'sus límites en la respuesta.\n' +
+      'CUÁNDO NO USARLA: para leyes y decretos nacionales de cualquier sector usa resolver_cita o buscar_por_tema, ' +
+      'que dan texto completo y vigencia. En particular, el Decreto Único Reglamentario de CADA sector (1071 ' +
+      'agropecuario, 1074 comercio e industria, 1076 ambiente, 1079 transporte, 1072 trabajo…) ya está en el Gestor.\n' +
+      'Ninguna de estas fuentes publica el estado de vigencia, y casi todas entregan PDF sin texto extraíble.',
+    inputSchema: {
+      entidad: z
+        .enum(sectorial.ids() as [string, ...string[]])
+        .describe('Regulador a consultar. Usa describir_fuentes para ver qué sector cubre cada uno.'),
+      texto: z.string().optional().describe('Filtra por número, año o epígrafe'),
+      anio: z.string().regex(/^\d{4}$/).optional().describe('Año de cuatro dígitos'),
+      pagina: z.coerce.number().int().min(1).default(1),
+      limite: z.coerce.number().int().min(1).max(100).default(15),
+    },
+  },
+  async ({ entidad, texto, anio, pagina, limite }) => {
+    const a = sectorial.adaptador(entidad)
+    if (!a) return vacio(`un regulador llamado "${entidad}"`, `Disponibles: ${sectorial.ids().join(', ')}.`)
+
+    const r = await a.buscar({ texto, anio, pagina, limite })
+    // La advertencia de la fuente viaja SIEMPRE, haya resultados o no: es lo que
+    // impide que un vacío de un regulador se lea como que la norma no existe.
+    const cierre = `\n\nFuente: ${a.nombre} — ${a.portal}\nQué NO cubre: ${a.advertencia}`
+
+    if (!r.items.length) {
+      return vacio(
+        `actos de ${a.nombre}${texto ? ` que coincidan con "${texto}"` : ''}${anio ? ` de ${anio}` : ''}`,
+        `${r.nota ? `${r.nota} ` : ''}Consultado: ${r.url}.${cierre}`,
+      )
+    }
+    return txt(
+      `${r.items.length} acto(s) de ${a.nombre} (${a.sector})` +
+        (r.total ? ` de ${r.total} que reúne el filtro` : '') +
+        `.${r.nota ? `\n${r.nota}` : ''}\n\n` +
+        r.items
+          .map(
+            (d) =>
+              `- ${d.tipo} ${d.numero}${d.anio ? ` de ${d.anio}` : ''}${d.fecha ? ` (${d.fecha})` : ''}\n` +
+              `  ${d.epigrafe || '(sin epígrafe)'}\n` +
+              (d.url ? `  ${d.url}` : '  (el portal no publicó enlace para este acto)'),
+          )
+          .join('\n') +
+        cierre,
+    )
+  },
+)
+
+server.registerTool(
+  'describir_fuentes',
+  {
+    title: 'Qué cubre este MCP, y qué no',
+    description:
+      'Declara el alcance real: qué fuente responde cada pregunta, qué NO está cubierto y con qué fecha se ' +
+      'generaron los índices que viajan empaquetados. Úsala ANTES de concluir que algo "no existe" a partir de ' +
+      'una búsqueda vacía, y para saber si el índice de vigencia sigue fresco. No consulta la red.',
+    inputSchema: {},
+  },
+  () => {
+    const idx = cargarIndice()
+    const suinIdx = suin.coberturaIndice()
+    const normasIndexadas = idx?.filas.reduce((n, f) => n + f.n.length, 0) ?? 0
+
+    const fuentes = [
+      `- Gestor Normativo (Función Pública) — normas del sector público: leyes, decretos, resoluciones, circulares y ` +
+        `conceptos. Es el corpus principal. NO publica estado de vigencia, y su buscador por palabras solo indexa los ` +
+        `resúmenes temáticos, no el articulado: para buscar dentro de una norma, obtener_norma con buscar_en_texto.`,
+      `- Corte Constitucional — relatoría al día, sentencias y autos con texto completo.`,
+      `- Corte Suprema de Justicia — cuatro salas (Tutelas, Civil, Laboral, Penal) desde 1991. Entrega la referencia y ` +
+        `las normas citadas, NO el texto: la Corte publica en .docx y esta extensión no lee ese formato.`,
+      `- Consejo de Estado (SAMAI) — providencias tituladas de lo contencioso administrativo, con el problema jurídico ` +
+        `y su respuesta. Tampoco entrega el texto completo; sí el enlace a la ficha del proceso.`,
+      `- DIAN — normograma tributario, aduanero y cambiario. Ninguna otra herramienta cubre esa materia.`,
+      `- SUIN-Juriscol (MinJusticia) — corpus histórico desde 1844 y, sobre todo, la ÚNICA fuente que publica el ` +
+        `estado de vigencia como dato.`,
+      `- CREG — resoluciones de energía y gas. La única fuente sectorial cuyo TEXTO se puede leer aquí, y la única ` +
+        `que separa las no derogadas de las derogadas en compilaciones distintas.`,
+      `- ANH — 785 actos de hidrocarburos (contratos, regalías, fiscalización). Solo PDF: epígrafe y enlace.`,
+      `- UPME — circulares y resoluciones de planeación minero energética. Solo PDF. Su fecha es la de publicación ` +
+        `en la web, no la de la norma.`,
+      `- ANLA (Eureka) — clasificación temática de la normativa ambiental. Aporta el mapa, no los documentos: casi ` +
+        `todo lo que lista son leyes y decretos que resolver_cita ya resuelve mejor.`,
+      ...sectorial
+        .adaptadores()
+        .map((a) => `- ${a.nombre} (entidad="${a.id}" en buscar_normativa_sectorial) — ${a.sector}. ${a.advertencia}`),
+    ]
+
+    const empaquetado = [
+      idx
+        ? `- Índice temático: ${idx.filas.length.toLocaleString('es')} pares tema/subtema y ` +
+          `${normasIndexadas.toLocaleString('es')} asociaciones norma–subtema. Generado el ${idx.generado}.${frescura(idx.generado)}`
+        : `- Índice temático: NO viaja con esta instalación. buscar_por_tema consultará el portal en vivo y será más lento.`,
+      suinIdx
+        ? `- Índice de SUIN: ${suinIdx.leyes.toLocaleString('es')} leyes. Generado el ${suinIdx.generado}.`
+        : `- Índice de SUIN: NO viaja con esta instalación, así que la vigencia no se puede consultar. No es que las ` +
+          `normas no estén vigentes: es que esta capacidad está ausente.`,
+    ]
+
+    return txt(
+      `normativa-colombia ${VERSION} — alcance declarado.\n\n` +
+        `FUENTES\n${fuentes.join('\n')}\n\n` +
+        `ÍNDICES EMPAQUETADOS (responden sin red)\n${empaquetado.join('\n')}\n\n` +
+        `LO QUE NO ESTÁ CUBIERTO — decirlo importa más que la lista de arriba:\n` +
+        `- El ESTADO PROCESAL de un caso: si un proceso sigue abierto, en qué etapa va o cuándo se falla. Aquí solo ` +
+        `hay normas y providencias YA PUBLICADAS.\n` +
+        `- La vigencia de los DECRETOS: el índice de SUIN son casi solo leyes, porque los sitemaps de decretos del ` +
+        `portal devuelven 404. Que un decreto no traiga estado NO significa que esté derogado ni vigente: no consta.\n` +
+        `- La normativa departamental y municipal, salvo la que el Gestor recoja por su cuenta.\n` +
+        `- Los tribunales y juzgados distintos de las tres altas cortes.\n` +
+        `- EL RESTO DE LA REGULACIÓN SECTORIAL. Hay cuatro reguladores —CREG, ANH, UPME y ANLA— y solo cuatro: NO ` +
+        `están la SIC, la Superfinanciera, la CRC, la Superservicios ni las demás comisiones y superintendencias. ` +
+        `Que este MCP tenga "algo sectorial" no significa que tenga lo sectorial.\n\n` +
+        `CÓMO LEER UN VACÍO: que una búsqueda no devuelva nada significa que no se encontró en ESTAS fuentes, con ` +
+        `estos índices y con estos huecos. No significa que la norma no exista. El corpus del Gestor no cubre todo ` +
+        `el país, y el índice de SUIN tiene agujeros conocidos.`,
     )
   },
 )
