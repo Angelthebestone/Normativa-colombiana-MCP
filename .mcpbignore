@@ -17,3 +17,9 @@ SECURITY.md
 CHANGELOG.md
 CHECKSUMS.txt
 *.mcpb
+# Instrucciones para agentes y notas de trabajo: son del repositorio, no del
+# producto. Quien instala la extensión no tiene por qué recibirlas.
+CLAUDE.md
+PLAN.md
+.commandcode/
+.claude/

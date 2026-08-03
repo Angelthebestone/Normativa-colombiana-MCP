@@ -6,6 +6,7 @@
  *   npm test
  */
 import { strict as assert } from 'node:assert'
+import { readFileSync } from 'node:fs'
 import test from 'node:test'
 
 import { parsearCita, idTipo, rutaDeSentencia } from '../src/citas.ts'
@@ -14,6 +15,11 @@ import { mereceAviso } from '../src/actualizacion.ts'
 import * as dian from '../src/fuentes/normograma.ts'
 import * as suprema from '../src/fuentes/cortesuprema.ts'
 import * as consejo from '../src/fuentes/consejoestado.ts'
+import * as anh from '../src/fuentes/anh.ts'
+import * as upme from '../src/fuentes/upme.ts'
+import * as creg from '../src/fuentes/creg.ts'
+import * as anla from '../src/fuentes/anla.ts'
+import * as sectorial from '../src/fuentes/sectorial.ts'
 import { pedir as pedirHttp } from '../src/http.ts'
 import {
   CanarioError,
@@ -383,6 +389,37 @@ test('el historial se reconstruye de las notas, sin inventar lo que no dicen', (
   assert.ok(h.every((c) => c.literal.length > 10))
 })
 
+test('el historial lee las tres formas en que el portal anota un cambio', () => {
+  // Las tres conviven en el artículo 6 de la Ley 1221 de 2008, y con solo la
+  // primera el historial lo daba por intacto mientras el texto mostraba dos
+  // reformas y una inhibición. Notas copiadas del portal, tal cual.
+  const texto =
+    'ARTÍCULO 6°. Garantías laborales.\n' +
+    'NOTA: Declarada inhibida por ineptitud sustantiva de la demanda (Numeral 1. ) Sentencia de la Corte Constitucional C-351 de 2013\n' +
+    'NOTA: Declarado Exequible de manera condicionada, mediante Sentencia de la Corte Constitucional C-337 de fecha mayo 11 de 2011, siempre y cuando se entienda algo\n' +
+    '(Adiciona Art 54 numerales 13, 14,15 de la Ley 2466 de 2025)\n'
+  const h = historial(texto)
+  assert.equal(h.length, 3, `se leyeron ${h.length} cambios: ${h.map((c) => c.accion)}`)
+  // Van en el orden del documento aunque cada forma se busque en otra pasada.
+  assert.deepEqual(h.map((c) => c.norma), ['Sentencia C-351', 'Sentencia C-337', 'Ley 2466'])
+  assert.deepEqual(h.map((c) => c.anio), ['2013', '2011', '2025'])
+  assert.equal(h[2]!.accion, 'adicionado', 'la forma activa se anota en participio, como el resto')
+  assert.equal(h[2]!.articulo, '54')
+  // Y las advertencias tienen que verlas también: el artículo salía sin ninguna.
+  assert.equal(advertenciasVigencia(texto).length, 2, 'sin aviso, el artículo parece intacto')
+})
+
+test('la prosa del articulado no se confunde con una nota de reforma', () => {
+  // El riesgo de ampliar el parser es invertir la dirección: el artículo de
+  // vigencias dice qué deroga ESTA norma, no quién la derogó a ella.
+  const prosa =
+    'de conformidad con lo previsto en la Ley 100 de 1993 y las normas que la modifiquen o adicionen\n' +
+    'Por la cual se modifica y adiciona la Ley 100 de 1993 y se dictan otras disposiciones\n' +
+    'ARTÍCULO 20. El presente decreto rige desde su publicación y deroga el Decreto 884 de 2012.\n' +
+    'El actor fue declarado insubsistente mediante acto administrativo.'
+  assert.deepEqual(historial(prosa), [])
+})
+
 test('las secciones de una providencia se cortan por encabezado, no por prosa', () => {
   const texto =
     'Preámbulo cualquiera.\nANTECEDENTES\nLos hechos.\nII. CONSIDERACIONES\nEl análisis.\n' +
@@ -406,18 +443,140 @@ test('el aviso de versión no molesta: solo cambios que importan', () => {
   assert.equal(mereceAviso('1.4.0', '1.3.9'), false)
 })
 
+test('la ANH devuelve actos citables y marca los de personal', RED, async () => {
+  const r = await anh.buscar({ pagina: 1 })
+  assert.ok(r.items.length > 5, `solo ${r.items.length} filas`)
+  for (const d of r.items) assert.ok(d.tipo && d.numero, `fila sin tipo o número: ${JSON.stringify(d)}`)
+  // Dos de cada tres son nombramientos: si dejaran de marcarse, el filtro por
+  // defecto se vuelve inútil y la herramienta se llena de ruido en silencio.
+  assert.ok(
+    r.items.some((d) => anh.ES_ADMINISTRATIVO(d.categoria)),
+    'ninguna fila trae categoría "Administrativo": el marcado cambió',
+  )
+  assert.ok(r.items.some((d) => d.urlPdf.endsWith('.pdf')), 'ninguna fila enlaza su PDF')
+})
+
+test('la UPME lee el número del título, no de la fecha del portal', RED, async () => {
+  const r = await upme.buscar({ limite: 5 })
+  assert.ok(r.total > 0 && r.items.length > 0, `total ${r.total}`)
+  const con = r.items.filter((d) => d.numero)
+  assert.ok(con.length, 'ningún documento trae número: el título dejó de parsearse')
+  // "Resolución" lleva tilde y \w la cortaba: el tipo salía vacío.
+  assert.ok(con.some((d) => d.tipo && !/^\d/.test(d.tipo)), `tipo mal leído: ${JSON.stringify(con[0])}`)
+})
+
+test('la CREG separa derogadas de no derogadas y su texto se puede leer', RED, async () => {
+  // La compilación se publica POR AÑO: sin el año se mira solo el corriente, que
+  // trae unas decenas. 2025 trae 118, y ese es el volumen que hace útil la fuente.
+  const vig = await creg.buscar('vigentes', undefined, 5, '2025')
+  assert.ok(vig.total > 50, `la compilación de vigentes de 2025 trae ${vig.total}`)
+  assert.match(vig.pagina, /_2025\.html$/, `no se pidió la página del año: ${vig.pagina}`)
+  assert.match(vig.items[0]!.estadoSegunCompilacion, /No derogada/i)
+  const der = await creg.buscar('derogadas', undefined, 3)
+  assert.match(der.items[0]!.estadoSegunCompilacion, /Derogada/i)
+
+  // Es la única fuente sectorial con articulado legible; si deja de serlo, la
+  // herramienta que lo promete se queda sin sentido.
+  const t = await creg.obtenerTexto(vig.items[0]!.ruta)
+  assert.ok(t.texto.length > 2000, `el texto vino con ${t.texto.length} caracteres`)
+  assert.doesNotMatch(t.texto.slice(0, 200), /Video no funciona/, 'el texto trae la cabecera del portal')
+})
+
+test('Eureka no confunde un decreto ley con una ley', RED, async () => {
+  const r = await anla.listar('leyes', 0)
+  assert.ok(r.items.length > 0, 'Eureka no devolvió entradas')
+  // "Decreto – Ley 2893 de 2011" con guion largo daba la cita "Ley 2893 de
+  // 2011", que es otra norma: la cita habría viajado mal a resolver_cita.
+  for (const x of r.items) {
+    if (/Decreto\s*[–—-]\s*Ley/i.test(x.titulo)) {
+      assert.match(x.cita, /^Decreto Ley/i, `cita mal extraída de "${x.titulo}": ${x.cita}`)
+    }
+  }
+})
+
+test('todo regulador sectorial declara qué NO cubre', async () => {
+  // El contrato exige `advertencia` porque es lo único que impide que un vacío
+  // de un regulador se lea como "esa norma no existe". Una fuente nueva que se
+  // registre sin ella pasaría inadvertida: esta prueba lo impide.
+  await import('../src/fuentes/sectorial/registro.ts')
+  const todos = sectorial.adaptadores()
+  assert.ok(todos.length >= 10, `solo ${todos.length} reguladores registrados`)
+  const ids = new Set<string>()
+  for (const a of todos) {
+    assert.match(a.id, /^[a-z][a-z0-9-]+$/, `id no utilizable como valor de enum: "${a.id}"`)
+    assert.ok(!ids.has(a.id), `id duplicado: ${a.id}`)
+    ids.add(a.id)
+    assert.ok(a.nombre && a.sector, `${a.id} sin nombre o sector`)
+    assert.match(a.portal, /^https:\/\//, `${a.id} sin portal citable`)
+    assert.ok(a.advertencia.length > 40, `${a.id} no declara qué NO cubre`)
+    assert.equal(typeof a.buscar, 'function', `${a.id} sin buscar()`)
+  }
+})
+
+test('los índices empaquetados no se degradan en silencio', () => {
+  // Son la diferencia entre que el MCP funcione y que encuentre la mitad sin
+  // decirlo: si generar-indice produjera un índice truncado, todo seguiría en
+  // verde y buscar_por_tema simplemente hallaría menos. Los umbrales van al 90%
+  // de lo medido el 2026-08-01 (12.063 pares, 56.458 asociaciones, 11.599 leyes)
+  // para que crezcan sin molestar y avisen si se desploman.
+  const leer = (f: string) => JSON.parse(readFileSync(new URL(`../datos/${f}`, import.meta.url), 'utf8'))
+
+  const tematico = leer('indice-tematico.json') as { generado: string; filas: { n: unknown[] }[] }
+  assert.ok(tematico.filas.length > 10_800, `el índice temático trae ${tematico.filas.length} pares tema/subtema`)
+  const asociaciones = tematico.filas.reduce((n, f) => n + f.n.length, 0)
+  assert.ok(asociaciones > 50_000, `el índice temático trae ${asociaciones} asociaciones norma–subtema`)
+
+  const suinIdx = leer('indice-suin.json') as { generado: string; normas: Record<string, string> }
+  const leyes = Object.keys(suinIdx.normas).length
+  assert.ok(leyes > 10_400, `el índice de SUIN trae ${leyes} leyes`)
+
+  // Sin fecha válida no se puede advertir de que un índice está viejo.
+  for (const [nombre, idx] of [['temático', tematico], ['SUIN', suinIdx]] as const) {
+    assert.match(idx.generado, /^\d{4}-\d{2}-\d{2}$/, `el índice ${nombre} no trae fecha de generación`)
+    assert.ok(!Number.isNaN(Date.parse(idx.generado)), `fecha ilegible en el índice ${nombre}`)
+  }
+})
+
 test('el Consejo de Estado devuelve providencias citables, no texto suelto', RED, async () => {
   const r = await consejo.buscar('liquidación del contrato', 2)
   assert.ok(r.paginas > 100, `páginas: ${r.paginas}`)
   assert.equal(r.items.length, 2)
+  assert.equal(r.pagina, 1)
   for (const p of r.items) {
     // Sin radicado y fecha no se puede citar, que es para lo que existe.
     assert.match(p.radicado, /^\d{15,25}$/, `radicado raro: ${p.radicado}`)
     assert.ok(p.fecha && p.sala, `falta fecha o sala en ${p.radicado}`)
+    // El enlace a la ficha del proceso es lo que evita el "búscalo tú".
+    assert.match(p.url, /list_procesos\.aspx\?guid=/, `sin ficha de proceso: ${p.url}`)
     // La respuesta al problema no puede colarse como si fuera otro problema.
     assert.ok(
       p.titulaciones.every((t) => !/^Respuesta al problema/i.test(t.problema)),
       'una respuesta se leyó como problema jurídico',
     )
   }
+})
+
+test('el Consejo de Estado pasa de la primera página', RED, async (t) => {
+  // Antes solo existía la página 1: con 15.000 páginas de resultados y un tope
+  // de 5, no había forma de ver la sexta providencia.
+  let uno: Awaited<ReturnType<typeof consejo.buscar>>
+  let dos: typeof uno
+  try {
+    ;[uno, dos] = await Promise.all([consejo.buscar('nulidad electoral', 5, 1), consejo.buscar('nulidad electoral', 5, 2)])
+  } catch (e) {
+    // El buscador de SAMAI agota el tiempo en su base de datos y responde 500.
+    // Es la fuente la que se cae, no la paginación la que se rompe.
+    if (/no respondió a tiempo/.test((e as Error).message)) {
+      t.skip('SAMAI devolvió 500 (timeout de su buscador)')
+      return
+    }
+    throw e
+  }
+  assert.equal(dos.pagina, 2)
+  assert.ok(dos.items.length > 0, 'la página 2 volvió vacía')
+  const previos = new Set(uno.items.map((p) => p.radicado))
+  assert.ok(
+    dos.items.every((p) => !previos.has(p.radicado)),
+    'la página 2 repite providencias de la 1: no está paginando',
+  )
 })

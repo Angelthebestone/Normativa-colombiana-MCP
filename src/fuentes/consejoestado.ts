@@ -2,33 +2,38 @@
  * Consejo de Estado — SAMAI, buscador de providencias tituladas.
  *
  * Es la tercera alta corte y la única que no tiene API. Su buscador es ASP.NET
- * WebForms: no hay JSON que pedir, hay que enviar el formulario. Lo que se
- * documenta aquí es lo que costó averiguar, porque nada de esto es evidente:
+ * WebForms, así que la primera versión enviaba el formulario con su
+ * `__VIEWSTATE` y el `__EVENTTARGET` del LinkButton de búsqueda. Funcionaba,
+ * pero solo daba la primera página: avanzar exigía otro postback encadenado.
  *
- * - **La búsqueda NO es un botón.** Es un LinkButton que dispara
- *   `__doPostBack('ctl00$MainContent$BusquedaRapidaLinkButton')`. Mandar el
- *   formulario sin ese `__EVENTTARGET` devuelve 200 y la misma página, sin
- *   buscar nada: se parece tanto a "no hay resultados" que cuesta un rato ver
- *   que la petición nunca llegó a ser una búsqueda.
- * - **No hay asistente de tres pasos.** Las pestañas son `slideUp/slideDown`
- *   en el navegador; todos los campos viven en el mismo formulario y basta una
- *   petición.
- * - **El `__VIEWSTATE` inicial se reutiliza** entre búsquedas distintas, así
- *   que el formulario se pide una vez por proceso y las consultas siguientes
- *   cuestan una sola petición.
+ * La propia página ofrece la salida, en su botón «Copiar Link Permanente de
+ * Búsqueda»: un GET a `ResultadoBuscadorProvidenciasTituladas.aspx` con la
+ * consulta y el número de página en un JSON. Sin `__VIEWSTATE`, sin cookie y
+ * sin POST. Se comprobó que devuelve exactamente las mismas providencias y en
+ * el mismo orden que el postback —tres consultas distintas, radicado por
+ * radicado— y que `PaginaActual` avanza de verdad, así que reemplaza a la
+ * maquinaria anterior en vez de convivir con ella.
  *
- * ponytail: el canario cuenta radicados, nunca mira el código HTTP. Aquí un
- * 200 no significa nada —la página de error, la sesión caducada y el postback
- * mal formado responden todos 200 con HTML—, y devolver vacío en silencio se
- * leería como "no existe esa sentencia".
+ * SAMAI pagina en bloques de ~10 y no acepta un desplazamiento libre; por eso
+ * esto se pide por página y no con el `desde` del resto de herramientas. Los
+ * bloques no siempre traen 10 filas legibles, así que un `desde` exacto sería
+ * un número inventado.
+ *
+ * ponytail: el canario cuenta radicados y lee el rótulo de paginación, nunca el
+ * código HTTP. Aquí un 200 no significa nada —la página de error responde 200
+ * con HTML—, y devolver vacío en silencio se leería como "no existe esa
+ * sentencia".
  */
 import * as cheerio from 'cheerio/slim'
-import { CanarioError } from '../parse.ts'
+import { CanarioError, limpiarTermino } from '../parse.ts'
 import { pedir } from '../http.ts'
 
 const BASE = 'https://samai.consejodeestado.gov.co'
-const RUTA = '/TitulacionRelatoria/BuscadorProvidenciasTituladas.aspx'
-const BOTON = 'ctl00$MainContent$BusquedaRapidaLinkButton'
+const RUTA = '/TitulacionRelatoria/ResultadoBuscadorProvidenciasTituladas.aspx'
+/** Código del Consejo de Estado en SAMAI; va fijo en el enlace permanente. */
+const CORPORACION = '1100103'
+/** El buscador tal como lo abre una persona, para remitir a él. */
+export const BUSCADOR = `${BASE}/TitulacionRelatoria/BuscadorProvidenciasTituladas.aspx`
 
 export type Titulacion = { problema: string; respuesta: string; nota: string }
 export type Providencia = {
@@ -40,33 +45,27 @@ export type Providencia = {
   actor: string
   demandado: string
   titulaciones: Titulacion[]
+  /** Ficha del proceso en SAMAI: es el enlace citable, no el del buscador. */
   url: string
 }
 
 const limpio = (s: string): string => s.replace(/\s+/g, ' ').trim()
 
-/** Campo oculto del formulario, tal como lo escribe ASP.NET. */
-const oculto = (html: string, nombre: string): string =>
-  html.match(new RegExp(`id="${nombre}"[^>]*value="([^"]*)"`))?.[1] ?? ''
-
-type Formulario = { viewstate: string; generator: string; validation: string; cookie: string }
-let formulario: Formulario | null = null
-
-async function cargarFormulario(): Promise<Formulario> {
-  if (formulario) return formulario
-  const r = await pedir(`${BASE}${RUTA}`, 90_000)
-  if (r.status !== 200) throw new CanarioError(`SAMAI respondió ${r.status} al pedir el formulario`)
-  const f = {
-    viewstate: oculto(r.cuerpo, '__VIEWSTATE'),
-    generator: oculto(r.cuerpo, '__VIEWSTATEGENERATOR'),
-    validation: oculto(r.cuerpo, '__EVENTVALIDATION'),
-    cookie: r.cookies ?? '',
-  }
-  if (!f.viewstate || !f.validation) {
-    throw new CanarioError('el formulario de SAMAI no trae __VIEWSTATE o __EVENTVALIDATION')
-  }
-  formulario = f
-  return f
+/**
+ * El enlace permanente que genera la propia página. Los paréntesis delimitan la
+ * consulta en la sintaxis del buscador, así que los del término se quitan: uno
+ * suelto la dejaría sin cerrar y SAMAI devolvería otra cosa sin avisar.
+ */
+export function enlaceBusqueda(texto: string, pagina: number): string {
+  const dic = JSON.stringify({
+    corporacion: CORPORACION,
+    modo: '2',
+    filtro: '',
+    busqueda: `(${texto.replace(/[()]/g, ' ').replace(/\s+/g, ' ').trim()})`,
+    searchMode: 'any',
+    PaginaActual: String(Math.max(0, pagina)),
+  })
+  return `${BASE}${RUTA}?BusquedaDictionary=${encodeURIComponent(dic)}`
 }
 
 /**
@@ -80,9 +79,9 @@ async function cargarFormulario(): Promise<Formulario> {
  * es la peor equivocación posible, y encima silenciosa. Se lee por id o no se
  * lee.
  */
-const RAIZ = 'MainContent_ResultadoBusqueda1_TitulacionesRepeater_'
+const RAIZ = 'ContentPlaceHolder1_ResultadoBusqueda1_TitulacionesRepeater_'
 
-function parsear(html: string, limite: number): { paginas: number; items: Providencia[] } {
+function parsear(html: string, limite: number, urlBusqueda: string): { paginas: number; items: Providencia[] } {
   const $ = cheerio.load(html)
   const campoDe = (nombre: string, n: number): string => limpio($(`[id="${RAIZ}${nombre}_${n}"]`).first().text())
 
@@ -116,6 +115,9 @@ function parsear(html: string, limite: number): { paginas: number; items: Provid
       }
     })
 
+    // El radicado enlaza a la ficha del proceso. Es lo que hace citable el
+    // resultado: sin ella solo quedaba decir "búscalo en el buscador".
+    const href = $(`[id="${RAIZ}HypRadicado_${n}"]`).first().attr('href') ?? ''
     items.push({
       radicado,
       fecha: campoDe('LblFECHAPROC', n),
@@ -125,46 +127,57 @@ function parsear(html: string, limite: number): { paginas: number; items: Provid
       actor: campoDe('LblActor', n),
       demandado: campoDe('LblDemandado', n),
       titulaciones: titulaciones.slice(0, 4),
-      url: `${BASE}${RUTA}`,
+      url: href ? new URL(href, `${BASE}${RUTA}`).toString() : urlBusqueda,
     })
   }
 
-  const pag = limpio($('[id$="PaginaActualLabel"]').first().text()).match(/de\s+([\d.,]+)/i)?.[1] ?? '0'
-  return { paginas: Number(pag.replace(/[.,]/g, '')) || 0, items }
+  const pag = limpio($('[id$="PaginaActualLabel"]').first().text()).match(/de\s+([\d.,]+)/i)?.[1] ?? ''
+  return { paginas: pag ? Number(pag.replace(/[.,]/g, '')) : -1, items }
 }
 
-export async function buscar(texto: string, limite = 5): Promise<{ paginas: number; items: Providencia[] }> {
-  const q = texto.trim()
+export async function buscar(
+  texto: string,
+  limite = 5,
+  pagina = 1,
+): Promise<{ paginas: number; pagina: number; items: Providencia[]; url: string }> {
+  const q = limpiarTermino(texto)
   if (!q) throw new Error('Indica un término para buscar en el Consejo de Estado.')
 
-  const f = await cargarFormulario()
-  const cuerpo = new URLSearchParams({
-    __EVENTTARGET: BOTON,
-    __EVENTARGUMENT: '',
-    __VIEWSTATE: f.viewstate,
-    __VIEWSTATEGENERATOR: f.generator,
-    __EVENTVALIDATION: f.validation,
-    'ctl00$MainContent$BusquedaRapidaTextBox': q,
-  }).toString()
+  // El enlace cuenta las páginas desde cero; hacia fuera se numeran desde uno,
+  // que es como las rotula la propia página ("Página 1 de 15406").
+  const n = Math.max(1, Math.trunc(pagina))
+  const url = enlaceBusqueda(q, n - 1)
+  const r = await pedir(url, 120_000)
 
-  const cabeceras: Record<string, string> = { 'Content-Type': 'application/x-www-form-urlencoded' }
-  if (f.cookie) cabeceras['Cookie'] = f.cookie
-  const r = await pedir(`${BASE}${RUTA}`, 120_000, 'text/html', cabeceras, cuerpo)
-  const res = parsear(r.cuerpo, Math.min(Math.max(limite, 1), 9))
+  // Un 500 de SAMAI no es un cambio de marcado. Su backend responde
+  // «The wait operation timed out» cuando la consulta agota el tiempo en su
+  // base de datos, y sin esta comprobación el canario culpaba a la estructura
+  // del portal y mandaba a actualizar la extensión, que no arregla nada.
+  if (r.status >= 500) {
+    throw new Error(
+      `SAMAI no respondió a tiempo (error ${r.status}): su buscador agota el tiempo con consultas amplias. ` +
+        `Vuelve a intentarlo, o usa un término más específico. No es que no haya providencias.`,
+    )
+  }
+  if (r.status !== 200) throw new Error(`SAMAI respondió ${r.status}.`)
 
-  // Un 200 no prueba nada en WebForms, así que el canario mira el contenido.
-  // Dos fallos distintos, y ninguno puede devolver una lista vacía en silencio:
-  if (!res.items.length) {
-    formulario = null // el estado pudo caducar; que la próxima lo repita
-    if (!res.paginas) {
-      throw new CanarioError('SAMAI respondió sin providencias ni paginación: el postback no llegó a ser una búsqueda')
-    }
-    // Este es el caso traicionero: el buscador SÍ buscó —hay paginación— pero no
-    // se pudo leer ninguna fila. Es un cambio de marcado, no un "no hay nada".
+  const res = parsear(r.cuerpo, Math.min(Math.max(limite, 1), 10), url)
+
+  // Un 200 no prueba nada, así que el canario mira el contenido. Sin el rótulo
+  // de paginación la respuesta ni siquiera es la página de resultados: eso es
+  // un cambio de marcado, no un "no hay nada".
+  if (res.paginas < 0) {
+    throw new CanarioError(
+      'SAMAI respondió sin el rótulo de paginación: el enlace permanente de búsqueda dejó de devolver resultados',
+    )
+  }
+  // Con paginación pero sin ninguna fila legible el fallo es del parseo, y este
+  // es el caso traicionero: parece "no hay providencias" y no lo es.
+  if (!res.items.length && res.paginas > 0 && n <= res.paginas) {
     throw new CanarioError(
       `SAMAI dice tener ${res.paginas} página(s) de resultados pero no se pudo leer ninguna providencia ` +
         `(los identificadores del repetidor cambiaron)`,
     )
   }
-  return res
+  return { ...res, pagina: n, url }
 }

@@ -236,8 +236,21 @@ export function advertenciasVigencia(texto: string): string[] {
   const avisos: string[] = []
   const derogado = (texto.match(/\bDerogad[oa]\b/gi) ?? []).length
   const modificado = (texto.match(/\bModificad[oa] por\b/gi) ?? []).length
+  // Las otras dos formas de anotar una reforma, las mismas que reconoce
+  // `historial`. Sin ellas, el artículo 6 de la Ley 1221 de 2008 —declarado
+  // exequible de forma condicionada e inhibida en un numeral, y adicionado por
+  // la Ley 2466 de 2025— se mostraba sin una sola advertencia.
+  const reformado = (texto.match(/\(\s*(?:Adiciona|Modifica|Deroga|Sustituye|Subroga|Corrige)\b[^)\n]{0,160}\)/gi) ?? []).length
+  const constitucional = (texto.match(/\bDeclarad[oa]s?\b(?=[^\n]{0,160}\b(?:C|T|SU)-\s?\d)/gi) ?? []).length
   if (derogado) avisos.push(`El texto mostrado contiene ${derogado} marca(s) de derogatoria. Verifica si el aparte que te interesa sigue vigente.`)
   if (modificado) avisos.push(`Contiene ${modificado} nota(s) de "Modificado por". El texto original pudo haber cambiado.`)
+  if (reformado) avisos.push(`Contiene ${reformado} nota(s) del portal en activa ("Adiciona…", "Deroga…"). Úsalas con obtener_norma e historial=true.`)
+  if (constitucional) {
+    avisos.push(
+      `Contiene ${constitucional} nota(s) de control constitucional (exequibilidad condicionada, inexequibilidad o ` +
+        `inhibición). El aparte afectado puede no regir tal como está escrito: lee la sentencia citada.`,
+    )
+  }
   return avisos
 }
 
@@ -252,6 +265,47 @@ export type Cambio = {
   articulo: string
   /** La nota completa, palabra por palabra. Es lo que hay que poder citar. */
   literal: string
+}
+
+const NORMA_CITADA =
+  /\b(Ley|Decreto(?:\s+Ley)?|Resoluci[óo]n|Acuerdo|Circular|Acto\s+Legislativo)\s+(\d[\d.]*)\s+de\s+(\d{4})/i
+const SENTENCIA_CITADA = /\b((?:C|T|SU|A)-\s?\d{1,4})\b/i
+
+/**
+ * El portal escribe sus notas de tres maneras, y el primer parser solo veía una.
+ * El artículo 6 de la Ley 1221 de 2008 lleva las otras dos y por eso el
+ * historial lo daba por intacto mientras el texto mostraba las reformas:
+ *
+ * - pasiva: `(Modificado por el art. 1 Decreto 666 de 2017)`
+ * - activa entre paréntesis: `(Adiciona Art 54 numerales 13, 14,15 de la Ley 2466 de 2025)`
+ * - control constitucional: `NOTA: Declarada inhibida por ineptitud sustantiva
+ *   de la demanda (Numeral 1. ) Sentencia de la Corte Constitucional C-351 de 2013`
+ *
+ * Las dos formas nuevas exigen que la nota identifique la norma o la sentencia,
+ * y la activa exige además ir entre paréntesis. Sin esas dos condiciones entra
+ * la prosa del propio articulado —«las normas que la modifiquen o adicionen», o
+ * el artículo de vigencias que dice qué deroga ESTA norma—, que apunta al revés:
+ * diría que reformaron esta norma cuando es ella la que reforma a otra.
+ */
+const FORMAS = [
+  {
+    // La pasiva se acepta aunque la nota no diga qué norma cambió: "Derogado por
+    // una norma que la nota no identifica" sigue siendo un cambio anotado.
+    re: /(Modificad[oa]|Adicionad[oa]|Derogad[oa]|Sustituid[oa]|Subrogad[oa]|Compilad[oa]|Corregid[oa]|Reglamentad[oa])\s+por\s+([^\n)]{0,160})/gi,
+    exigeReferencia: false,
+  },
+  { re: /\(\s*(Adiciona|Modifica|Deroga|Sustituye|Subroga|Corrige)\b([^)\n]{0,160})\)/gi, exigeReferencia: true },
+  { re: /(Declarad[oa]s?)\b([^\n]{0,160})/gi, exigeReferencia: true },
+] as const
+
+/** Los verbos en activa se anotan en participio, como el resto. */
+const PARTICIPIO: Record<string, string> = {
+  adiciona: 'adicionado',
+  modifica: 'modificado',
+  deroga: 'derogado',
+  sustituye: 'sustituido',
+  subroga: 'subrogado',
+  corrige: 'corregido',
 }
 
 /**
@@ -269,29 +323,40 @@ export type Cambio = {
  * se entregan en el orden en que aparecen, que es el del propio documento.
  */
 export function historial(texto: string): Cambio[] {
-  const re =
-    /(Modificad[oa]|Adicionad[oa]|Derogad[oa]|Sustituid[oa]|Subrogad[oa]|Compilad[oa]|Corregid[oa])\s+por\s+([^\n)]{0,160})/gi
-  const cambios: Cambio[] = []
+  // Se recoge con la posición porque las tres formas se buscan en pasadas
+  // distintas: sin reordenar, la respuesta dejaría de ir en el orden del
+  // documento, que es lo único que se promete sobre la secuencia.
+  const cambios: (Cambio & { pos: number })[] = []
   const vistos = new Set<string>()
 
-  for (const m of texto.matchAll(re)) {
-    const literal = `${m[1]} por ${m[2]}`.replace(/\s+/g, ' ').trim().replace(/[,.;]$/, '')
-    if (vistos.has(literal)) continue // el portal repite la misma nota en varios apartes
-    vistos.add(literal)
+  for (const { re, exigeReferencia } of FORMAS) {
+    for (const m of texto.matchAll(re)) {
+      const detalle = m[2] ?? ''
+      const norma = detalle.match(NORMA_CITADA)
+      const sentencia = detalle.match(SENTENCIA_CITADA)
+      if (exigeReferencia && !norma && !sentencia) continue
 
-    const detalle = m[2] ?? ''
-    const norma = detalle.match(
-      /\b(Ley|Decreto(?:\s+Ley)?|Resoluci[óo]n|Acuerdo|Circular|Acto\s+Legislativo)\s+(\d[\d.]*)\s+de\s+(\d{4})/i,
-    )
-    cambios.push({
-      accion: (m[1] ?? '').replace(/a$/i, 'o').toLowerCase(),
-      norma: norma ? `${norma[1]} ${norma[2]}` : '',
-      anio: norma?.[3] ?? '',
-      articulo: detalle.match(/\bart[íi]?c?u?l?o?\.?\s*(\d+[\w.]*)/i)?.[1] ?? '',
-      literal,
-    })
+      // La nota se lee hasta 160 caracteres. Cuando ahí se corta hay que
+      // decirlo: una cita literal truncada en silencio se lee como completa.
+      const literal =
+        m[0].replace(/\s+/g, ' ').trim().replace(/[,.;]$/, '') + (detalle.length >= 160 ? '…' : '')
+      if (vistos.has(literal)) continue // el portal repite la misma nota en varios apartes
+      vistos.add(literal)
+
+      const verbo = (m[1] ?? '').toLowerCase()
+      cambios.push({
+        pos: m.index,
+        accion: PARTICIPIO[verbo] ?? verbo.replace(/a$/, 'o'),
+        norma: norma ? `${norma[1]} ${norma[2]}` : sentencia ? `Sentencia ${sentencia[1]}` : '',
+        // Sin norma citada, el año es el último que aparece en la nota: la Corte
+        // se cita como "C-337 de fecha mayo 11 de 2011", con el año al final.
+        anio: norma?.[3] ?? (sentencia ? (detalle.match(/\b((?:19|20)\d{2})\b(?![\s\S]*\b(?:19|20)\d{2}\b)/)?.[1] ?? '') : ''),
+        articulo: detalle.match(/\bart[íi]?c?u?l?o?\.?\s*(\d+[\w.]*)/i)?.[1] ?? '',
+        literal,
+      })
+    }
   }
-  return cambios
+  return cambios.sort((a, b) => a.pos - b.pos).map(({ pos: _pos, ...c }) => c)
 }
 
 // --- secciones de una providencia ----------------------------------------

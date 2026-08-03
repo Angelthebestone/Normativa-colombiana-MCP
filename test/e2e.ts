@@ -100,9 +100,9 @@ after(() => c?.cerrar())
 
 // --- contrato que ve el cliente -----------------------------------------
 
-test('las 16 herramientas se declaran con esquemas utilizables', CONTRATO, async () => {
+test('las 23 herramientas se declaran con esquemas utilizables', CONTRATO, async () => {
   const { tools } = await c.peticion('tools/list')
-  assert.equal(tools.length, 16, tools.map((t: any) => t.name).join(', '))
+  assert.equal(tools.length, 23, tools.map((t: any) => t.name).join(', '))
 
   const sinTipo: string[] = []
   for (const t of tools) {
@@ -311,14 +311,22 @@ test('buscar_en_suin busca, pagina y avisa de que su vigencia no es fiable', LEN
   assert.match(cita.texto, /No encontré|resolver_cita/)
 })
 
-test('una ley que el Gestor no tiene se resuelve contra SUIN', LENTO, async () => {
+test('una ley que el Gestor no tiene se resuelve contra SUIN', LENTO, async (t) => {
   // El Gestor no cubre todo el país: la Ley 1541 de 2012 no está ahí y sí en
   // SUIN. Antes se respondía "no encontré", que se lee como "no existe".
   const r = await c.tool('resolver_cita', { cita: 'art. 3 de la Ley 1541 de 2012' })
   assert.equal(r.esError, false)
   if (/No encontré/.test(r.texto)) {
-    // Sin índice de SUIN la capacidad no existe; que se note en vez de fingir.
-    assert.fail('falta datos/indice-suin.json: genera el índice con npm run generar-indice-suin')
+    // Dos causas distintas que esta prueba confundía en una: que el índice no
+    // viaje con la instalación —capacidad ausente, culpa nuestra— o que SUIN no
+    // responda —fuente caída, nada que arreglar aquí—. Acusar al índice cuando
+    // está intacto manda a regenerar 11.599 leyes para nada.
+    const fuentes = await c.tool('describir_fuentes')
+    if (/Índice de SUIN: NO viaja/.test(fuentes.texto)) {
+      assert.fail('falta datos/indice-suin.json: genera el índice con npm run generar-indice-suin')
+    }
+    t.skip('SUIN-Juriscol no respondió: el índice está, la fuente está caída')
+    return
   }
   assert.match(r.texto, /SUIN-Juriscol sí la publica/)
   assert.match(r.texto, /Estado de vigencia según SUIN/)
@@ -381,4 +389,140 @@ test('el aviso de baja pertinencia no culpa a un filtro que no se usó', LENTO, 
     limite: 3,
   })
   if (/Atención:/.test(conFechas.texto)) assert.match(conFechas.texto, /acotar por fechas/)
+})
+
+// --- tercer lote de fallos reportados ------------------------------------
+
+test('el historial ve las notas que el modo artículo ya mostraba', LENTO, async () => {
+  // El artículo 6 de la Ley 1221 de 2008 trae una inhibición (C-351 de 2013),
+  // una exequibilidad condicionada (C-337 de 2011) y una adición (Ley 2466 de
+  // 2025), y el historial respondía "no registran cambios sobre esta norma".
+  const art = await c.tool('obtener_norma', { id: '31431', articulo: '6', historial: true })
+  assert.doesNotMatch(art.texto, /no registran cambios/, 'el historial no ve lo que el propio texto muestra')
+  assert.match(art.texto, /C-351/)
+  assert.match(art.texto, /Ley 2466/)
+
+  // Y la norma entera tampoco puede darse por intacta.
+  const toda = await c.tool('obtener_norma', { id: '31431', historial: true })
+  assert.doesNotMatch(toda.texto, /no registran cambios/)
+
+  // Las mismas notas tienen que advertirse al leer el artículo, no solo al
+  // pedir el historial: quien lee el texto no sabe que hay un historial.
+  const texto = await c.tool('obtener_norma', { id: '31431', articulo: '6' })
+  assert.match(texto.texto, /control constitucional/)
+})
+
+test('una cita sin año no elige por ti entre normas distintas', LENTO, async () => {
+  // "Decreto 1072" son cuatro decretos (2025, 2015, 2004, 1999) y devolvía el
+  // de 2025 sin avisar, cuando el que casi todo el mundo cita es el de 2015.
+  const ambigua = await c.tool('resolver_cita', { cita: 'Decreto 1072' })
+  assert.match(ambigua.texto, /ambigua/i, 'resolvió una cita ambigua sin decirlo')
+  assert.match(ambigua.texto, /Decreto 1072 de 2015/)
+  assert.match(ambigua.texto, /Decreto 1072 de 2025/)
+
+  // Con el año sí resuelve, y a la norma pedida.
+  const exacta = await c.tool('resolver_cita', { cita: 'Decreto 1072 de 2015' })
+  assert.match(exacta.texto, /Decreto 1072 de 2015/)
+  assert.doesNotMatch(exacta.texto, /ambigua/i)
+})
+
+test('buscar_conceptos_fp exige un filtro, como el resto de buscadores', LENTO, async () => {
+  // Sin filtro devolvía los 21.759 conceptos, que no dicen de qué tratan.
+  const vacia = await c.tool('buscar_conceptos_fp', {})
+  assert.equal(vacia.esError, true, 'la llamada sin filtros debe rechazarse')
+  assert.match(vacia.texto, /numero o anio/)
+})
+
+test('el vacío por entidad señala la entidad que el Gestor sí usa', LENTO, async () => {
+  // Ley + 1993 + "Congreso de la República" da 0 porque el Gestor las cataloga
+  // bajo "Nivel Nacional"; el mensaje mandaba a dudar de la norma.
+  const r = await c.tool('buscar_normas', { tipo_documento: 'Ley', anio: '1993', entidad: 'Congreso de la República' })
+  assert.match(r.texto, /Nivel Nacional/, 'no sugiere la entidad que el Gestor sí usa')
+})
+
+test('el Consejo de Estado pagina y entrega el radicado para pegar', LENTO, async (t) => {
+  const uno = await c.tool('buscar_jurisprudencia_consejo_estado', { texto: 'nulidad electoral', limite: 3 })
+  // SAMAI agota el tiempo en su propia base de datos con consultas amplias y
+  // responde 500. Es la fuente, no el MCP: se distingue y se salta, en vez de
+  // dar por roto lo que funciona en cuanto el portal se recupera.
+  if (/no respondió a tiempo/.test(uno.texto)) {
+    t.skip('SAMAI devolvió 500 (timeout de su buscador)')
+    return
+  }
+  assert.match(uno.texto, /Página 1 de \d+/)
+  assert.match(uno.texto, /repite con pagina=2/)
+  assert.match(uno.texto, /list_procesos\.aspx/, 'sin ficha de proceso no hay dónde leerla')
+
+  const dos = await c.tool('buscar_jurisprudencia_consejo_estado', { texto: 'nulidad electoral', limite: 3, pagina: 2 })
+  assert.match(dos.texto, /Página 2 de \d+/)
+})
+
+test('describir_fuentes declara el alcance con números medidos', CONTRATO, async () => {
+  // Existe para que un vacío no se lea como "no existe". Lo importante no es
+  // la lista de fuentes sino la de huecos, así que eso es lo que se verifica.
+  const r = await c.tool('describir_fuentes')
+  assert.equal(r.esError, false)
+  assert.match(r.texto, /LO QUE NO ESTÁ CUBIERTO/)
+  assert.match(r.texto, /ESTADO PROCESAL/, 'el hueco más importante debe estar declarado')
+  assert.match(r.texto, /no significa que la norma no exista/i)
+
+  // Los números salen de los índices reales, no de prosa escrita a mano: si el
+  // índice deja de viajar con la instalación, tiene que decirlo, no callarlo.
+  assert.match(r.texto, /Índice de SUIN: (\d[\d.,]* leyes|NO viaja)/)
+  assert.match(r.texto, /Índice temático: (\d[\d.,]* pares|NO viaja)/)
+})
+
+test('la Corte Suprema amplía la búsqueda en vez de decir que no hay nada', LENTO, async () => {
+  // Con exacto por defecto, una frase sin coincidencia exacta devolvía vacío.
+  // Ampliar está bien; presentarlo como la búsqueda pedida, no.
+  const r = await c.tool('buscar_jurisprudencia_suprema', {
+    texto: 'despido sin justa causa por teletrabajo sobreviniente',
+    sala: 'Laboral',
+    limite: 3,
+  })
+  assert.equal(r.esError, false)
+  if (/AVISO: la frase exacta/.test(r.texto)) {
+    assert.match(r.texto, /b[úu]squeda AMPLIADA/i)
+    assert.match(r.texto, /Verifica la pertinencia/)
+  } else {
+    // Si hubo frase exacta, no puede anunciarse como ampliada.
+    assert.doesNotMatch(r.texto, /AMPLIADA/)
+  }
+})
+
+test('el buscador sectorial nunca responde sin decir qué no cubre', LENTO, async () => {
+  // Diez reguladores en una herramienta: el riesgo es que "tener algo sectorial"
+  // se lea como "tener lo sectorial". Por eso la advertencia de la fuente viaja
+  // en TODA respuesta, haya resultados o no.
+  const r = await c.tool('buscar_normativa_sectorial', { entidad: 'supertransporte', limite: 3 })
+  assert.equal(r.esError, false)
+  assert.match(r.texto, /Qué NO cubre:/, 'la respuesta no declara los límites de la fuente')
+  assert.match(r.texto, /Fuente: Superintendencia de Transporte/)
+
+  // Y un vacío tiene que seguir declarándolos: es justo cuando más importa.
+  const vacia = await c.tool('buscar_normativa_sectorial', {
+    entidad: 'supertransporte',
+    texto: 'zzqxnoexisteestetermino',
+  })
+  assert.match(vacia.texto, /Qué NO cubre:/, 'un vacío sin advertencia se lee como "esa norma no existe"')
+})
+
+test('el esquema sectorial ofrece las entidades sin que haya que adivinarlas', CONTRATO, async () => {
+  const { tools } = await c.peticion('tools/list')
+  const t = tools.find((x: any) => x.name === 'buscar_normativa_sectorial')
+  const enum_ = t.inputSchema.properties.entidad.enum
+  assert.ok(Array.isArray(enum_) && enum_.length >= 10, `entidad debe enumerar los reguladores: ${enum_}`)
+  assert.deepEqual(t.inputSchema.required, ['entidad'], 'sin entidad la herramienta no sabe a quién preguntar')
+  // Y la descripción tiene que desviar a resolver_cita lo que ya está cubierto:
+  // duplicar leyes y decretos con una fuente peor sería un retroceso.
+  assert.match(t.description, /Decreto Único Reglamentario|resolver_cita/)
+})
+
+test('listar_catalogos dice de quién son sus catálogos', CONTRATO, async () => {
+  // Buscar "DIAN" en entidades devuelve vacío y parecía que no hay normativa
+  // de la DIAN, cuando lo que pasa es que tiene su propio normograma.
+  const { tools } = await c.peticion('tools/list')
+  const t = tools.find((x: any) => x.name === 'listar_catalogos')
+  assert.match(t.description, /Gestor Normativo de Función Pública/)
+  assert.match(t.description, /buscar_normativa_tributaria/)
 })

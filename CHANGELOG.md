@@ -3,6 +3,100 @@
 Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/).
 Este proyecto sigue [versionado semántico](https://semver.org/lang/es/).
 
+## [1.8.0] — 2026-08-03
+
+Diez reguladores sectoriales más, en **una sola herramienta**.
+
+### Añadido
+
+- **`buscar_normativa_sectorial`**, con diez entidades que el Gestor Normativo no cataloga: MinAgricultura, ICA y ANM (primario y extractivo); Supersociedades, SIC, INVIMA y Superfinanciera (industria, comercio, consumo y sector financiero); MinTrabajo, Supertransporte y Parques Nacionales (transversales).
+
+  **Una herramienta y no diez.** CREG, ANH, UPME y ANLA conservan la suya porque cada una devuelve algo distinto —la CREG entrega articulado, ANLA una clasificación temática—, pero estas diez publican todas lo mismo: un acto con tipo, número, fecha, epígrafe y enlace. Eso no rompe la regla de «una herramienta por fuente»: lo que esa regla evita son los parámetros condicionales, los que solo aplican según el valor de otro, y aquí `entidad` solo elige a quién se pregunta.
+
+  El contrato obliga a cada adaptador a declarar **qué NO cubre**, y esa advertencia viaja en toda respuesta, haya resultados o no. Una prueba lo verifica: una fuente nueva que se registre sin ella no pasa.
+
+### Lo que NO se construyó, y por qué
+
+- **Nada para «la ley del sector».** Se comprobó que **los 20 Decretos Únicos Reglamentarios están todos en el Gestor** —1071 agropecuario, 1074 comercio e industria, 1076 ambiente, 1079 transporte, 1072 trabajo, 780 salud…—, resolubles con `resolver_cita` y con texto completo. Construir fuentes para eso habría duplicado peor lo que ya funciona, así que la descripción de la herramienta desvía explícitamente ese caso.
+
+- **El filtro por entidad del Gestor no sirve para recorrer un sector**, y quedó medido: 16 normas para el Ministerio de Agricultura, 7 para el de Comercio, 1 para «Sector Transporte». El grueso está bajo «Nivel Nacional». Ese es exactamente el hueco que llenan los diez adaptadores.
+
+### Hallazgos de la exploración
+
+- **`normograma.info` sí es un proveedor compartido.** Estaba anotado lo contrario tras probar 20 instancias: solo respondía `prueba-dian`. Es falso — el buscador del INVIMA vive en `normograma.info/prueba-invima/buscador/Buscar.ashx`, y da **5.765 documentos**. Se encontró leyendo el JS de su aplicación Angular.
+- **La SIC no era inalcanzable, era una cadena TLS rota.** Su certificado no envía el intermedio de GlobalSign. Se añadió el intermedio siguiendo el patrón que ya existía para funcionpublica.gov.co, **sin desactivar la verificación** en ningún momento.
+- **El ruido administrativo es un patrón, no una anécdota.** Igual que en la ANH, en la SIC 41 de 50 filas recientes son nombramientos de personal. Cada adaptador lo aparta y lo dice.
+- **Dos portales mienten con la fecha**, como ya hacía la UPME: la ANM publica la de subida al portal, no la del acto, y la Supersociedades llegó a servir «Expedición 27 Dic 0031» en una resolución de 2026.
+
+## [1.7.0] — 2026-08-02
+
+Tercer lote de fallos encontrados usándolo. Dos de ellos eran del tipo caro: la respuesta parecía correcta.
+
+### Añadido
+
+- **Cuatro reguladores sectoriales: CREG, ANH, UPME y ANLA.** Es la primera vez que este MCP sale de «ley nacional y altas cortes», y por eso el alcance se declara con más cuidado que nunca, no con menos.
+
+  - **CREG** (`buscar_resoluciones_creg`, `obtener_resolucion_creg`) — resulta ser la mejor de las cuatro. Su «Gestor Normativo Alejandría 2.0» no es el software de Función Pública, pero publica el articulado en **HTML**, así que es la única fuente sectorial cuyo texto se puede leer aquí. Y hace algo rarísimo en Colombia: **mantiene compilaciones separadas de resoluciones no derogadas y derogadas**. Esa señal se traslada literal, con el rótulo de la propia compilación, sin convertirla en un sí o un no. Las compilaciones se publican **por año**: sin el parámetro `anio` solo se ve el año en curso —20 resoluciones frente a las 118 de 2025—, y la respuesta lo dice.
+  - **ANH** (`buscar_normativa_anh`) — 785 documentos exactos, contados paginando hasta el final (39 × 20 + 5). Un formulario GET sin estado de sesión: la fuente más sencilla de todo el proyecto. **Dos de cada tres son actos de personal** —15 de 20 en la primera página—, así que se ocultan por defecto y se dice cuántos se ocultaron.
+  - **UPME** (`buscar_normativa_upme`) — su portal es WordPress y dejó `wp-json` abierto, con un tipo propio `circular_resolucion`. Aviso que va en la propia descripción porque induce a error: **la fecha que publica es la de publicación en la web, no la de la norma** — la «Resolución 1163 de 2024» figura publicada en 2025. El número y el año reales se leen del título.
+  - **ANLA** (`listar_normativa_ambiental_anla`) — su sistema «Eureka» aporta una **curaduría temática**, no documentos nuevos: casi todo lo que lista son leyes y decretos que `resolver_cita` ya resuelve mejor, con texto y vigencia. La herramienta lo dice y remite. Un detalle que habría producido citas falsas: Eureka escribe «Decreto – Ley 2893 de 2011» con guion largo, y el extractor ingenuo sacaba de ahí «Ley 2893 de 2011», que es **otra norma**.
+
+  ANH y UPME solo publican PDF, así que entregan epígrafe y enlace, como ya hacían la Corte Suprema y el Consejo de Estado.
+
+- **`describir_fuentes` declara los límites de esta ampliación.** Añadir cuatro reguladores crea justo el riesgo que este proyecto combate: que «tener algo sectorial» se lea como «tener lo sectorial». Por eso la herramienta ahora dice, con todas las letras, que **no** están la SIC, la Superfinanciera, la CRC ni la Superservicios.
+
+- **`describir_fuentes`.** Declara el alcance real sin consultar la red: qué responde cada una de las seis fuentes, con qué fecha se generaron los índices empaquetados —números leídos de los propios ficheros, no prosa escrita a mano— y, sobre todo, **qué NO está cubierto**: el estado procesal de un caso, la vigencia de los decretos (el índice de SUIN son casi solo leyes, porque los sitemaps de decretos devuelven 404), la normativa departamental y municipal, y los tribunales distintos de las tres altas cortes.
+
+  Existe para una sola situación, que es la más peligrosa de todas: que una búsqueda vacía se lea como «esa norma no existe». Si el índice deja de viajar con la instalación, la herramienta lo dice en vez de callarlo — una capacidad ausente no es un resultado negativo.
+
+  La idea está tomada del `list_sources` de `@ansvar/colombian-law-mcp`, que fue lo mejor que encontré al revisarlo. Su implementación no era aprovechable —declara `jurisdiction: "EE"` (Estonia) y `languages: ["en"]` en un servidor colombiano cuyo corpus está en español—, pero el concepto de publicar la procedencia y la cobertura como dato consultable sí lo era.
+
+- **Los índices empaquetados dejan de poder degradarse en silencio.** Son la diferencia entre que esto funcione y que encuentre la mitad sin avisar, y no había una sola prueba que los mirara: un `generar-indice` truncado habría dejado todo en verde. Ahora se afirman sus tamaños (12.063 pares tema/subtema, 56.458 asociaciones, 11.599 leyes de SUIN, con umbrales al 90 %) y que traen una fecha de generación legible, sin la cual no se puede advertir de que están viejos. La idea —afirmar el tamaño del corpus como contrato— viene de los `golden tests` de `@ansvar/colombian-law-mcp`.
+
+- **`resolver_cita` distingue tres silencios que antes se veían iguales.** Que el índice de SUIN no esté instalado, que SUIN no responda y que la norma no conste en el índice producían todos la misma respuesta: ninguna línea de vigencia. Los dos primeros son estados del sistema, no datos sobre la norma, y ahora se dicen —«capacidad ausente» y «la fuente no respondió»—. El tercero se sigue callando, porque la regla general ya cubre el «no consta». Portado del `detectCapabilities` del mismo servidor, que apaga funciones según lo que traiga su base y lo publica en vez de fingir.
+
+- **La Corte Suprema amplía la búsqueda en vez de darla por vacía.** Con la frase exacta por defecto, una consulta de varias palabras sin coincidencia literal devolvía «no encontré», que no es lo mismo que «no existe esa frase». Ahora, si la frase exacta no da nada, se reintenta uniendo las palabras con OR y **la respuesta se abre diciendo que es una búsqueda ampliada** y que hay que verificar la pertinencia de cada resultado. La escalera —lo más específico primero, ampliar solo si hace falta, y decir siempre cuál de las dos respondió— viene del `buildFtsQueryVariants` del mismo servidor.
+
+### Corregido
+
+- **`historial` daba por intacto lo que el propio texto mostraba reformado.** Pedir el historial de la Ley 1221 de 2008 respondía «las notas del Gestor no registran cambios», mientras que el artículo 6 traía tres notas a la vista. La causa: el parser solo reconocía una de las **tres formas** en que el portal anota un cambio. Ahora lee las tres, con las notas reales como prueba:
+
+  - pasiva: `(Modificado por el art. 1 Decreto 666 de 2017)`
+  - activa entre paréntesis: `(Adiciona Art 54 numerales 13, 14,15 de la Ley 2466 de 2025)`
+  - control constitucional: `Declarada inhibida por ineptitud sustantiva de la demanda (Numeral 1. ) Sentencia de la Corte Constitucional C-351 de 2013`
+
+  Las dos formas nuevas **exigen que la nota identifique la norma o la sentencia**, y la activa exige además ir entre paréntesis. Sin esas dos condiciones entraba la prosa del articulado —«las normas que la modifiquen o adicionen»— y, peor, el artículo de vigencias, que dice qué deroga **esta** norma: se habría registrado al revés, como si la hubieran reformado a ella.
+
+- **El mismo punto ciego en las advertencias de vigencia.** El artículo 6 de la Ley 1221 —inhibida en un numeral, exequible de forma condicionada en otro y adicionado por la Ley 2466 de 2025— se mostraba **sin una sola advertencia**. Ahora avisa de las notas en activa y de las de control constitucional, que es donde vive la parte de un artículo que no rige como está escrita.
+
+- **`resolver_cita` sin año elegía por ti, sin decirlo.** «Decreto 1072» son cuatro decretos —2025, 2015, 2004 y 1999— y devolvía el de 2025, sobre tarifas de energía, cuando el que casi cualquiera cita es el de 2015, el Único Reglamentario del Sector Trabajo. Acertaba la forma y fallaba el fondo, sin nada en la respuesta que invitara a sospechar. Ahora, cuando el mismo tipo y número existen en años distintos, **devuelve los candidatos y pide el año** en vez de escoger. Las citas que no son ambiguas —«Decreto 1083», «Ley 909»— siguen resolviéndose directas.
+
+- **`buscar_normas` fallaba en silencio al filtrar por entidad.** `Ley` + `1993` + `Congreso de la República` devolvía cero pese a existir la Ley 80 y la Ley 100 de ese año, porque el Gestor no cataloga por emisor: la misma consulta con `Nivel Nacional` devuelve 39. El mensaje mandaba a dudar de la norma cuando el equivocado era el filtro, así que ahora **nombra esa entidad** cuando el vacío viene de filtrar por otra.
+
+### Cambiado
+
+- **`buscar_jurisprudencia_consejo_estado` pagina.** Antes solo existía la primera página: con 15.406 páginas de resultados y un tope de 5, la sexta providencia era inalcanzable. La salida estaba en el propio botón «Copiar Link Permanente de Búsqueda»: un **GET con la consulta y el número de página**, sin `__VIEWSTATE`, sin cookie y sin POST. Se comprobó radicado por radicado, en tres consultas distintas, que devuelve exactamente lo mismo que el postback, así que **sustituye a toda la maquinaria de WebForms** en vez de convivir con ella.
+
+  Se pide por `pagina` y no por el `desde` del resto de herramientas porque SAMAI pagina en bloques de ~10 que no siempre traen 10 filas legibles: un desplazamiento exacto sería un número inventado.
+
+  De paso, cada providencia trae ahora **el enlace a su ficha de proceso**, en vez de remitir al buscador para que se busque a mano.
+
+- **`exacto` viene activado en `buscar_jurisprudencia_suprema`.** El modo por defecto unía las palabras con OR y devolvía 33.607 resultados en la sala Penal y 3.318 en la Civil: para más de una palabra era inservible, y la propia herramienta lo advertía en cada respuesta. Ponerlo en `false` sigue disponible para ampliar a propósito una búsqueda que quedó corta.
+
+- **`buscar_conceptos_fp` exige `numero` o `anio`.** Sin filtro devolvía los 21.759 conceptos, y el listado no dice de qué trata ninguno. `buscar_normas` y `buscar_jurisprudencia` ya rechazaban la llamada vacía.
+
+- **Las providencias que no traen texto dan el número para pegarlo.** Corte Suprema y Consejo de Estado no publican el texto en un formato legible aquí; ahora la respuesta termina con el radicado o el número de cada providencia, listo para el buscador oficial, en vez de un enlace genérico.
+
+- **`listar_catalogos` dice de quién son sus catálogos.** Buscar «DIAN» entre las entidades devolvía vacío y se leía como que no hay normativa de la DIAN. Son catálogos **solo del Gestor Normativo de Función Pública**: la DIAN tiene su propio normograma, y SUIN y las tres cortes quedan fuera.
+
+- **Un 500 del Consejo de Estado se reportaba como «el portal cambió su estructura».** Al reemplazar la maquinaria de WebForms por el enlace permanente se perdió la comprobación del código de estado, y SAMAI responde `500 The wait operation timed out` cuando su base de datos agota el tiempo con consultas amplias. El canario culpaba al marcado y mandaba a actualizar la extensión, que no arregla nada. Ahora se distingue: la fuente se cayó, y así se dice.
+
+- **Una prueba acusaba al índice cuando el caído era el portal.** El e2e de SUIN fallaba con «falta `datos/indice-suin.json`: genera el índice» durante una caída de SUIN, con el índice intacto y sus 11.599 leyes dentro: mandaba a regenerar media hora de datos para nada. Ahora distingue las dos causas preguntándole a `describir_fuentes` si el índice viaja, y solo culpa al índice cuando de verdad falta.
+
+### Sin cambios, a propósito
+
+- **«Telebrajo durante jornada día sin carro».** La errata es del portal de Función Pública y así está indexada. Corregirla en silencio rompería la correspondencia con la fuente, así que se sigue devolviendo tal cual; quien cite ese subtema debe citarlo como está.
+
 ## [1.6.0] — 2026-08-01
 
 ### Añadido

@@ -2,7 +2,7 @@
   "manifest_version": "0.2",
   "name": "normativa-colombia",
   "display_name": "Normativa Colombia",
-  "version": "1.6.0",
+  "version": "1.8.0",
   "description": "Consulta la normativa y la jurisprudencia colombiana desde Claude: Gestor Normativo, Corte Constitucional, Corte Suprema, SUIN-Juriscol (estado de vigencia) y normograma de la DIAN.",
   "long_description": "Conecta Claude con dos fuentes oficiales colombianas.\n\n**Gestor Normativo** del Departamento Administrativo de la Función Pública: leyes, decretos, resoluciones, circulares y conceptos aplicables al sector público, con su consulta temática y los restrictores que explican por qué cada norma aplica a un tema.\n\n**Relatoría de la Corte Constitucional**: 49.000 sentencias y autos, actualizados a diario.\n\nIncluye un índice temático empaquetado (12.054 subtemas) que responde al instante y sigue funcionando aunque el portal esté caído. Toda respuesta cita el enlace oficial y la fecha de consulta.\n\nNo sustituye asesoría jurídica: verifica siempre en la fuente antes de tomar una decisión.",
   "author": {
@@ -93,6 +93,34 @@
     {
       "name": "listar_normas_fp",
       "description": "Listado curado por el portal con la normativa que rige o le compete al Departamento Administrativo de la Función Pública."
+    },
+    {
+      "name": "buscar_normativa_anh",
+      "description": "Resoluciones, acuerdos y circulares de la Agencia Nacional de Hidrocarburos: contratos de exploración y producción, regalías, derechos económicos, fiscalización y reservas."
+    },
+    {
+      "name": "buscar_normativa_upme",
+      "description": "Circulares y resoluciones de la Unidad de Planeación Minero Energética: convocatorias de transmisión y de gas, planes de expansión y actos administrativos."
+    },
+    {
+      "name": "buscar_resoluciones_creg",
+      "description": "Resoluciones de la Comisión de Regulación de Energía y Gas, donde vive la regulación operativa del sector: tarifas, conexión, comercialización, plantas solares, gas natural."
+    },
+    {
+      "name": "obtener_resolucion_creg",
+      "description": "Texto completo de una resolución de la CREG por su ruta (la que devuelve buscar_resoluciones_creg)."
+    },
+    {
+      "name": "listar_normativa_ambiental_anla",
+      "description": "La ANLA mantiene en su sistema \"Eureka\" una CURADURÍA de la normativa nacional que aplica al licenciamiento ambiental, agrupada por tema."
+    },
+    {
+      "name": "buscar_normativa_sectorial",
+      "description": "Actos administrativos —resoluciones, circulares, acuerdos— de los reguladores y ministerios sectoriales que el Gestor Normativo NO cataloga."
+    },
+    {
+      "name": "describir_fuentes",
+      "description": "Declara el alcance real: qué fuente responde cada pregunta, qué NO está cubierto y con qué fecha se generaron los índices que viajan empaquetados."
     }
   ],
   "prompts": [
