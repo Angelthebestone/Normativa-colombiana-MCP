@@ -3,6 +3,19 @@
 Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/).
 Este proyecto sigue [versionado semántico](https://semver.org/lang/es/).
 
+## [1.8.2] — 2026-08-04
+
+Un recorrido completo por las 23 herramientas en Claude Desktop encontró **una fuente «caída»** que no lo estaba.
+
+### Corregido
+
+- **Seis de las siete secciones de ANLA estaban rotas, y la extensión culpaba al portal.** Eureka usa DOS plantillas de Joomla: «leyes» es un blog (`div.article`, 10 por página) y las seis secciones temáticas son páginas de etiqueta (`ul.com-tags-tag__category`, 20 por página). El parser solo entendía la primera, así que las otras seis —que respondían **200 con sus documentos dentro**— salían como «su plantilla de Joomla cambió». Rotas eran justo las que dan la **curaduría temática**, que es lo único que esta fuente aporta: lo que sí funcionaba era la sección de leyes, la que el propio módulo documenta como la menos útil porque `resolver_cita` la resuelve mejor. Medido tras el arreglo: licencia-ambiental, biodiversidad, cambio climático, consulta previa, impacto ambiental y participación ciudadana devuelven 20 entradas cada una.
+- **El «hay más» de ANLA repetía documentos.** Se deducía de contar entradas (`>= 10`) y de sumar 10 fijos, con dos plantillas que paginan distinto: la última página de cambio climático trae 12 documentos y decía «repite con desde=70», que devolvía otra vez lo ya visto. Ahora el salto se lee de los enlaces `?start=N` del propio portal, y la última página se declara última (comprobado: 72 documentos en cuatro páginas, sin repetir ninguno).
+
+### Cambiado
+
+- **Cuando la ficha de SUIN no responde, se dice qué servidor se cayó.** SUIN vive en dos: la ficha de vigencia en `www.suin-juriscol.gov.co` y el buscador en un índice de Azure. Al ver «SUIN no respondió» junto a un `buscar_en_suin` que funcionaba, la conclusión natural era la contraria a la verdadera —que fallaba el índice empaquetado y respondía lo consultado en vivo—, cuando son dos servidores independientes y el que se cae es el de la ficha.
+
 ## [1.8.1] — 2026-08-04
 
 Tanda de correcciones sobre respuestas que **parecían buenas**. Ninguna fallaba: contestaban con aplomo algo distinto de lo preguntado.

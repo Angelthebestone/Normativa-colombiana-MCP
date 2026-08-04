@@ -501,6 +501,31 @@ test('Eureka no confunde un decreto ley con una ley', RED, async () => {
   }
 })
 
+test('Eureka lee sus dos plantillas, no solo la del blog', RED, async () => {
+  // Seis de las siete secciones son páginas de etiqueta, no de blog, y el parser
+  // solo entendía la de blog: las daba por "plantilla cambiada" respondiendo 200
+  // con sus documentos dentro. Justo las seis que traen la curaduría, que es lo
+  // único que esta fuente aporta.
+  const etiqueta = await anla.listar('cambio-climatico', 0)
+  assert.ok(etiqueta.items.length >= 20, `una página de etiqueta trajo ${etiqueta.items.length} entradas`)
+  assert.ok(etiqueta.items.every((x) => x.titulo && x.url), 'entradas sin título o sin enlace')
+
+  // El salto de página no es el mismo en las dos plantillas (10 en el blog, 20 en
+  // las etiquetas): sale de los enlaces del portal, no de una constante.
+  assert.equal(etiqueta.siguiente, 20)
+  assert.equal((await anla.listar('leyes', 0)).siguiente, 10)
+
+  // Y la última página se declara última: contar entradas decía "hay más" en
+  // cualquier cola de 10 o más, y repetía documentos ya devueltos.
+  let d: number | null = etiqueta.siguiente
+  let ultima = etiqueta
+  while (d !== null) {
+    ultima = await anla.listar('cambio-climatico', d)
+    d = ultima.siguiente
+  }
+  assert.ok(ultima.items.length > 0, 'la última página vino vacía')
+})
+
 test('todo regulador sectorial declara qué NO cubre', async () => {
   // El contrato exige `advertencia` porque es lo único que impide que un vacío
   // de un regulador se lea como "esa norma no existe". Una fuente nueva que se

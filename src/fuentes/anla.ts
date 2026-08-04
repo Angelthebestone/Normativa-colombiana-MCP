@@ -14,7 +14,12 @@
  * clasificación temática y remite a `resolver_cita` para el contenido, en vez de
  * duplicar lo que ya existe peor.
  *
- * Técnicamente es Joomla: listados de 10 con paginación `?start=N`.
+ * Técnicamente es Joomla con DOS plantillas distintas, y eso importa: «leyes» es
+ * un blog (`div.article`, 10 por página) y las seis secciones temáticas son
+ * páginas de etiqueta (`ul.com-tags-tag__category`, 20 por página). Leer solo la
+ * primera dejaba rotas justo las seis que dan la curaduría, que es lo único que
+ * esta fuente aporta. El salto de página se lee de los enlaces `?start=N` del
+ * propio HTML en vez de cablearlo, porque depende de la plantilla.
  */
 import { CanarioError, cargar, sinTildes } from '../parse.ts'
 import { pedir } from '../http.ts'
@@ -57,27 +62,31 @@ const clase = (s: string): string => sinTildes(s).toLowerCase().replace(/[^a-z]/
 
 const limpio = (s: string): string => s.replace(/\s+/g, ' ').trim()
 
-/** Eureka pagina de 10 en 10 y no admite otro tamaño, así que no hay `limite`. */
+/** Eureka pagina por su cuenta y no admite otro tamaño, así que no hay `limite`. */
 export async function listar(
   seccion: SeccionAnla,
   desde = 0,
-): Promise<{ items: EntradaAnla[]; desde: number; hayMas: boolean; url: string }> {
+): Promise<{ items: EntradaAnla[]; desde: number; siguiente: number | null; url: string }> {
   const inicio = Math.max(0, Math.trunc(desde))
   const url = `${BASE}${SECCIONES[seccion]}${inicio ? `?start=${inicio}` : ''}`
   const r = await pedir(url, 40_000)
   if (r.status !== 200) throw new Error(`Eureka (ANLA) respondió ${r.status}.`)
 
   const $ = cargar(r.cuerpo)
-  // La plantilla de Joomla NO usa <article>: cada entrada es un `div.article`
-  // con `.article-header` y `.article-introtext`. Costó una pasada averiguarlo.
-  const articulos = $('div.article, [itemprop=blogPost]')
+  // Ninguna de las dos plantillas usa <article>. En el blog cada entrada es un
+  // `div.article` con `.article-header` y `.article-introtext`; en las páginas de
+  // etiqueta es un `li` de `ul.com-tags-tag__category` con el título en un `h3` y
+  // sin resumen. Se aceptan las dos: mirar solo la del blog daba por «plantilla
+  // cambiada» seis secciones que respondían 200 con sus documentos dentro.
+  const articulos = $('div.article, [itemprop=blogPost], ul.com-tags-tag__category > li')
   if (!articulos.length) {
     // La caída es por sección: en la misma sesión "leyes" respondió y
     // "licencia-ambiental" no. Un aviso genérico hacía concluir de más en las dos
     // direcciones —ANLA entera caída, o ANLA sana— según cuál se hubiera probado.
     throw new CanarioError(
-      `la sección "${seccion}" de Eureka no devolvió entradas: su plantilla de Joomla cambió. Es esta sección, no ` +
-        `todo el portal: otras secciones pueden seguir respondiendo, pruébalas antes de dar ANLA por caída`,
+      `la sección "${seccion}" de Eureka no devolvió entradas con ninguna de sus dos plantillas (blog y etiqueta): ` +
+        `su HTML cambió. Es esta sección, no todo el portal: otras secciones pueden seguir respondiendo, pruébalas ` +
+        `antes de dar ANLA por caída`,
     )
   }
 
@@ -123,8 +132,18 @@ export async function listar(
     })
   })
 
-  // Joomla pagina de 10 en 10; que venga una página llena sugiere que hay más.
-  return { items, desde: inicio, hayMas: items.length >= 10, url }
+  // El paginador de Joomla enlaza las páginas por `?start=N`, y el salto es el de
+  // la plantilla: 10 en el blog, 20 en las etiquetas. Se toma el menor N mayor
+  // que el actual en vez de contar entradas, que daba «hay más» en la última
+  // página de una etiqueta con 10 o más documentos.
+  const siguiente =
+    $('a[href*="start="]')
+      .map((_, a) => Number(new URL($(a).attr('href') ?? '', BASE).searchParams.get('start')))
+      .get()
+      .filter((n) => Number.isFinite(n) && n > inicio)
+      .sort((a, b) => a - b)[0] ?? null
+
+  return { items, desde: inicio, siguiente, url }
 }
 
 /** Busca por texto dentro de una sección ya descargada; Eureka no tiene buscador propio. */

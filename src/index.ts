@@ -332,9 +332,16 @@ server.registerTool(
           // SUIN es un complemento y la cita se resuelve igual, pero que se haya
           // caído no puede parecerse a que la norma no tenga estado publicado.
           //
+          // Y hay que nombrar QUÉ se cayó: SUIN vive en dos servidores distintos
+          // —la ficha en www.suin-juriscol.gov.co y el buscador en un índice de
+          // Azure—, y el primero se cae solo. Sin decirlo, ver esta línea junto a
+          // un buscar_en_suin que responde llevaba a la conclusión contraria: que
+          // fallaba el índice empaquetado y funcionaba lo que consulta en vivo.
           vig =
-            `\nEstado de vigencia: SUIN-Juriscol no respondió en esta consulta. Vuelve a intentarlo antes de ` +
-            `afirmar nada; no es que esta norma carezca de estado.`
+            `\nEstado de vigencia: la ficha de SUIN-Juriscol (www.suin-juriscol.gov.co) no respondió en esta ` +
+            `consulta. Vuelve a intentarlo antes de afirmar nada; no es que esta norma carezca de estado. Que ` +
+            `buscar_en_suin sí funcione no lo desmiente: esa herramienta consulta OTRO servidor (el índice de ` +
+            `búsqueda), y no publica el estado de vigencia.`
         }
       }
     }
@@ -1538,7 +1545,12 @@ server.registerTool(
     inputSchema: {
       seccion: z.enum(Object.keys(anla.SECCIONES) as [anla.SeccionAnla, ...anla.SeccionAnla[]]).default('leyes'),
       texto: z.string().optional().describe('Filtra las entradas de esa sección por título o resumen'),
-      desde: z.coerce.number().int().min(0).default(0).describe('Eureka pagina de 10 en 10'),
+      desde: z.coerce
+        .number()
+        .int()
+        .min(0)
+        .default(0)
+        .describe('Eureka pagina sola y con distinto tamaño según la sección: no lo calcules, usa el que dice la respuesta'),
     },
   },
   async ({ seccion, texto, desde }) => {
@@ -1572,7 +1584,7 @@ server.registerTool(
               `  ${x.url}`,
           )
           .join('\n') +
-        (r.hayMas ? `\n\nHay más: repite con desde=${r.desde + 10}.` : '') +
+        (r.siguiente !== null ? `\n\nHay más: repite con desde=${r.siguiente}.` : '') +
         `\n\nEsto es la clasificación temática de la ANLA, no su normativa propia. Para el texto y la vigencia de ` +
         `cada norma, pásala por resolver_cita.`,
     )
