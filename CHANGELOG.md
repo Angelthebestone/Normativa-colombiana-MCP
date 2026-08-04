@@ -3,6 +3,25 @@
 Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/).
 Este proyecto sigue [versionado semántico](https://semver.org/lang/es/).
 
+## [1.8.1] — 2026-08-04
+
+Tanda de correcciones sobre respuestas que **parecían buenas**. Ninguna fallaba: contestaban con aplomo algo distinto de lo preguntado.
+
+### Corregido
+
+- **Los ids temáticos ahora llevan prefijo: `ts-`, `sub-` y `tema-`.** El portal mantiene tres taxonomías que numeran cada una por su cuenta, así que el mismo entero existe en las tres: el 38968 es «Teletrabajo durante jornada día sin carro» en `listar_subtemas` e «INHABILIDADES E INCOMPATIBILIDADES / Ex Diputados» en el de `buscar_por_tema`. Advertirlo en las descripciones no bastaba —un id cruzado no daba error, respondía por el subtema equivocado—. Con el prefijo pegado al id, cruzarlos es un error explícito que además dice de qué catálogo salió.
+- **La celda «Norma» del MinTrabajo perdía los decretos y se inventaba años.** Su número va pelado, sin rótulo delante, y exigirlo devolvía «Decreto  de 2026» sin número con el que citar ni filtrar. Y «Ley 1929» salía como «Ley 1929 de 1929» cuando su fila fechaba 2018: ahora solo cuenta como año el que va tras «de».
+- **`resolver_cita` callaba la vigencia en los decretos.** Las leyes siempre traían la línea, aunque fuera para decir que SUIN no respondió, y los decretos la perdían sin más — que se lee como «no aplica» en vez de «no se puede saber». El índice de SUIN son casi solo leyes; ahora lo dice.
+- **El Consejo de Estado repetía providencias entre páginas sin avisar.** SAMAI pagina por problema jurídico y no por caso, así que un radicado con varias tesis reaparece en la página siguiente y quien suma páginas cuenta dos veces el mismo precedente. Se recuerdan los radicados de la búsqueda en curso y los repetidos van marcados.
+- **El canario de ANLA daba por caído el portal entero.** La caída es por sección: en la misma sesión «leyes» respondió y «licencia-ambiental» no.
+
+### Añadido
+
+- **ANLA marca la cita que su propio resumen desmiente.** Eureka titula «Ley 2585 de 2026» un artículo cuyo texto dice «la Ley 2577 de 2026»; la 2585 no existe. No se corrige el número —cuál es el bueno lo dice la fuente, no esta extensión—: se entregan los dos.
+- **`describir_fuentes` acepta `fuente`.** Preguntar por el alcance de la CREG no debería costar el texto de las otras veinte.
+- **Las fichas del Gestor salen rotuladas como lo que son.** El Decreto 1072 de 2015 declara «Fecha de Entrada en Vigencia: 10 de marzo de 2022»: es su dato, y cuando el año no cuadra con el del título se avisa en vez de servirlo como si lo afirmáramos nosotros.
+- **La ANM y el MinTrabajo declaran hasta dónde llega su dato.** El «[Vigencia según el portal]» de la ANM es texto que ella escribió, no una comprobación; y la fila «Ley 2021 de 2021» del MinTrabajo enlaza el PDF de la Ley 2101 de 2021.
+
 ## [1.8.0] — 2026-08-03
 
 Diez reguladores sectoriales más, en **una sola herramienta**.

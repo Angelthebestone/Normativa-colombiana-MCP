@@ -46,9 +46,18 @@ export type ActoMintrabajo = {
   url: string
 }
 
-/** Número y año dentro de la celda «Norma» («0661 del 26 de junio de 2026», «No. 3462», «Circular 0026 de 2020»). */
-const NUMERO = /\b(?:n[°o]\.?|no\.?|circular|decreto|resoluci[oó]n|ley)\s*([\d]{2,6})\b/i
+/**
+ * Número y año dentro de la celda «Norma» («0661 del 26 de junio de 2026»,
+ * «No. 3462», «Circular 0026 de 2020»).
+ *
+ * La alternativa `^` es lo que rescata a los decretos: su celda empieza por el
+ * número pelado, sin palabra delante, y exigir el rótulo los devolvía todos como
+ * «Decreto  de 2026», sin número con el que citarlos ni con el que filtrar.
+ */
+const NUMERO = /(?:^|\b(?:n[°o]\.?|no\.?|circular|decreto|resoluci[oó]n|ley)\s*)([\d]{2,6})\b/i
 const ANIO = /\b((?:19|20)\d{2})\b/
+/** «Circular 0026 de 2020», «0661 del 26 de junio de 2026»: aquí el año es de verdad el año. */
+const ANIO_TRAS_DE = /\bde\s+((?:19|20)\d{2})\b/i
 
 const limpio = (s: string): string => s.replace(/\s+/g, ' ').trim()
 
@@ -91,8 +100,14 @@ export async function buscar(opts: OpcionesSectorial): Promise<ResultadoSectoria
     const href = $tr.find('a[href]').attr('href') ?? ''
     if (!tipo || !norma || !href) return
     const numero = norma.match(NUMERO)?.[1] ?? ''
-    // El año puede ir en la celda «Norma» o solo en la fecha («No. 3462»).
-    const anio = ANIO.test(norma) ? (norma.match(ANIO)?.[0] ?? '') : (fecha.match(ANIO)?.[0] ?? '')
+    // El año puede ir en la celda «Norma» o solo en la fecha («No. 3462»). Pero
+    // hay números que PARECEN año: «Ley 1929» daba "Ley 1929 de 1929" cuando la
+    // fila decía 2018 en su fecha. Solo vale como año el que va tras «de», o uno
+    // suelto que no sea el propio número; si no, manda la fecha.
+    const suelto = norma.match(ANIO)?.[0] ?? ''
+    const anio =
+      norma.match(ANIO_TRAS_DE)?.[1] ??
+      (suelto && suelto !== numero ? suelto : (fecha.match(ANIO)?.[0] ?? ''))
     items.push({
       tipo: limpio(tipo),
       numero,
@@ -135,6 +150,8 @@ export default {
   advertencia:
     'Cubre solo lo que el Mintrabajo publica en su marco legal (leyes, decretos, resoluciones y circulares ' +
     'del Ministerio). No cubre conceptos, doctrina, ni la normativa de otras entidades. El enlace de cada ' +
-    'fila es de descarga (PDF o acortador): este adaptador NO lee el texto del documento.',
+    'fila es de descarga (PDF o acortador): este adaptador NO lee el texto del documento. El número sale de la ' +
+    'celda «Norma» del portal y a veces el propio portal lo escribe mal: la fila "Ley 2021 de 2021" enlaza el PDF ' +
+    'de la Ley 2101 de 2021. Antes de citar un número, ábrelo.',
   buscar,
 } satisfies import('../sectorial.ts').Adaptador

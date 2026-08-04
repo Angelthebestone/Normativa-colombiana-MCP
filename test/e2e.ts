@@ -141,8 +141,8 @@ test('los identificadores se aceptan como número y como texto', LENTO, async ()
   // Exigir solo texto convertía eso en un -32602 y la herramienta parecía rota.
   for (const [name, args] of [
     ['obtener_norma', { id: 31431 }],
-    ['listar_subtemas', { tema_id: 36496 }],
-    ['explicar_relacion_tema', { temsubid: 24928, normid: 31431 }],
+    ['listar_subtemas', { tema_id: 'tema-36496' }],
+    ['explicar_relacion_tema', { temsubid: 'ts-24928', normid: 31431 }],
     ['buscar_normas', { tipo_documento: 'Ley', numero: 909, anio: 2004 }],
   ] as const) {
     const r = await c.peticion('tools/call', { name, arguments: args }).catch((e: Error) => e)
@@ -176,7 +176,7 @@ test('el extracto temático no se presenta como resumen de la norma', LENTO, asy
 })
 
 test('explicar_relacion_tema dice a qué tema corresponde', LENTO, async () => {
-  const { texto } = await c.tool('explicar_relacion_tema', { temsubid: '24928', normid: '31431' })
+  const { texto } = await c.tool('explicar_relacion_tema', { temsubid: 'ts-24928', normid: '31431' })
   assert.match(texto, /Tema \/ subtema:/, 'sin el rótulo no se puede verificar la respuesta')
   assert.match(texto, /PROVISIÓN/, 'el rótulo debe salir con la tilde normalizada')
   assert.match(texto, /Teletrabajo/)
@@ -351,7 +351,7 @@ test('listar_catalogos exige filtro en temas y resuelve entidades', LENTO, async
 })
 
 test('listar_subtemas y buscar_conceptos_fp responden', LENTO, async () => {
-  const sub = await c.tool('listar_subtemas', { tema_id: '36496' })
+  const sub = await c.tool('listar_subtemas', { tema_id: 'tema-36496' })
   assert.ok(sub.texto.split('\n').length > 10)
   const con = await c.tool('buscar_conceptos_fp', { anio: '2024', limite: 3 })
   assert.match(con.texto, /2024/)
@@ -359,8 +359,21 @@ test('listar_subtemas y buscar_conceptos_fp responden', LENTO, async () => {
 
 test('buscar_por_tema responde con temsubid y rótulos normalizados', LENTO, async () => {
   const { texto } = await c.tool('buscar_por_tema', { texto: 'teletrabajo', limite: 5 })
-  assert.match(texto, /temsubid \d+/)
+  assert.match(texto, /temsubid ts-\d+/)
   assert.doesNotMatch(texto, /PROVISIóN/, 'el rótulo debe salir normalizado')
+})
+
+test('un id de otra taxonomía se rechaza en vez de responder por el tema equivocado', CONTRATO, async () => {
+  // El 38968 existe en los dos catálogos: en listar_subtemas es "Teletrabajo…" y
+  // en el de buscar_por_tema es "INHABILIDADES / Ex Diputados". Antes de los
+  // prefijos, cruzarlos devolvía una respuesta creíble sobre otra cosa.
+  const cruzado = await c.tool('explicar_relacion_tema', { temsubid: 'sub-38968', normid: '31431' })
+  assert.equal(cruzado.esError, true, 'un id de listar_subtemas no puede colar en explicar_relacion_tema')
+  assert.match(cruzado.texto, /listar_subtemas/, 'debe decir de qué catálogo salió el id')
+
+  const pelado = await c.tool('explicar_relacion_tema', { temsubid: '38968', normid: '31431' })
+  assert.equal(pelado.esError, true, 'sin prefijo no se puede saber de qué catálogo es')
+  assert.match(pelado.texto, /ts-/, 'debe decir cómo se escribe el id que sí vale')
 })
 
 test('un tipo de norma equivocado no devuelve otra norma distinta', LENTO, async () => {

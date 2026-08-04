@@ -128,7 +128,9 @@ export default {
     'año en resoluciones usa la fecha de publicación en el portal, no el año que lleva el número ' +
     'del acto (una "Resolución 0484 de 2012" puede figurar publicada en 2013). El filtro de año no ' +
     'se aplica a circulares porque el campo del formulario del portal no filtra por año pese a decir ' +
-    'que lo hace.',
+    'que lo hace. El "[Vigencia según el portal: …]" que llevan algunos epígrafes es el texto que la ANM ' +
+    'escribió en esa fila, NO una verificación de esta extensión ni una consulta a SUIN: no lo cites como ' +
+    'estado de vigencia comprobado.',
   async buscar(opts: OpcionesSectorial): Promise<ResultadoSectorial> {
     const resultados = await Promise.all(FUENTES.map((f) => paginaDe(f, opts)))
     const items = resultados.flatMap((r) => r.items)

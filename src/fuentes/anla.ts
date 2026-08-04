@@ -37,9 +37,23 @@ export type EntradaAnla = {
   titulo: string
   /** Cita normativa detectada en el título, para encadenar con resolver_cita. */
   cita: string
+  /**
+   * La cita del mismo tipo y año que aparece en el RESUMEN cuando desmiente al
+   * título. Eureka titula «Ley 2585 de 2026» un artículo cuyo texto dice «la Ley
+   * 2577 de 2026»: 2585 no existe, y ofrecerla como cita resoluble era mandar a
+   * citar mal una ley. No se corrige el número —cuál de los dos es el bueno lo
+   * dice la fuente, no esta extensión—: se entregan los dos y se avisa.
+   */
+  desmentida: string
   resumen: string
   url: string
 }
+
+/** Citas normativas dentro de un texto corrido, para contrastar el título con su resumen. */
+const CITAS = /\b(Ley|Decreto(?:\s*[–—-]?\s*Ley)?|Resoluci[óo]n|Acuerdo|Circular)\s+(\d[\d.]*)\s+de\s+(\d{4})\b/gi
+const UNA_CITA = new RegExp(CITAS.source, 'i')
+/** «Decreto – Ley» y «Decreto Ley» son la misma clase de norma escritas distinto. */
+const clase = (s: string): string => sinTildes(s).toLowerCase().replace(/[^a-z]/g, '')
 
 const limpio = (s: string): string => s.replace(/\s+/g, ' ').trim()
 
@@ -58,7 +72,13 @@ export async function listar(
   // con `.article-header` y `.article-introtext`. Costó una pasada averiguarlo.
   const articulos = $('div.article, [itemprop=blogPost]')
   if (!articulos.length) {
-    throw new CanarioError('la sección de Eureka no devolvió entradas: su plantilla de Joomla cambió')
+    // La caída es por sección: en la misma sesión "leyes" respondió y
+    // "licencia-ambiental" no. Un aviso genérico hacía concluir de más en las dos
+    // direcciones —ANLA entera caída, o ANLA sana— según cuál se hubiera probado.
+    throw new CanarioError(
+      `la sección "${seccion}" de Eureka no devolvió entradas: su plantilla de Joomla cambió. Es esta sección, no ` +
+        `todo el portal: otras secciones pueden seguir respondiendo, pruébalas antes de dar ANLA por caída`,
+    )
   }
 
   const items: EntradaAnla[] = []
@@ -76,10 +96,29 @@ export async function listar(
       titulo.match(/\b(?:Ley|Decreto(?:\s+Ley)?|Resoluci[óo]n|Acuerdo|Circular)\s+\d[\d.]*\s+de\s+\d{4}/i)?.[0] ??
       ''
     ).replace(/\s+/g, ' ')
+    const resumen = (limpio($e.find('.article-introtext').text()) || limpio($e.text()).slice(titulo.length))
+      .slice(0, 400)
+      .trim()
+
+    // Misma clase de norma y mismo año, número distinto: el resumen desmiente al
+    // título. Se exige que coincida el año para no confundir una norma citada de
+    // pasada («modificada por la Ley 99 de 1993») con el número equivocado.
+    const suya = cita.match(UNA_CITA)
+    let desmentida = ''
+    if (suya) {
+      for (const m of resumen.matchAll(CITAS)) {
+        if (m[3] === suya[3] && m[2] !== suya[2] && clase(m[1]!) === clase(suya[1]!)) {
+          desmentida = `${m[1]} ${m[2]} de ${m[3]}`.replace(/\s+/g, ' ')
+          break
+        }
+      }
+    }
+
     items.push({
       titulo,
       cita,
-      resumen: (limpio($e.find('.article-introtext').text()) || limpio($e.text()).slice(titulo.length)).slice(0, 400).trim(),
+      desmentida,
+      resumen,
       url: href ? new URL(href, BASE).toString() : url,
     })
   })

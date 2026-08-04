@@ -2,7 +2,7 @@
   "manifest_version": "0.2",
   "name": "normativa-colombia",
   "display_name": "Normativa Colombia",
-  "version": "1.8.0",
+  "version": "1.8.1",
   "description": "Consulta la normativa y la jurisprudencia colombiana desde Claude: Gestor Normativo, Corte Constitucional, Corte Suprema, SUIN-Juriscol (estado de vigencia) y normograma de la DIAN.",
   "long_description": "Conecta Claude con dos fuentes oficiales colombianas.\n\n**Gestor Normativo** del Departamento Administrativo de la Función Pública: leyes, decretos, resoluciones, circulares y conceptos aplicables al sector público, con su consulta temática y los restrictores que explican por qué cada norma aplica a un tema.\n\n**Relatoría de la Corte Constitucional**: 49.000 sentencias y autos, actualizados a diario.\n\nIncluye un índice temático empaquetado (12.054 subtemas) que responde al instante y sigue funcionando aunque el portal esté caído. Toda respuesta cita el enlace oficial y la fecha de consulta.\n\nNo sustituye asesoría jurídica: verifica siempre en la fuente antes de tomar una decisión.",
   "author": {
@@ -80,7 +80,7 @@
     },
     {
       "name": "listar_subtemas",
-      "description": "Subtemas de un tema del CATÁLOGO DE BÚSQUEDA, cuyos ids van en el parámetro subtema de buscar_normas."
+      "description": "Subtemas de un tema del CATÁLOGO DE BÚSQUEDA, cuyos ids (\"sub-38968\") van en el parámetro subtema de buscar_normas."
     },
     {
       "name": "explicar_relacion_tema",

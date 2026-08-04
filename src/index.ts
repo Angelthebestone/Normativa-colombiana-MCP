@@ -83,6 +83,48 @@ function temaDelIndice(termino: string): { t: string; s: string } | null {
   return (exacta.length ? exacta : candidatas).sort((a, b) => b.n.length - a.n.length)[0] ?? null
 }
 
+/**
+ * Los tres catálogos temáticos del portal numeran cada uno por su cuenta, así
+ * que el mismo entero existe en los tres queriendo decir cosas distintas: el
+ * 38968 es «Teletrabajo durante jornada día sin carro» en listar_subtemas e
+ * «INHABILIDADES E INCOMPATIBILIDADES / Ex Diputados» en el de buscar_por_tema.
+ * Advertirlo en las descripciones no bastaba: un id cruzado no fallaba, contestaba
+ * por el subtema equivocado con el mismo aire de certeza. Con el prefijo pegado
+ * al id, cruzarlos es un error explícito y no una respuesta creíble sobre otra cosa.
+ */
+const CATALOGOS = {
+  ts: { de: 'buscar_por_tema', ejemplo: 'ts-38872' },
+  sub: { de: 'listar_subtemas', ejemplo: 'sub-38968' },
+  tema: { de: 'listar_catalogos con catalogo="temas"', ejemplo: 'tema-24457' },
+} as const
+type Catalogo = keyof typeof CATALOGOS
+
+const conPrefijo = (c: Catalogo, id: string | number): string => `${c}-${id}`
+
+/** Radicados ya devueltos de la última búsqueda en el Consejo de Estado, con la página en que salieron. */
+const memoriaCE: { clave: string; paginas: Map<string, number> } = { clave: '', paginas: new Map() }
+
+/** Filtros que aceptan el nombre o el id: solo lo que parece un id pasa por la aduana. */
+const idOnombre = (c: Catalogo, valor: string | undefined): string | undefined =>
+  valor && /^([a-z]+-)?\d+$/i.test(valor.trim()) ? sinPrefijo(c, valor) : valor
+
+/** Devuelve el número que entiende el portal, o explica de qué catálogo salió el id equivocado. */
+function sinPrefijo(c: Catalogo, valor: string): string {
+  const v = valor.trim()
+  const propio = v.match(new RegExp(`^${c}-(\\d+)$`, 'i'))
+  if (propio) return propio[1]!
+  const ajeno = (Object.keys(CATALOGOS) as Catalogo[]).find((k) => new RegExp(`^${k}-\\d+$`, 'i').test(v))
+  throw new Error(
+    `"${valor}" no sirve aquí: este parámetro lleva un id de ${CATALOGOS[c].de}, que se escribe como ` +
+      `"${CATALOGOS[c].ejemplo}". ` +
+      (ajeno
+        ? `El prefijo "${ajeno}-" lo emite ${CATALOGOS[ajeno].de}, que es OTRA taxonomía del portal: sus números ` +
+          `coinciden con los de esta y significan otra cosa, así que antes esto respondía por el tema equivocado.`
+        : `Los ids pelados no se aceptan justo para que no se puedan cruzar los tres catálogos temáticos del ` +
+          `portal, que reutilizan los mismos números. Pide el id a ${CATALOGOS[c].de} y pégalo con su prefijo.`),
+  )
+}
+
 function frescura(generado: string): string {
   const meses = (Date.now() - Date.parse(generado)) / (30 * 24 * 3600 * 1000)
   return meses > 3
@@ -112,10 +154,10 @@ Qué herramienta usar:
 - Qué le pasó a una norma o a un artículo (quién lo modificó, adicionó o derogó) → obtener_norma con historial=true. Devuelve las notas literales del portal, sin ordenarlas ni deducir cuál rige hoy.
 - El fallo de una sentencia, sin leerla entera → obtener_sentencia con seccion="decision": trae el RESUELVE. La T-099/24 pasa de 140.162 a 39.906 caracteres.
 - Jurisprudencia del CONSEJO DE ESTADO (contencioso administrativo: nulidad y restablecimiento, contratación estatal, nulidad electoral, reparación directa) → buscar_jurisprudencia_consejo_estado. Tercer tribunal distinto de los otros dos; cada resultado trae el problema jurídico y su respuesta.
-- Por qué una norma aplica a un tema → explicar_relacion_tema con el temsubid y el normid de la MISMA fila de buscar_por_tema.
+- Por qué una norma aplica a un tema → explicar_relacion_tema con el temsubid ("ts-…") y el normid de la MISMA fila de buscar_por_tema.
 - Antes de decirle a alguien que una norma "no existe", o para saber si el índice de vigencia sigue fresco → describir_fuentes. Declara qué cubre cada fuente y qué NO, sin consultar la red.
 - Energía, gas, tarifas o conexión → buscar_resoluciones_creg (y obtener_resolucion_creg para el texto). Hidrocarburos, regalías o contratos E&P → buscar_normativa_anh. Planeación minero energética → buscar_normativa_upme. Qué normas aplican a un tema ambiental → listar_normativa_ambiental_anla, y resuelve cada cita con resolver_cita.
-- Solo hay CUATRO reguladores sectoriales: CREG, ANH, UPME y ANLA. Para la SIC, la Superfinanciera, la CRC o la Superservicios este MCP no tiene nada, y un vacío no prueba que la norma no exista.
+- Cuatro reguladores tienen herramienta propia (CREG, ANH, UPME y ANLA) y otros diez se consultan con buscar_normativa_sectorial y su parámetro entidad, la SIC y la Superfinanciera entre ellos: pide la lista a describir_fuentes. Para lo que no esté en ninguna de las dos listas —la CRC, la Superservicios, la Supersalud— este MCP no tiene nada, y un vacío no prueba que la norma no exista.
 
 Reglas al responder:
 - Cita siempre el enlace y la fecha de consulta que devuelven las herramientas. Una afirmación normativa sin fuente verificable no sirve.
@@ -128,7 +170,7 @@ Reglas al responder:
 - Si resolver_cita responde que la cita es AMBIGUA, no escojas tú: el mismo número existe en varios años ("Decreto 1072" son cuatro decretos distintos). Pregunta el año o presenta los candidatos.
 - Un documento sin texto NO es un documento que no diga nada. Si la respuesta avisa de que es un escaneo o de que el portal no publicó el texto, dilo así y remite al enlace; no concluyas nada sobre su contenido.
 - Nunca inventes números de norma, artículos ni sentencias. Si no aparecen en una respuesta, no existen para efectos de esta conversación.
-- Tres numeraciones distintas y no intercambiables: temsubid (solo de buscar_por_tema), subtemaid (de listar_subtemas, va en buscar_normas) y tema (de listar_catalogos).
+- Los ids temáticos vienen con prefijo y no son intercambiables: "ts-" de buscar_por_tema (va en explicar_relacion_tema), "sub-" de listar_subtemas (va en buscar_normas) y "tema-" de listar_catalogos. Pégalos tal cual, con el prefijo: son tres numeraciones distintas del portal que reutilizan los mismos números.
 
 Esto no es asesoría jurídica.`
 
@@ -276,10 +318,20 @@ server.registerTool(
             vig =
               `\nEstado de vigencia según SUIN-Juriscol (índice del ${v.generado}): ` +
               `${v.estado || 'SUIN no publica el estado de esta norma'}\n  ${v.url}`
+          } else {
+            // Callarse aquí era una asimetría: las leyes siempre traían la línea
+            // —aunque fuera para decir que SUIN no respondió— y los decretos la
+            // perdían sin más, que se lee como "el dato no aplica" en vez de "no
+            // se puede saber". El índice de SUIN son casi solo leyes.
+            vig =
+              `\nEstado de vigencia: no consta. El índice de SUIN que viaja aquí son casi solo leyes (los sitemaps ` +
+              `de decretos del portal devuelven 404), así que de esta norma no hay estado que consultar. No ` +
+              `concluyas ni que está vigente ni que está derogada: revísalo en el enlace.`
           }
         } catch {
           // SUIN es un complemento y la cita se resuelve igual, pero que se haya
           // caído no puede parecerse a que la norma no tenga estado publicado.
+          //
           vig =
             `\nEstado de vigencia: SUIN-Juriscol no respondió en esta consulta. Vuelve a intentarlo antes de ` +
             `afirmar nada; no es que esta norma carezca de estado.`
@@ -323,15 +375,19 @@ server.registerTool(
       numero: z.coerce.string().regex(/^\d+$/).optional().describe('Número de la norma, como texto. Ej.: "909"'),
       anio: z.coerce.string().regex(/^\d{4}$/).optional().describe('Año de cuatro dígitos, como texto. Ej.: "2004"'),
       entidad: z.string().optional().describe('Nombre o id: "Corte Constitucional", "Congreso de la República"'),
-      tema: z.string().optional().describe('Nombre o id de tema del catálogo'),
+      tema: z.string().optional().describe('Nombre del tema, o su id de listar_catalogos con prefijo: "tema-24457"'),
       subtema: z.coerce
         .string()
         .optional()
-        .describe('subtemaid de listar_subtemas, o su nombre si además indicas tema. NO sirve el temsubid de buscar_por_tema.'),
+        .describe('id de listar_subtemas con prefijo ("sub-38968"), o su nombre si además indicas tema. El "ts-" de buscar_por_tema no vale aquí.'),
       limite: z.coerce.number().int().min(1).max(100).default(20),
     },
   },
-  async ({ palabras, tipo_documento, numero, anio, entidad, tema, subtema, limite }) => {
+  async ({ palabras, tipo_documento, numero, anio, entidad, tema: temaCrudo, subtema: subtemaCrudo, limite }) => {
+    // Nombre o id: el id llega con prefijo, y uno pelado o de otro catálogo se
+    // rechaza en vez de resolverse contra el tema equivocado.
+    const tema = idOnombre('tema', temaCrudo)
+    const subtema = idOnombre('sub', subtemaCrudo)
     const r = await gestor.buscar({ palabras, tipo: tipo_documento, numero, anio, entidad, tema, subtema })
     const notas = r.nota ? [r.nota] : []
 
@@ -352,7 +408,7 @@ server.registerTool(
               r.items.push(...extra)
               notas.push(
                 `La búsqueda por palabras solo halló ${r.total}. Se reconsultó con el subtema "${normalizarRotulo(par.s)}" ` +
-                  `(id ${sub}) del catálogo de búsqueda y se añadieron ${extra.length} documentos. Ese catálogo y el de ` +
+                  `(id ${conPrefijo('sub', sub)}) del catálogo de búsqueda y se añadieron ${extra.length} documentos. Ese catálogo y el de ` +
                   `buscar_por_tema son taxonomías distintas del portal, así que allí estos documentos pueden aparecer ` +
                   `bajo otro tema.`,
               )
@@ -404,11 +460,10 @@ server.registerTool(
     description:
       'Consulta temática oficial: devuelve tema, subtema y las normas, sentencias y conceptos asociados. ' +
       'Resuelve contra un índice empaquetado (instantáneo, funciona aunque el portal esté caído). ' +
-      'Cada resultado trae temsubid y normid para pedir después explicar_relacion_tema. ' +
-      'OJO con los identificadores: el temsubid que devuelve esta herramienta SOLO sirve en ' +
-      'explicar_relacion_tema. NO es el mismo número que el subtema de listar_subtemas (que va en el ' +
-      'parámetro subtema de buscar_normas) ni que el tema de listar_catalogos. Son tres numeraciones distintas ' +
-      'del portal y mezclarlas devuelve resultados equivocados.',
+      'Cada resultado trae temsubid ("ts-38872") y normid para pedir después explicar_relacion_tema. ' +
+      'El prefijo "ts-" es parte del id: pégalo tal cual. Marca de qué catálogo salió, porque el portal ' +
+      'mantiene tres taxonomías que reutilizan los mismos números —"sub-" es de listar_subtemas y "tema-" de ' +
+      'listar_catalogos—, y antes de los prefijos un id cruzado no fallaba: respondía por el tema equivocado.',
     inputSchema: {
       texto: z.string().describe('Tema a buscar, ej. "teletrabajo", "encargo", "prima de servicios"'),
       limite: z.coerce.number().int().min(1).max(50).default(15),
@@ -427,7 +482,7 @@ server.registerTool(
           .slice(0, limite)
           .map(
             (f) =>
-              `- ${normalizarRotulo(f.t)} / ${normalizarRotulo(f.s)} (temsubid ${f.ts})\n` +
+              `- ${normalizarRotulo(f.t)} / ${normalizarRotulo(f.s)} (temsubid ${conPrefijo('ts', f.ts)})\n` +
               f.n.slice(0, 8).map(([id, tit]) => `    · ${tit} (normid ${id})`).join('\n') +
               (f.n.length > 8 ? `\n    … y ${f.n.length - 8} más` : ''),
           )
@@ -447,7 +502,7 @@ server.registerTool(
       .slice(0, limite)
       .map(
         (f) =>
-          `- ${normalizarRotulo(f.tema)} / ${normalizarRotulo(f.subtema)} (temsubid ${f.temsubid})\n` +
+          `- ${normalizarRotulo(f.tema)} / ${normalizarRotulo(f.subtema)} (temsubid ${conPrefijo('ts', f.temsubid)})\n` +
           f.documentos.slice(0, 8).map((d) => `    · ${d.titulo} (normid ${d.normid})`).join('\n'),
       )
       .join('\n')
@@ -493,12 +548,28 @@ server.registerTool(
       if (e instanceof NoExisteError) return vacio(`una norma con id ${id}`, 'Verifica el id con buscar_normas o resolver_cita.')
       throw e
     }
+    // Estos campos son la ficha del Gestor copiada tal cual, y a veces no dicen lo
+    // que parecen: el Decreto 1072 de 2015 declara "Fecha de Entrada en Vigencia:
+    // 10 de marzo de 2022". No sabemos qué mide ese campo en una norma compilada y
+    // no vamos a inventarlo, pero sin rótulo se lee como si lo afirmáramos nosotros.
+    const anioTitulo = n.titulo.match(/\bde\s+((?:19|20)\d{2})\b/)?.[1]
+    const anioVigencia = Object.entries(n.fechas)
+      .find(([k]) => /entrada\s+en\s+vigencia/i.test(k))?.[1]
+      ?.match(/\b((?:19|20)\d{2})\b/)?.[1]
+    const desajuste =
+      anioTitulo && anioVigencia && anioVigencia !== anioTitulo
+        ? `\nOJO CON ESE CAMPO: el portal fecha la entrada en vigencia en ${anioVigencia} para una norma de ` +
+          `${anioTitulo}. Es su dato, no una comprobación de esta extensión, y en las normas compiladas no consta ` +
+          `qué mide: no lo cites como fecha de expedición ni como prueba de que rige.`
+        : ''
+    const fechas = Object.entries(n.fechas)
     const cab = [
       n.titulo,
-      ...Object.entries(n.fechas).map(([k, v]) => `${k}: ${v}`),
+      ...(fechas.length ? ['Ficha del portal (campos del Gestor, copiados sin interpretar):'] : []),
+      ...fechas.map(([k, v]) => `  ${k}: ${v || '(vacío en el portal)'}`),
       `URL: ${n.url}`,
       `PDF: ${n.urlPdf}`,
-    ].join('\n')
+    ].join('\n') + desajuste
 
     if (n.texto.length < 200) {
       return txt(`${cab}\n\n${avisoSinTexto(n.texto.length, n.urlPdf, await gestor.pdfEscaneado(n.id))}`)
@@ -597,7 +668,8 @@ server.registerTool(
     title: 'Listar catálogos de búsqueda',
     description:
       'Valores válidos para los filtros de buscar_normas: tipos de documento (29), años, entidades (89) y temas (2.509). ' +
-      'En temas el filtro es obligatorio por volumen. ' +
+      'En temas el filtro es obligatorio por volumen, y sus ids salen con prefijo ("tema-24457") porque el portal ' +
+      'tiene tres taxonomías temáticas que reutilizan los mismos números. ' +
       'OJO CON EL ALCANCE: estos catálogos son SOLO del Gestor Normativo de Función Pública y solo sirven en ' +
       'buscar_normas. No cubren la DIAN (que tiene su propio normograma, con buscar_normativa_tributaria), ni ' +
       'SUIN-Juriscol, ni las tres altas cortes. Que "DIAN" no aparezca en el catálogo de entidades no significa ' +
@@ -618,7 +690,10 @@ server.registerTool(
     if (!lista.length) return vacio(`entradas de "${catalogo}" que coincidan con "${filtro}"`, 'Prueba un filtro más corto.')
     return txt(
       `${lista.length} entrada(s) en ${catalogo}:\n` +
-        lista.slice(0, limite).map((o) => `- ${o.nombre} (id ${o.id})`).join('\n') +
+        lista
+          .slice(0, limite)
+          .map((o) => `- ${o.nombre} (id ${catalogo === 'temas' ? conPrefijo('tema', o.id) : o.id})`)
+          .join('\n') +
         (lista.length > limite ? `\n… y ${lista.length - limite} más.` : ''),
     )
   },
@@ -689,7 +764,8 @@ server.registerTool(
     description:
       'Texto completo de una sentencia o auto de la Corte Constitucional. Acepta tanto la ruta que devuelve ' +
       'buscar_jurisprudencia ("2024/T-099-24.htm") como la cita corta ("T-099/24"). Igual que las normas, no se ' +
-      'devuelve entero por defecto (la T-099/24 son 153.000 caracteres): usa buscar_en_texto o desde/limite_caracteres.',
+      'devuelve entero por defecto —una tutela larga pasa de cien mil caracteres—: usa buscar_en_texto o ' +
+      'desde/limite_caracteres. El total y lo mostrado se informan medidos en cada respuesta.',
     inputSchema: {
       ruta: z
         .string()
@@ -698,8 +774,8 @@ server.registerTool(
         .enum(['antecedentes', 'consideraciones', 'decision'])
         .optional()
         .describe(
-          'Devuelve solo esa parte. "decision" trae el RESUELVE, que es lo que casi siempre se busca: en la ' +
-            'T-099/24 son 39.906 caracteres en vez de 140.162.',
+          'Devuelve solo esa parte. "decision" trae el RESUELVE, que es lo que casi siempre se busca y suele ser ' +
+            'una fracción del texto; la respuesta dice cuántos caracteres son de cuántos.',
         ),
       buscar_en_texto: z.string().optional(),
       desde: z.coerce.number().int().min(0).default(0),
@@ -978,6 +1054,25 @@ server.registerTool(
   },
   async ({ texto, pagina, limite }) => {
     const r = await consejo.buscar(texto, limite, pagina)
+
+    // SAMAI pagina por titulación, no por caso: el radicado 25000233600020190090701
+    // sale en la página 1 y otra vez en la 2 con otras tesis, y quien suma páginas
+    // cuenta el mismo precedente dos veces. Desde una sola página no hay forma de
+    // saberlo, así que se recuerda lo ya devuelto de ESTA búsqueda. Solo la última,
+    // que es como se pagina: cambiar de término vacía la memoria en vez de
+    // acumularla toda la sesión.
+    const clave = sinTildes(texto).toLowerCase().trim()
+    if (memoriaCE.clave !== clave) {
+      memoriaCE.clave = clave
+      memoriaCE.paginas.clear()
+    }
+    const repetidos = new Map<string, number>()
+    for (const p of r.items) {
+      const antes = memoriaCE.paginas.get(p.radicado)
+      if (antes !== undefined && antes !== r.pagina) repetidos.set(p.radicado, antes)
+      else if (antes === undefined) memoriaCE.paginas.set(p.radicado, r.pagina)
+    }
+
     if (!r.items.length) {
       return vacio(
         `providencias del Consejo de Estado sobre "${texto}" en la página ${r.pagina}`,
@@ -992,8 +1087,10 @@ server.registerTool(
         `providencias contienen alguna de las palabras.\n\n` +
         r.items
           .map((p) => {
+            const yaSalio = repetidos.get(p.radicado)
             const cabecera = [
-              `- ${p.radicado}${p.clase ? ` (${p.clase})` : ''}`,
+              `- ${p.radicado}${p.clase ? ` (${p.clase})` : ''}` +
+                (yaSalio ? ` — REPETIDA: ya salió en la página ${yaSalio} con otras tesis; no la cuentes dos veces` : ''),
               p.fecha ? `  Fecha: ${p.fecha}` : '',
               p.sala ? `  Sala: ${p.sala}` : '',
               p.ponente ? `  Ponente: ${p.ponente}` : '',
@@ -1010,6 +1107,13 @@ server.registerTool(
           })
           .join('\n\n') +
         (r.pagina < r.paginas ? `\n\nHay más: repite con pagina=${r.pagina + 1}.` : '') +
+        (repetidos.size
+          ? `\n\n${repetidos.size} de estas ${r.items.length} ya se devolvieron en páginas anteriores de esta misma ` +
+            `búsqueda (${[...repetidos.keys()].join(', ')}): van marcadas arriba. SAMAI pagina por problema ` +
+            `jurídico y no por caso, así que ${r.items.length - repetidos.size} son nuevas.`
+          : `\n\nUNA PROVIDENCIA PUEDE REPETIRSE ENTRE PÁGINAS: SAMAI pagina por problema jurídico, no por caso, ` +
+            `así que un radicado con varias tesis puede reaparecer en la página siguiente. Aquí se marcan las que ` +
+            `ya salieron mientras se pagine la MISMA búsqueda; en esta página no hay ninguna.`) +
         `\n\nEl texto completo de la providencia no se entrega aquí. Cada ficha de proceso enlaza arriba; para ` +
         `buscarla a mano, el número que se pega en ${consejo.BUSCADOR} es el radicado: ` +
         r.items.map((p) => p.radicado).join(' · '),
@@ -1066,7 +1170,10 @@ server.registerTool(
         (fin < r.total ? `\n\nQuedan ${r.total - fin}: repite con desde=${fin}.` : '') +
         `\n\nATENCIÓN: la vigencia de esta lista es la del índice de búsqueda y contradice la ficha del documento ` +
         `(la Ley 74 de 1923 figura aquí como "Vigencia en Estudio" y su ficha dice DEROGADO). Para el estado real ` +
-        `de una norma, pídela por su cita con resolver_cita.`,
+        `de una norma, pídela por su cita con resolver_cita. Ese camino tiene un tope, y este ejemplo lo enseña: ` +
+        `resolver_cita solo alcanza lo que estén el Gestor Normativo o el índice de leyes de SUIN, y la Ley 74 de ` +
+        `1923 no está en ninguno, así que responderá que no la encuentra. Cuando pase eso, el único estado fiable ` +
+        `es el de la ficha del documento, en el enlace de arriba.`,
     )
   },
 )
@@ -1076,16 +1183,20 @@ server.registerTool(
   {
     title: 'Listar subtemas de un tema',
     description:
-      'Subtemas de un tema del CATÁLOGO DE BÚSQUEDA, cuyos ids van en el parámetro subtema de buscar_normas. ' +
-      'Ojo: el portal mantiene dos taxonomías distintas y no sincronizadas. Esta es la del formulario de consulta ' +
-      'avanzada y suele ser más pobre; la de buscar_por_tema es más rica (para "teletrabajo" tiene ocho pares ' +
-      'tema/subtema donde esta tiene uno). Los ids de una NO sirven en la otra.',
-    inputSchema: { tema_id: z.coerce.string().regex(/^\d+$/).describe('id de tema del catálogo, como texto') },
+      'Subtemas de un tema del CATÁLOGO DE BÚSQUEDA, cuyos ids ("sub-38968") van en el parámetro subtema de ' +
+      'buscar_normas. Ojo: el portal mantiene dos taxonomías distintas y no sincronizadas. Esta es la del ' +
+      'formulario de consulta avanzada y suele ser más pobre; la de buscar_por_tema es más rica (para ' +
+      '"teletrabajo" tiene ocho pares tema/subtema donde esta tiene uno). Los ids de una NO sirven en la otra, y ' +
+      'por eso cada uno lleva su prefijo.',
+    inputSchema: {
+      tema_id: z.coerce.string().describe('id de tema de listar_catalogos, con su prefijo: "tema-24457"'),
+    },
   },
   async ({ tema_id }) => {
-    const s = await gestor.subtemas(tema_id)
+    const tema = sinPrefijo('tema', tema_id)
+    const s = await gestor.subtemas(tema)
     if (!s.length) return vacio(`subtemas para el tema ${tema_id}`, 'Verifica el id con listar_catalogos.')
-    return txt(s.map((o) => `- ${o.nombre} (id ${o.id})`).join('\n'))
+    return txt(s.map((o) => `- ${o.nombre} (id ${conPrefijo('sub', o.id)})`).join('\n'))
   },
 )
 
@@ -1095,15 +1206,16 @@ server.registerTool(
     title: 'Explicar por qué una norma aplica a un subtema',
     description:
       'Devuelve el "restrictor": el extracto que explica por qué esa norma es pertinente para ESE subtema en ' +
-      'concreto. Ambos identificadores deben salir de la MISMA fila de buscar_por_tema: el temsubid no es el id ' +
-      'de listar_subtemas ni el de listar_catalogos. Para ver todos los restrictores de una norma de una vez, ' +
-      'usa obtener_norma y mira su bloque "Temas asociados".',
+      'concreto. Ambos identificadores deben salir de la MISMA fila de buscar_por_tema, y el temsubid va con su ' +
+      'prefijo ("ts-38872"): un id de listar_subtemas o de listar_catalogos se rechaza aquí. Para ver todos los ' +
+      'restrictores de una norma de una vez, usa obtener_norma y mira su bloque "Temas asociados".',
     inputSchema: {
-      temsubid: z.coerce.string().regex(/^\d+$/).describe('temsubid de buscar_por_tema (no vale el id de listar_subtemas)'),
+      temsubid: z.coerce.string().describe('temsubid de buscar_por_tema, con su prefijo: "ts-38872"'),
       normid: z.coerce.string().regex(/^\d+$/).describe('normid de la misma fila de buscar_por_tema'),
     },
   },
-  async ({ temsubid, normid }) => {
+  async ({ temsubid: temsubidCrudo, normid }) => {
+    const temsubid = sinPrefijo('ts', temsubidCrudo)
     // Se recupera el par del índice para poder decir a qué tema corresponde:
     // sin eso el usuario no puede verificar que la respuesta sea la que pidió.
     const fila = cargarIndice()?.filas.find((f) => f.ts === temsubid)
@@ -1116,11 +1228,12 @@ server.registerTool(
         `un restrictor para la norma ${normid} bajo "${rotulo}"`,
         enElIndice
           ? 'El índice sí relaciona esa norma con ese subtema, pero el portal no publica el extracto. Usa obtener_norma para ver los restrictores que sí tiene.'
-          : 'Esa norma no está clasificada bajo ese subtema. Verifica que temsubid y normid vengan de la misma fila de buscar_por_tema.',
+          : 'Esa norma no está clasificada bajo ese subtema. Verifica que temsubid y normid vengan de la misma ' +
+            'fila de buscar_por_tema; si el rótulo de arriba no es el subtema que buscabas, el id es de otra fila.',
       )
     }
     return txt(
-      `Tema / subtema: ${rotulo} (temsubid ${temsubid})\nNorma: ${normid}\n\n` +
+      `Tema / subtema: ${rotulo} (temsubid ${conPrefijo('ts', temsubid)})\nNorma: ${normid}\n\n` +
         `Por qué aplica:\n${r}\n\n` +
         `Norma completa: https://www.funcionpublica.gov.co/eva/gestornormativo/norma.php?i=${normid}\n` +
         `Este es el restrictor de ESTE subtema; la norma puede tener otros distintos bajo otros temas (obtener_norma los lista todos).`,
@@ -1445,7 +1558,16 @@ server.registerTool(
           .map(
             (x) =>
               `- ${x.titulo}\n` +
-              (x.cita ? `  Cita resoluble con resolver_cita: ${x.cita}\n` : '') +
+              // El número del título es el que escribió Eureka, y a veces no es el
+              // de la norma. Cuando el propio resumen lo desmiente, decirlo aquí
+              // vale más que la cita: es la diferencia entre citar mal una ley de
+              // deforestación y saber que hay que comprobar cuál de las dos es.
+              (x.desmentida
+                ? `  OJO, EL NÚMERO NO CUADRA: el título dice "${x.cita}" y el resumen de la propia ANLA cita ` +
+                  `"${x.desmentida}". Comprueba las dos con resolver_cita antes de citar ninguna.\n`
+                : x.cita
+                  ? `  Cita leída del título, sin comprobar: pásala por resolver_cita — ${x.cita}\n`
+                  : '') +
               (x.resumen ? `  ${x.resumen.slice(0, 220)}\n` : '') +
               `  ${x.url}`,
           )
@@ -1468,7 +1590,13 @@ server.registerTool(
       'CUÁNDO NO USARLA: para leyes y decretos nacionales de cualquier sector usa resolver_cita o buscar_por_tema, ' +
       'que dan texto completo y vigencia. En particular, el Decreto Único Reglamentario de CADA sector (1071 ' +
       'agropecuario, 1074 comercio e industria, 1076 ambiente, 1079 transporte, 1072 trabajo…) ya está en el Gestor.\n' +
-      'Ninguna de estas fuentes publica el estado de vigencia, y casi todas entregan PDF sin texto extraíble.',
+      'Casi todas entregan PDF sin texto extraíble. La mayoría no publica estado de vigencia; donde sí aparece ' +
+      '(ANM y Supersociedades) es lo que declara el portal en su propia fila, NO una verificación de esta ' +
+      'extensión: para el estado real de una ley o un decreto, resolver_cita.\n' +
+      'LOS FILTROS NO SE COMPORTAN IGUAL EN TODAS, porque los portales tampoco: el Invima exige texto o año y ' +
+      'rechaza la consulta sin ellos; la Superfinanciera y la Supertransporte se quedan en el año en curso si no ' +
+      'indicas otro; la ANM no aplica el año a las circulares; las demás listan lo más reciente. Cada respuesta ' +
+      'dice cuál de estas cosas hizo, pero no lo adivines: si esperabas un año concreto, indícalo.',
     inputSchema: {
       entidad: z
         .enum(sectorial.ids() as [string, ...string[]])
@@ -1486,18 +1614,42 @@ server.registerTool(
     const r = await a.buscar({ texto, anio, pagina, limite })
     // La advertencia de la fuente viaja SIEMPRE, haya resultados o no: es lo que
     // impide que un vacío de un regulador se lea como que la norma no existe.
-    const cierre = `\n\nFuente: ${a.nombre} — ${a.portal}\nQué NO cubre: ${a.advertencia}`
+    // A partir de la segunda página se abrevia: paginar 480 resoluciones de 15 en
+    // 15 repetía el párrafo entero 32 veces, y quien pagina ya lo leyó. En un
+    // vacío y en la primera página va completa, que son los dos casos en que se
+    // puede concluir de más.
+    const fuente = `\n\nFuente: ${a.nombre} — ${a.portal}\nQué NO cubre: `
+    const completo = `${fuente}${a.advertencia}`
+    const cierre =
+      pagina > 1 ? `${fuente}lo mismo que declaró la página 1 de esta consulta; pídela con pagina=1 para releerlo.` : completo
 
     if (!r.items.length) {
       return vacio(
         `actos de ${a.nombre}${texto ? ` que coincidan con "${texto}"` : ''}${anio ? ` de ${anio}` : ''}`,
-        `${r.nota ? `${r.nota} ` : ''}Consultado: ${r.url}.${cierre}`,
+        `${r.nota ? `${r.nota} ` : ''}Consultado: ${r.url}.${completo}`,
       )
     }
+
+    // Parques lista dos veces la Ley 1333 de 2009 en la misma página, con fecha y
+    // enlace distintos. Son dos filas reales de una página mantenida a mano, no un
+    // duplicado nuestro, pero contarlas como dos normas es un error de quien lee.
+    const repes = new Map<string, number>()
+    for (const d of r.items) {
+      const k = `${d.tipo} ${d.numero} de ${d.anio}`.toLowerCase()
+      repes.set(k, (repes.get(k) ?? 0) + 1)
+    }
+    const dobles = [...repes].filter(([, n]) => n > 1).map(([k]) => k)
+
     return txt(
       `${r.items.length} acto(s) de ${a.nombre} (${a.sector})` +
         (r.total ? ` de ${r.total} que reúne el filtro` : '') +
-        `.${r.nota ? `\n${r.nota}` : ''}\n\n` +
+        `.${r.nota ? `\n${r.nota}` : ''}` +
+        (dobles.length
+          ? `\nEl portal repite en esta misma página ${dobles.length === 1 ? 'una entrada' : `${dobles.length} entradas`} ` +
+            `(${dobles.join('; ')}), con fecha o enlace distintos. Son filas suyas, no copias nuestras: son menos ` +
+            `normas de las que parecen.`
+          : '') +
+        `\n\n` +
         r.items
           .map(
             (d) =>
@@ -1518,37 +1670,68 @@ server.registerTool(
     description:
       'Declara el alcance real: qué fuente responde cada pregunta, qué NO está cubierto y con qué fecha se ' +
       'generaron los índices que viajan empaquetados. Úsala ANTES de concluir que algo "no existe" a partir de ' +
-      'una búsqueda vacía, y para saber si el índice de vigencia sigue fresco. No consulta la red.',
-    inputSchema: {},
+      'una búsqueda vacía, y para saber si el índice de vigencia sigue fresco. No consulta la red. ' +
+      'Con el parámetro `fuente` devuelve SOLO el alcance de esa fuente, que es lo que suele hacer falta; sin él, ' +
+      'el cuadro completo, que es largo.',
+    inputSchema: {
+      fuente: z
+        .string()
+        .optional()
+        .describe('Clave de una sola fuente ("creg", "suin", "sic"…). Sin ella se devuelven todas.'),
+    },
   },
-  () => {
+  ({ fuente }) => {
     const idx = cargarIndice()
     const suinIdx = suin.coberturaIndice()
     const normasIndexadas = idx?.filas.reduce((n, f) => n + f.n.length, 0) ?? 0
 
-    const fuentes = [
-      `- Gestor Normativo (Función Pública) — normas del sector público: leyes, decretos, resoluciones, circulares y ` +
+    const fuentes: [string, string][] = [
+      ['gestor', `- Gestor Normativo (Función Pública) — normas del sector público: leyes, decretos, resoluciones, circulares y ` +
         `conceptos. Es el corpus principal. NO publica estado de vigencia, y su buscador por palabras solo indexa los ` +
-        `resúmenes temáticos, no el articulado: para buscar dentro de una norma, obtener_norma con buscar_en_texto.`,
-      `- Corte Constitucional — relatoría al día, sentencias y autos con texto completo.`,
-      `- Corte Suprema de Justicia — cuatro salas (Tutelas, Civil, Laboral, Penal) desde 1991. Entrega la referencia y ` +
-        `las normas citadas, NO el texto: la Corte publica en .docx y esta extensión no lee ese formato.`,
-      `- Consejo de Estado (SAMAI) — providencias tituladas de lo contencioso administrativo, con el problema jurídico ` +
-        `y su respuesta. Tampoco entrega el texto completo; sí el enlace a la ficha del proceso.`,
-      `- DIAN — normograma tributario, aduanero y cambiario. Ninguna otra herramienta cubre esa materia.`,
-      `- SUIN-Juriscol (MinJusticia) — corpus histórico desde 1844 y, sobre todo, la ÚNICA fuente que publica el ` +
-        `estado de vigencia como dato.`,
-      `- CREG — resoluciones de energía y gas. La única fuente sectorial cuyo TEXTO se puede leer aquí, y la única ` +
-        `que separa las no derogadas de las derogadas en compilaciones distintas.`,
-      `- ANH — 785 actos de hidrocarburos (contratos, regalías, fiscalización). Solo PDF: epígrafe y enlace.`,
-      `- UPME — circulares y resoluciones de planeación minero energética. Solo PDF. Su fecha es la de publicación ` +
-        `en la web, no la de la norma.`,
-      `- ANLA (Eureka) — clasificación temática de la normativa ambiental. Aporta el mapa, no los documentos: casi ` +
-        `todo lo que lista son leyes y decretos que resolver_cita ya resuelve mejor.`,
+        `resúmenes temáticos, no el articulado: para buscar dentro de una norma, obtener_norma con buscar_en_texto.`],
+      ['corte-constitucional', `- Corte Constitucional — relatoría al día, sentencias y autos con texto completo.`],
+      ['corte-suprema', `- Corte Suprema de Justicia — cuatro salas (Tutelas, Civil, Laboral, Penal) desde 1991. Entrega la referencia y ` +
+        `las normas citadas, NO el texto: la Corte publica en .docx y esta extensión no lee ese formato.`],
+      ['consejo-de-estado', `- Consejo de Estado (SAMAI) — providencias tituladas de lo contencioso administrativo, con el problema jurídico ` +
+        `y su respuesta. Tampoco entrega el texto completo; sí el enlace a la ficha del proceso.`],
+      ['dian', `- DIAN — normograma tributario, aduanero y cambiario. Ninguna otra herramienta cubre esa materia.`],
+      ['suin', `- SUIN-Juriscol (MinJusticia) — corpus histórico desde 1844 y, sobre todo, la ÚNICA fuente que publica el ` +
+        `estado de vigencia como dato.`],
+      ['creg', `- CREG — resoluciones de energía y gas. La única fuente sectorial cuyo TEXTO se puede leer aquí, y la única ` +
+        `que separa las no derogadas de las derogadas en compilaciones distintas.`],
+      ['anh', `- ANH — 785 actos de hidrocarburos (contratos, regalías, fiscalización). Solo PDF: epígrafe y enlace.`],
+      ['upme', `- UPME — circulares y resoluciones de planeación minero energética. Solo PDF. Su fecha es la de publicación ` +
+        `en la web, no la de la norma.`],
+      ['anla', `- ANLA (Eureka) — clasificación temática de la normativa ambiental. Aporta el mapa, no los documentos: casi ` +
+        `todo lo que lista son leyes y decretos que resolver_cita ya resuelve mejor.`],
       ...sectorial
         .adaptadores()
-        .map((a) => `- ${a.nombre} (entidad="${a.id}" en buscar_normativa_sectorial) — ${a.sector}. ${a.advertencia}`),
+        .map(
+          (a) =>
+            [a.id, `- ${a.nombre} (entidad="${a.id}" en buscar_normativa_sectorial) — ${a.sector}. ${a.advertencia}`] as [
+              string,
+              string,
+            ],
+        ),
     ]
+
+    // Pedir el alcance de la CREG no debería costar el texto de las otras veinte.
+    if (fuente) {
+      const q = sinTildes(fuente).toLowerCase().trim()
+      const una = fuentes.find(([k]) => k === q) ?? fuentes.find(([k, t]) => k.includes(q) || sinTildes(t).toLowerCase().includes(q))
+      if (!una) {
+        return vacio(
+          `una fuente llamada "${fuente}"`,
+          `Las claves son: ${fuentes.map(([k]) => k).join(', ')}. Sin el parámetro fuente se devuelven todas.`,
+        )
+      }
+      return txt(
+        `normativa-colombia ${VERSION} — alcance de una sola fuente.\n\n${una[1]}\n\n` +
+          `Esto es SOLO esa fuente: llama a describir_fuentes sin parámetros para el cuadro completo, con lo que ` +
+          `no está cubierto y la fecha de los índices empaquetados. Que una búsqueda salga vacía aquí significa ` +
+          `que no se encontró en ESTA fuente, no que la norma no exista.`,
+      )
+    }
 
     const empaquetado = [
       idx
@@ -1563,7 +1746,7 @@ server.registerTool(
 
     return txt(
       `normativa-colombia ${VERSION} — alcance declarado.\n\n` +
-        `FUENTES\n${fuentes.join('\n')}\n\n` +
+        `FUENTES (pide una sola con fuente="creg", "suin", "sic"…)\n${fuentes.map(([, t]) => t).join('\n')}\n\n` +
         `ÍNDICES EMPAQUETADOS (responden sin red)\n${empaquetado.join('\n')}\n\n` +
         `LO QUE NO ESTÁ CUBIERTO — decirlo importa más que la lista de arriba:\n` +
         `- El ESTADO PROCESAL de un caso: si un proceso sigue abierto, en qué etapa va o cuándo se falla. Aquí solo ` +
@@ -1572,9 +1755,11 @@ server.registerTool(
         `portal devuelven 404. Que un decreto no traiga estado NO significa que esté derogado ni vigente: no consta.\n` +
         `- La normativa departamental y municipal, salvo la que el Gestor recoja por su cuenta.\n` +
         `- Los tribunales y juzgados distintos de las tres altas cortes.\n` +
-        `- EL RESTO DE LA REGULACIÓN SECTORIAL. Hay cuatro reguladores —CREG, ANH, UPME y ANLA— y solo cuatro: NO ` +
-        `están la SIC, la Superfinanciera, la CRC, la Superservicios ni las demás comisiones y superintendencias. ` +
-        `Que este MCP tenga "algo sectorial" no significa que tenga lo sectorial.\n\n` +
+        `- EL RESTO DE LA REGULACIÓN SECTORIAL. Con herramienta propia hay cuatro reguladores —CREG, ANH, UPME y ` +
+        `ANLA—; los demás que aparecen en la lista de FUENTES se consultan por el parámetro entidad de ` +
+        `buscar_normativa_sectorial (${sectorial.ids().join(', ')}). Fuera de esas dos listas no hay nada: NO están ` +
+        `la CRC, la Superservicios, la Supersalud ni las demás comisiones y superintendencias. Que este MCP tenga ` +
+        `"algo sectorial" no significa que tenga lo sectorial.\n\n` +
         `CÓMO LEER UN VACÍO: que una búsqueda no devuelva nada significa que no se encontró en ESTAS fuentes, con ` +
         `estos índices y con estos huecos. No significa que la norma no exista. El corpus del Gestor no cubre todo ` +
         `el país, y el índice de SUIN tiene agujeros conocidos.`,

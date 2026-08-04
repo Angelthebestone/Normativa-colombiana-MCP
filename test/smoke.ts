@@ -107,10 +107,17 @@ test('SUIN: la ficha se lee del bloque de campos, no de la prosa', () => {
   assert.equal(claveSuin('LEY', '0909', '2004'), 'ley 909 2004')
 })
 
-test('SUIN publica el estado, y el campo manda sobre la prosa', RED, async () => {
+test('SUIN publica el estado, y el campo manda sobre la prosa', RED, async (t) => {
   // La Ley 1541 de 2012 es el caso que obligó a cambiar de fuente de verdad: su
   // texto visible dice "Vigente" y su campo dice "Vigencia en Estudio".
-  const r = await pedirHttp('https://www.suin-juriscol.gov.co/viewDocument.asp?id=1683108', 40_000)
+  // El portal se cae entero y corta la conexión: es la fuente, no el parser. El
+  // e2e ya lo saltaba y aquí fallaba duro, así que un SUIN caído bloqueaba el
+  // publicar de una versión que no lo tocaba.
+  const r = await pedirHttp('https://www.suin-juriscol.gov.co/viewDocument.asp?id=1683108', 40_000).catch((e: Error) => e)
+  if (r instanceof Error) {
+    t.skip(`SUIN-Juriscol no respondió: ${r.message}`)
+    return
+  }
   assert.equal(r.status, 200)
   const f = fichaSuin(r.cuerpo)
   assert.deepEqual({ tipo: f?.tipo, numero: f?.numero, anio: f?.anio }, { tipo: 'LEY', numero: '1541', anio: '2012' })
