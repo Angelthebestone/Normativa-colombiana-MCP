@@ -176,6 +176,43 @@ Esto no es asesoría jurídica.`
 
 const server = new McpServer({ name: 'normativa-colombia', version: VERSION }, { instructions: INSTRUCCIONES })
 
+/**
+ * Una línea JSON por llamada, SIEMPRE a stderr: stdout es el canal JSON-RPC y
+ * escribir ahí rompe el protocolo. Los clientes MCP guardan el stderr del
+ * servidor en su log, así que esto es lo único que permite saber después qué
+ * herramienta se usa, cuánto tarda y cuál falla —el servidor no emitía nada, y
+ * un fallo contra un portal era indistinguible de una consulta sin resultados.
+ *
+ * Se envuelve `registerTool` una vez en lugar de tocar veintiséis handlers.
+ *
+ * ponytail: sin muestreo ni niveles; una línea por llamada es despreciable
+ * cuando cada llamada cuesta una petición de red. Si algún día molesta, se
+ * apaga por variable de entorno, no se filtra por nivel.
+ */
+type Registrar = typeof server.registerTool
+const registrarOriginal = server.registerTool.bind(server) as Registrar
+server.registerTool = ((nombre: string, config: unknown, handler: (...a: unknown[]) => unknown) =>
+  registrarOriginal(
+    nombre as never,
+    config as never,
+    (async (...args: unknown[]) => {
+      const t0 = performance.now()
+      const anotar = (ok: boolean, error?: string) =>
+        process.stderr.write(
+          `${JSON.stringify({ ts: new Date().toISOString(), herramienta: nombre, ms: Math.round(performance.now() - t0), ok, ...(error ? { error } : {}) })}\n`,
+        )
+      try {
+        const r = await handler(...args)
+        anotar(true)
+        return r
+      } catch (e) {
+        // Se anota y se relanza: el enrutado de errores del SDK no cambia.
+        anotar(false, e instanceof Error ? `${e.name}: ${e.message}` : String(e))
+        throw e
+      }
+    }) as never,
+  )) as Registrar
+
 server.registerTool(
   'resolver_cita',
   {
