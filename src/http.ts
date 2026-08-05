@@ -1,4 +1,5 @@
 import { request } from 'node:https'
+import { pipeline } from 'node:stream'
 import { rootCertificates } from 'node:tls'
 import { createGunzip, createInflate } from 'node:zlib'
 import { GLOBALSIGN_OV, SECTIGO_EV, SECTIGO_OV } from './ca.ts'
@@ -119,6 +120,35 @@ type Cruda = {
   cabeceras: Record<string, string>
 }
 
+/**
+ * Junta el cuerpo de una respuesta, descomprimiéndolo si viene comprimido.
+ *
+ * Va con `pipeline` y no con `pipe` porque `pipe` NO propaga el error del
+ * origen. Medido con un servidor que corta la conexión a mitad del cuerpo gzip:
+ * `res` emitía 'error' (ECONNRESET) sin nadie escuchando —en Node eso es una
+ * excepción no capturada que se lleva por delante el servidor MCP entero— y el
+ * descompresor no emitía ni 'end' ni 'error', así que la promesa quedaba
+ * colgada para siempre y con ella la cola de ese dominio. El `timeout` de la
+ * petición tampoco rescataba: ya no vuelve a dispararse una vez empezada la
+ * respuesta.
+ *
+ * Está separada de `crudo` para poder probarla sin levantar un TLS con
+ * certificado propio, que es lo único que impedía cubrir este caso.
+ */
+export function cuerpoDe(res: NodeJS.ReadableStream & { headers: Record<string, unknown> }): Promise<Buffer> {
+  return new Promise((resolve, reject) => {
+    const enc = String(res.headers['content-encoding'] ?? '')
+    const descompresor = enc === 'gzip' ? createGunzip() : enc === 'deflate' ? createInflate() : null
+    const flujo: NodeJS.ReadableStream = descompresor
+      ? pipeline(res, descompresor, (e) => e && reject(e))
+      : res
+    const trozos: Buffer[] = []
+    flujo.on('data', (c: Buffer) => trozos.push(c))
+    flujo.on('end', () => resolve(Buffer.concat(trozos)))
+    flujo.on('error', reject)
+  })
+}
+
 function crudo(
   url: string,
   timeout: number,
@@ -146,23 +176,20 @@ function crudo(
         },
       },
       (res) => {
-        const enc = String(res.headers['content-encoding'] ?? '')
-        const flujo = enc === 'gzip' ? res.pipe(createGunzip()) : enc === 'deflate' ? res.pipe(createInflate()) : res
-        const trozos: Buffer[] = []
-        flujo.on('data', (c: Buffer) => trozos.push(c))
-        flujo.on('end', () =>
-          resolve({
-            status: res.statusCode ?? 0,
-            datos: Buffer.concat(trozos),
-            contentType: String(res.headers['content-type'] ?? ''),
-            retryAfter: String(res.headers['retry-after'] ?? ''),
-            cookies: (res.headers['set-cookie'] ?? []).map((c) => c.split(';')[0]).join('; '),
-            cabeceras: Object.fromEntries(
-              Object.entries(res.headers).map(([k, v]) => [k, Array.isArray(v) ? v.join(', ') : String(v ?? '')]),
-            ),
-          }),
+        cuerpoDe(res).then(
+          (datos) =>
+            resolve({
+              status: res.statusCode ?? 0,
+              datos,
+              contentType: String(res.headers['content-type'] ?? ''),
+              retryAfter: String(res.headers['retry-after'] ?? ''),
+              cookies: (res.headers['set-cookie'] ?? []).map((c) => c.split(';')[0]).join('; '),
+              cabeceras: Object.fromEntries(
+                Object.entries(res.headers).map(([k, v]) => [k, Array.isArray(v) ? v.join(', ') : String(v ?? '')]),
+              ),
+            }),
+          reject,
         )
-        flujo.on('error', reject)
       },
     )
     req.on('timeout', () => req.destroy(new Error(`tiempo de espera agotado tras ${timeout} ms`)))
