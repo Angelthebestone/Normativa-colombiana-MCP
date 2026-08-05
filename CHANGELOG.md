@@ -3,6 +3,46 @@
 Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/).
 Este proyecto sigue [versionado semántico](https://semver.org/lang/es/).
 
+## [1.9.0] — 2026-08-04
+
+**Las tres altas cortes entregan ya texto completo.** Eran dos; la Corte Suprema y el Consejo de Estado estaban declarados como «sin texto» y en ambos casos era falso.
+
+### Añadido
+
+- **`obtener_providencia_consejo_estado`**: texto completo de una providencia del Consejo de Estado. Medido: la sentencia 25000232600020090088801 de la Sección Tercera son 36 páginas y 102.296 caracteres, en unos 3 segundos de extremo a extremo.
+
+  **La verificación anti-robot no cubría lo que parecía.** Está en la ficha del proceso —que es a donde enlazábamos— y por eso se dio el texto por inalcanzable. La providencia tiene otra ruta, **y la publica el propio buscador en sus resultados**: un enlace firmado `VerProvidencia.aspx?tokenDocumento=<JWT>` que no pide nada, y que a su vez genera una URL SAS de Azure con el PDF. Los tres saltos son el camino que el portal ofrece a cualquiera que use su buscador.
+
+  El token **caduca en una hora**, así que no es citable: para citar sigue valiendo el radicado, y la respuesta lo dice en mayúsculas. Se regenera repitiendo la búsqueda.
+
+  El token se lee de `documentlink_<n>`, con el mismo índice que el radicado, por la regla que ya regía este módulo: emparejar por proximidad atribuiría el documento de una providencia a otra.
+
+- **`obtener_providencia_suprema`**: texto completo de una providencia de la Corte Suprema, por su ruta y su sala. Medido en las cuatro: ATP284-2021 (Tutelas) 7.781 caracteres, una casación Civil 50.758, la 29456 (Laboral) 33.771, AP5252-2021 (Penal) 31.733. Se trocea igual que el resto —`buscar_en_texto`, `desde`, `limite_caracteres`—, porque una casación no cabe en una respuesta.
+
+  **Exige la MISMA sala con la que se encontró.** Comprobado: la SL3772-2018 devuelve 46.910 caracteres desde `Laboral` y `null` desde Penal, Civil y Tutelas. El backend no devuelve otro documento, devuelve nada.
+
+### Lo que resultó ser falso
+
+- **«Las providencias son .docx y esta extensión no las lee» era falso dos veces**, y estaba escrito en cuatro sitios: el docstring del módulo, la descripción de la herramienta, `describir_fuentes` y el README.
+
+  Primero, **no son .docx**: de 22 providencias muestreadas en las cuatro salas, **18 son `.doc` binario**, 3 `.docx` y 1 `.pdf`. Una librería de OOXML habría fallado en el grueso del corpus, y en silencio.
+
+  Segundo, **no hace falta ninguna librería**: su propio backend GraphQL ya sirve el texto extraído. La introspección está abierta y expone `getContentSearch(previewDocument:{id, room, text})`. Lo que devuelve no es el documento sino los pasajes que contienen `text`: sin él llegan 547 caracteres de rótulos, con «despido» 49.956 y con un punto —que casa con todo— la providencia entera.
+
+### Corregido
+
+### Dependencias
+
+- **Primera dependencia de peso del proyecto: `unpdf`**, para leer el PDF del Consejo de Estado. El bundle pasa de 669 kB a 2,2 MB, y se carga en diferido para que solo lo pague quien pida un texto.
+
+  Se probó antes **`@llamaindex/liteparse`**, que era **el doble de rápido** —417 ms contra 884 en la misma sentencia de 36 páginas, con el mismo contenido: 15.969 palabras frente a 15.970— y aun así se descartó: trae **un binario nativo por plataforma** (17,9 MB en Windows, 24,5 en Linux). El `.mcpb` viaja sin `node_modules`, así que la herramienta respondía `Failed to load native module for win32-x64`. Comprobado ejecutando el servidor compilado en un directorio limpio, que es como se instala de verdad; con `unpdf`, la misma prueba responde el texto. Este proyecto ya había descartado antes una dependencia nativa, y por la misma razón.
+
+  Nota al margen: el OCR de `liteparse` viene activado por defecto y sobre un PDF con capa de texto costaba **125.011 ms** en vez de 417. Juzgar una librería por su configuración por defecto habría dado la respuesta contraria.
+
+### Corregido
+
+- **El quitador de preámbulo de Word se comía la cabecera de los fallos.** Descarta las líneas cortas iniciales para limpiar la basura que Word dejó en los documentos viejos, y la cabecera de la Corte son siete líneas de menos de 40 caracteres: «CORTE SUPREMA DE JUSTICIA», «Radicación n.° 46498», el ponente, «SL3772-2018». Se perdían enteras, **con el radicado dentro, que es la clave con la que se cita**. El propio `ponytail:` de `parse.ts` había anticipado este caso y señalado la salida; se aplicó por ahí, ampliando `INICIO_REAL` con CORTE, SALA y RADICACIÓN. El preámbulo de Word nunca empieza por esas palabras: son «Clean», «false», «mso-…» o cifras sueltas.
+
 ## [1.8.2] — 2026-08-04
 
 Un recorrido completo por las 23 herramientas en Claude Desktop encontró **una fuente «caída»** que no lo estaba.

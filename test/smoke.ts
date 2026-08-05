@@ -526,6 +526,56 @@ test('Eureka lee sus dos plantillas, no solo la del blog', RED, async () => {
   assert.ok(ultima.items.length > 0, 'la última página vino vacía')
 })
 
+test('la Corte Suprema sí entrega el texto, y solo desde su propia sala', RED, async (t) => {
+  // Se creyó que hacía falta una librería de OOXML y era falso dos veces: los
+  // ficheros son .doc BINARIO en su mayoría, y el backend ya sirve el texto.
+  const r = await suprema.buscar({ texto: 'despido sin justa causa', sala: 'Laboral', limite: 3 })
+  const p = r.items.find((x) => x.ruta)
+  if (!p) {
+    t.skip('el buscador de la Corte Suprema no devolvió providencias con ruta')
+    return
+  }
+  const doc = await suprema.obtenerTexto(p.ruta, 'Laboral')
+  assert.ok(doc, 'la providencia encontrada debe poder leerse')
+  assert.ok(doc!.texto.length > 5_000, `una casación no cabe en ${doc!.texto.length} caracteres`)
+
+  // La cabecera son siete líneas cortas y el quitador de preámbulo de Word se
+  // las comía enteras, con el radicado dentro: sin él la providencia no se cita.
+  assert.match(doc!.texto.slice(0, 300), /CORTE SUPREMA|SALA DE CASACI[ÓO]N|Radicaci[óo]n/i, 'falta la cabecera del fallo')
+
+  // El backend busca dentro de la sala que se le indique: la sala equivocada no
+  // devuelve otro documento, devuelve nada. Conviene que siga siendo así.
+  assert.equal(await suprema.obtenerTexto(p.ruta, 'Penal'), null, 'una sala ajena no puede resolver la providencia')
+})
+
+test('el Consejo de Estado entrega el texto por la vía que publica su buscador', RED, async (t) => {
+  // La ficha del proceso pide una verificación anti-robot; el propio buscador
+  // emite otro enlace, sin puerta, que lleva al PDF. Si SAMAI deja de emitir el
+  // token, esta prueba lo dice en vez de devolver providencias sin texto.
+  const r = await consejo.buscar('liquidación del contrato estatal', 3, 1)
+  const p = r.items.find((x) => x.token)
+  if (!p) {
+    t.skip('SAMAI no emitió tokens de documento en esta consulta')
+    return
+  }
+  assert.ok(
+    r.items.every((x) => x.token),
+    'todas las providencias deberían traer token; si no, se está leyendo por índice equivocado',
+  )
+  const d = await consejo.obtenerTexto(p.token)
+  assert.ok(d, 'el token recién emitido debe resolver')
+  // Un ZIP no trae texto y eso es legítimo; lo que no puede es fallar en silencio.
+  if (!d!.texto) {
+    assert.ok(d!.urlVisor.includes('VerProvidencia'), 'sin texto debe quedar al menos el visor')
+    return
+  }
+  assert.ok(d!.texto.length > 5_000, `una providencia no cabe en ${d!.texto.length} caracteres`)
+  assert.ok(d!.paginas > 0, 'debe contar las páginas del PDF')
+  // Las tildes son el canario del extractor: una codificación mal leída las rompe
+  // primero y el texto sigue pareciendo correcto.
+  assert.match(d!.texto.slice(0, 4_000), /[óéáíúñÓÉÁÍÚÑ]/, 'el texto llegó sin tildes: el extractor las perdió')
+})
+
 test('todo regulador sectorial declara qué NO cubre', async () => {
   // El contrato exige `advertencia` porque es lo único que impide que un vacío
   // de un regulador se lea como "esa norma no existe". Una fuente nueva que se

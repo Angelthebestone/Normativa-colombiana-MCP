@@ -15,11 +15,14 @@
  * - Hay que indicar sala: sin `typeOfQuery` la consulta devuelve `null` en vez
  *   de error. Es la trampa que más tiempo cuesta si no se sabe.
  *
- * ponytail: no se descarga el texto. Las providencias son .docx en el servidor
- * y extraerlo pediría una dependencia nueva para leer OOXML; se entrega la
- * referencia y las normas citadas, que es lo que encadena con el resto del MCP.
+ * El texto completo lo entrega el propio backend, ya extraído, con
+ * `getContentSearch`. Se creía que haría falta una dependencia para leer OOXML y
+ * era falso por partida doble: los ficheros del servidor son casi todos `.doc`
+ * BINARIO —18 de 22 providencias muestreadas en las cuatro salas, frente a 3
+ * `.docx` y 1 `.pdf`—, así que una librería de docx habría fallado en el grueso,
+ * y además no hace falta ninguna.
  */
-import { CanarioError } from '../parse.ts'
+import { CanarioError, cargar, textoDe } from '../parse.ts'
 import { pedirJson } from '../http.ts'
 
 const API = 'https://consultaprovidenciasbk.cortesuprema.gov.co/api'
@@ -151,4 +154,56 @@ export async function buscar(opts: {
     // si no se dice, "quedan N resultados" promete documentos que no existen.
     brutos: r.searchResults.length,
   }
+}
+
+const CONTENIDO =
+  'query($p:SearchPreviewDocument!){getContentSearch(previewDocument:$p){title id contentText}}'
+
+/**
+ * Lo que devuelve `getContentSearch` NO es el documento: es el conjunto de
+ * pasajes que contienen `text`. Sin `text` solo llegan los rótulos de las
+ * secciones (547 caracteres en la SL3772-2018) y con "despido" llegan 49.956.
+ *
+ * ponytail: para pedir el documento entero se manda un punto, que casa con todo
+ * —659.513 caracteres de HTML, 47.104 de texto, de la cabecera al salvamento de
+ * voto y sin repetir pasajes—. El techo es que una providencia sin un solo punto
+ * volvería corta, cosa que no existe en un fallo judicial. El salto, si algún
+ * día importa, es un parámetro `resaltar` que pase el término del usuario y
+ * devuelva solo sus pasajes, que es para lo que el backend está hecho.
+ */
+const TODO = '.'
+
+export type TextoProvidencia = { texto: string; ruta: string }
+
+/**
+ * Texto completo de una providencia por su `ruta` (el `onlinePath` que devuelve
+ * `buscar`). Devuelve `null` cuando el backend no la encuentra: no lanza, porque
+ * una ruta caducada es una respuesta sobre el documento, no un fallo de la fuente.
+ */
+export async function obtenerTexto(ruta: string, sala: Sala): Promise<TextoProvidencia | null> {
+  const j = await pedirJson<{
+    data?: { getContentSearch?: { title?: string; id?: string; contentText?: string } | null }
+    errors?: { message?: string }[]
+  }>(API, { query: CONTENIDO, variables: { p: { id: ruta, room: sala, text: TODO } } })
+
+  if (j.errors?.length) throw new CanarioError(`la Corte Suprema rechazó la petición de texto: ${j.errors[0]?.message}`)
+  const d = j.data?.getContentSearch
+  if (!d) throw new CanarioError('la respuesta de texto de la Corte Suprema no trae el documento')
+  // Su forma de decir "no existe" es 200 con id "-1" y los campos rellenos con
+  // el mismo rótulo; tratarlo como texto habría devuelto esa frase como si fuera
+  // la providencia.
+  if (!d.id || d.id === '-1' || d.contentText === 'No se encontraron resultados') return null
+
+  // El backend resalta lo que casa con `text` envolviéndolo en <mark>, y como
+  // aquí casa TODO acaba envolviendo carácter a carácter: "46498" viaja como
+  // cinco <mark> y deja de existir como cadena. Eso pesa 659 KB de HTML para 47
+  // KB de texto y partía la cabecera —el radicado, que es la clave de cita—.
+  // Quitar el resaltado no pierde nada: con este `text` no señala nada.
+  const html = (d.contentText ?? '').replace(/<\/?mark\b[^>]*>/gi, '')
+  // Sin <body> el selector de textoDe no encuentra nada y devuelve "".
+  const texto = textoDe(cargar(`<body>${html}</body>`), 'body')
+  if (!texto) return null
+  // `title` no se devuelve: su backend guarda ahí basura ("sdñlfmñksdaf" en la
+  // SL3772-2018). El número que sirve para citar es el que ya trae `buscar`.
+  return { texto, ruta }
 }

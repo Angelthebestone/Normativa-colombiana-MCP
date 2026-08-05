@@ -12,7 +12,7 @@ Conecta seis fuentes oficiales:
 - **Relatoría de la Corte Constitucional** — 49.000 sentencias y autos, actualizados a diario.
 - **SUIN-Juriscol** del Ministerio de Justicia — **el estado de vigencia**, que ninguna otra fuente del país publica, y 11.599 leyes de 1844 a 2026, muchas de las cuales el Gestor no tiene.
 - **Corte Suprema de Justicia** — providencias de las salas de Tutelas, Civil, Laboral y Penal, cada una con las normas que cita.
-- **Consejo de Estado** — providencias tituladas de lo contencioso administrativo, con el problema jurídico que la Sala se planteó y su respuesta. Con esta se completan las tres altas cortes.
+- **Consejo de Estado** — providencias tituladas de lo contencioso administrativo, con el problema jurídico que la Sala se planteó, su respuesta y el texto completo. Con esta se completan las tres altas cortes, y las tres entregan texto.
 - **Normograma de la DIAN** — normativa tributaria, aduanera y cambiaria.
 
 Es un servidor MCP estándar que se comunica por **stdio**, así que sirve en Claude Desktop, Claude Code, Cursor, VS Code, Windsurf, Zed, Continue, LM Studio, agentes propios hechos con los SDK de MCP y cualquier cliente que aparezca después.
@@ -117,15 +117,15 @@ Después se apunta el cliente a `node /ruta/absoluta/a/Normativa-colombiana-MCP/
 
 ### Qué recibe el cliente
 
-Al conectarse, el servidor entrega **16 herramientas**, **4 prompts** y sus **propias instrucciones de uso**: a qué tipo de pregunta corresponde cada herramienta, que debe citarse siempre la fuente y que nunca debe afirmarse por cuenta propia que una norma está vigente. Los clientes que respetan el campo `instructions` del protocolo lo aprovechan sin configurar nada.
+Al conectarse, el servidor entrega **25 herramientas**, **4 prompts** y sus **propias instrucciones de uso**: a qué tipo de pregunta corresponde cada herramienta, que debe citarse siempre la fuente y que nunca debe afirmarse por cuenta propia que una norma está vigente. Los clientes que respetan el campo `instructions` del protocolo lo aprovechan sin configurar nada.
 
 | Fuente | Herramientas |
 | --- | --- |
 | Cualquiera (punto de entrada) | `resolver_cita` — cita exacta → norma o sentencia, con su vigencia si consta |
 | Gestor Normativo | `buscar_normas`, `buscar_por_tema`, `obtener_norma`, `listar_catalogos`, `listar_subtemas`, `explicar_relacion_tema`, `buscar_conceptos_fp`, `listar_normas_fp` |
 | Corte Constitucional | `buscar_jurisprudencia`, `obtener_sentencia` |
-| Corte Suprema | `buscar_jurisprudencia_suprema` |
-| Consejo de Estado | `buscar_jurisprudencia_consejo_estado` |
+| Corte Suprema | `buscar_jurisprudencia_suprema`, `obtener_providencia_suprema` |
+| Consejo de Estado | `buscar_jurisprudencia_consejo_estado`, `obtener_providencia_consejo_estado` |
 | SUIN-Juriscol | `buscar_en_suin` |
 | DIAN | `buscar_normativa_tributaria`, `obtener_documento_dian` |
 
@@ -169,7 +169,9 @@ Y la regla de fondo no cambia: **verifica en el enlace antes de actuar.**
 
 **Cobertura de la búsqueda tributaria.** La primera consulta de cada término a la DIAN tarda unos 20 segundos: su portal devuelve el resultado completo y no admite límite. Las páginas siguientes del mismo término son instantáneas, así que conviene paginar en lugar de repetir búsquedas.
 
-**Las providencias de la Corte Suprema no traen texto.** Se publican como `.docx` y esta extensión no lee ese formato: se entregan la referencia, el ponente, la fecha y las normas que cita cada una, que sí se pueden resolver con `resolver_cita`.
+**El enlace del Consejo de Estado caduca; el radicado no.** `buscar_jurisprudencia_consejo_estado` entrega, junto a cada providencia, un token firmado que emite el propio buscador y con el que `obtener_providencia_consejo_estado` saca el texto del PDF. Ese token **vive una hora**: sirve para leer, no para citar. Para citar se usa el radicado. Si caducó, se repite la búsqueda y sale uno nuevo.
+
+**El texto de la Corte Suprema se pide con su ruta y su sala.** `buscar_jurisprudencia_suprema` devuelve la referencia, el ponente, la fecha y las normas citadas; `obtener_providencia_suprema` devuelve el texto completo, pero exige la MISMA sala con la que apareció la providencia: el backend la busca dentro de esa sala y desde otra no la encuentra.
 
 ## Para desarrolladores
 

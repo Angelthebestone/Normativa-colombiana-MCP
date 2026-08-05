@@ -150,10 +150,10 @@ Qué herramienta usar:
 - Sentencias y autos → buscar_jurisprudencia (Corte Constitucional, al día). El Gestor casi no tiene jurisprudencia reciente.
 - Normativa que el Gestor no tiene, o exploración por materia/sector del corpus histórico (desde 1844) → buscar_en_suin. NUNCA la uses para saber si algo está vigente: su campo de vigencia es del índice de búsqueda y contradice la ficha. La vigencia sale de resolver_cita.
 - Impuestos, aduanas o cambios (retención, IVA, renta, importación) → buscar_normativa_tributaria y obtener_documento_dian. Ninguna otra herramienta cubre esa materia.
-- Jurisprudencia de la Corte SUPREMA (casación civil, laboral, penal y sus tutelas) → buscar_jurisprudencia_suprema. Es un tribunal DISTINTO de la Corte Constitucional: no las mezcles. Exige indicar sala, y cada resultado trae las normas que cita, que puedes resolver con resolver_cita.
+- Jurisprudencia de la Corte SUPREMA (casación civil, laboral, penal y sus tutelas) → buscar_jurisprudencia_suprema, y obtener_providencia_suprema para el texto completo con la ruta y la sala de esa misma búsqueda. Es un tribunal DISTINTO de la Corte Constitucional: no las mezcles. Exige indicar sala, y cada resultado trae las normas que cita, que puedes resolver con resolver_cita.
 - Qué le pasó a una norma o a un artículo (quién lo modificó, adicionó o derogó) → obtener_norma con historial=true. Devuelve las notas literales del portal, sin ordenarlas ni deducir cuál rige hoy.
 - El fallo de una sentencia, sin leerla entera → obtener_sentencia con seccion="decision": trae el RESUELVE. La T-099/24 pasa de 140.162 a 39.906 caracteres.
-- Jurisprudencia del CONSEJO DE ESTADO (contencioso administrativo: nulidad y restablecimiento, contratación estatal, nulidad electoral, reparación directa) → buscar_jurisprudencia_consejo_estado. Tercer tribunal distinto de los otros dos; cada resultado trae el problema jurídico y su respuesta.
+- Jurisprudencia del CONSEJO DE ESTADO (contencioso administrativo: nulidad y restablecimiento, contratación estatal, nulidad electoral, reparación directa) → buscar_jurisprudencia_consejo_estado, y obtener_providencia_consejo_estado con el token de esa búsqueda para el texto completo. Tercer tribunal distinto de los otros dos; cada resultado trae el problema jurídico y su respuesta. El token caduca en una hora: para CITAR usa el radicado, nunca el enlace con token.
 - Por qué una norma aplica a un tema → explicar_relacion_tema con el temsubid ("ts-…") y el normid de la MISMA fila de buscar_por_tema.
 - Antes de decirle a alguien que una norma "no existe", o para saber si el índice de vigencia sigue fresco → describir_fuentes. Declara qué cubre cada fuente y qué NO, sin consultar la red.
 - Energía, gas, tarifas o conexión → buscar_resoluciones_creg (y obtener_resolucion_creg para el texto). Hidrocarburos, regalías o contratos E&P → buscar_normativa_anh. Planeación minero energética → buscar_normativa_upme. Qué normas aplican a un tema ambiental → listar_normativa_ambiental_anla, y resuelve cada cita con resolver_cita.
@@ -940,8 +940,8 @@ server.registerTool(
     description:
       'Busca providencias de la Corte Suprema por sala: Tutelas, Civil, Laboral o Penal, desde 1991. Complementa a ' +
       'buscar_jurisprudencia, que es de la Corte CONSTITUCIONAL: son tribunales distintos. Cada resultado trae las ' +
-      'NORMAS QUE CITA, que puedes resolver después con resolver_cita. No devuelve el texto: las providencias son ' +
-      'archivos .docx y esta extensión no los lee, pero sí el número con el que se pide en el portal. ' +
+      'NORMAS QUE CITA, que puedes resolver después con resolver_cita, y una RUTA con la que obtener_providencia_suprema ' +
+      'devuelve el texto completo. ' +
       'CÓMO BUSCA: sobre el texto completo de la providencia y sin descartar palabras comunes, así que "de" solo ' +
       'devuelve 69.454 resultados. Por eso busca la FRASE EXACTA por defecto; usa términos distintivos.',
     inputSchema: {
@@ -1020,15 +1020,65 @@ server.registerTool(
               (p.magistrado ? `  Ponente: ${p.magistrado}\n` : '') +
               (p.normasCitadas.length
                 ? `  Normas citadas (resolubles con resolver_cita): ${p.normasCitadas.slice(0, 8).join(' · ')}` +
-                  (p.normasCitadas.length > 8 ? ` … y ${p.normasCitadas.length - 8} más` : '')
-                : '  (no declara normas citadas)'),
+                  (p.normasCitadas.length > 8 ? ` … y ${p.normasCitadas.length - 8} más` : '') +
+                  '\n'
+                : '  (no declara normas citadas)\n') +
+              `  Texto completo: obtener_providencia_suprema con sala="${sala}" y ruta="${p.ruta}"`,
           )
           .join('\n') +
-        (fin < r.total ? `\n\nQuedan ${r.total - fin}: repite con desde=${fin}.` : '') +
-        `\n\nEl texto completo no se puede entregar aquí: la Corte Suprema publica las providencias en .docx y esta ` +
-        `extensión no lee ese formato. Lo que sí se puede pegar en https://cortesuprema.gov.co/consulta-providencias/ ` +
-        `es el número de cada una, tal cual:\n` +
-        r.items.map((p) => `  ${p.titulo}`).join('\n'),
+        (fin < r.total ? `\n\nQuedan ${r.total - fin}: repite con desde=${fin}.` : ''),
+    )
+  },
+)
+
+server.registerTool(
+  'obtener_providencia_suprema',
+  {
+    title: 'Obtener el texto de una providencia de la Corte Suprema',
+    description:
+      'Texto completo de una providencia de la Corte Suprema por su RUTA (la que devuelve ' +
+      'buscar_jurisprudencia_suprema) y su SALA. Hay que dar la misma sala con la que se encontró: el backend ' +
+      'busca el documento dentro de esa sala y en otra no lo halla. Nunca devuelve el documento entero de golpe ' +
+      '(una casación laboral ronda los 47.000 caracteres): usa buscar_en_texto o desde/limite_caracteres, igual ' +
+      'que en obtener_norma y obtener_sentencia.',
+    inputSchema: {
+      ruta: z
+        .string()
+        .describe('Ruta que devuelve buscar_jurisprudencia_suprema, tal cual, empezando por "/var/www/html/Index/…"'),
+      sala: z.enum(suprema.SALAS).describe('La MISMA sala con la que se encontró la providencia'),
+      buscar_en_texto: z.string().optional().describe('Devuelve solo los fragmentos que mencionan este término'),
+      desde: z.coerce.number().int().min(0).default(0),
+      max_pasajes: z.coerce.number().int().positive().optional(),
+      limite_caracteres: z.coerce.number().int().positive().default(8000).describe('Tope del TEXTO devuelto; se ajusta al rango 200–40.000'),
+    },
+  },
+  async ({ ruta, sala, buscar_en_texto, desde, max_pasajes, limite_caracteres }) => {
+    const tope = Math.min(Math.max(limite_caracteres, 200), 40_000)
+    const p = await suprema.obtenerTexto(ruta, sala)
+    if (!p) {
+      return vacio(
+        `una providencia en la ruta "${ruta}" dentro de la sala ${sala}`,
+        `Comprueba que la ruta salga de buscar_jurisprudencia_suprema y que la sala sea la misma con la que ` +
+          `apareció: el mismo documento no se encuentra desde otra sala.`,
+      )
+    }
+    const cab = `Corte Suprema de Justicia, sala ${sala}\nRuta: ${ruta}`
+
+    if (buscar_en_texto) {
+      const f = fragmentos(p.texto, buscar_en_texto, 400, max_pasajes ?? 10, tope)
+      if (!f.total) {
+        return txt(`El término "${buscar_en_texto}" no aparece en esta providencia (${p.texto.length} caracteres revisados).\n${cab}`)
+      }
+      return txt(
+        `${cab}\n${f.total} aparición(es) de "${buscar_en_texto}" en ${f.pasajes} pasaje(s); se muestran ${f.mostrados}.\n` +
+          `${advertenciasVigencia(f.trozos.join(' ')).join('\n')}\n\n${f.trozos.join('\n\n---\n\n')}`,
+      )
+    }
+    const t = trocear(p.texto, desde, tope)
+    return txt(
+      `${cab}\nTexto total: ${t.total} caracteres; se muestran ${t.texto.length} desde ${t.desde}` +
+        (t.omitido > 0 ? `; quedan ${t.omitido} (usa desde/limite_caracteres o buscar_en_texto).` : '.') +
+        `\n${advertenciasVigencia(t.texto).join('\n')}\n\n--- Texto ---\n${t.texto}`,
     )
   },
 )
@@ -1103,6 +1153,11 @@ server.registerTool(
               p.ponente ? `  Ponente: ${p.ponente}` : '',
               p.actor || p.demandado ? `  ${p.actor} contra ${p.demandado || '(sin demandado)'}` : '',
               `  Ficha del proceso: ${p.url}`,
+              // La ficha pide una verificación anti-robot; este enlace, que emite
+              // el propio buscador, abre la providencia sin pedir nada. Se dan los
+              // dos porque el primero es el citable y el segundo el que se lee.
+              p.token ? `  Leerla: ${consejo.enlaceProvidencia(p.token)}` : '',
+              p.token ? `  Texto completo: obtener_providencia_consejo_estado con token="${p.token}"` : '',
             ].filter(Boolean)
             const tesis = p.titulaciones.map(
               (t) =>
@@ -1121,9 +1176,63 @@ server.registerTool(
           : `\n\nUNA PROVIDENCIA PUEDE REPETIRSE ENTRE PÁGINAS: SAMAI pagina por problema jurídico, no por caso, ` +
             `así que un radicado con varias tesis puede reaparecer en la página siguiente. Aquí se marcan las que ` +
             `ya salieron mientras se pagine la MISMA búsqueda; en esta página no hay ninguna.`) +
-        `\n\nEl texto completo de la providencia no se entrega aquí. Cada ficha de proceso enlaza arriba; para ` +
-        `buscarla a mano, el número que se pega en ${consejo.BUSCADOR} es el radicado: ` +
+        `\n\nLOS TOKENS CADUCAN EN UNA HORA: sirven para leer, no para citar. Para citar usa el radicado, que es ` +
+        `lo que se pega en ${consejo.BUSCADOR}: ` +
         r.items.map((p) => p.radicado).join(' · '),
+    )
+  },
+)
+
+server.registerTool(
+  'obtener_providencia_consejo_estado',
+  {
+    title: 'Obtener el texto de una providencia del Consejo de Estado',
+    description:
+      'Texto completo de una providencia del Consejo de Estado, por el TOKEN que devuelve ' +
+      'buscar_jurisprudencia_consejo_estado. El token caduca en una hora: si expiró, repite la búsqueda y usa el ' +
+      'nuevo. Nunca devuelve el documento entero de golpe (una sentencia de la Sección Tercera ronda los 100.000 ' +
+      'caracteres): usa buscar_en_texto o desde/limite_caracteres, igual que en obtener_norma.',
+    inputSchema: {
+      token: z.string().describe('El token que acompaña a cada providencia en buscar_jurisprudencia_consejo_estado'),
+      buscar_en_texto: z.string().optional().describe('Devuelve solo los fragmentos que mencionan este término'),
+      desde: z.coerce.number().int().min(0).default(0),
+      max_pasajes: z.coerce.number().int().positive().optional(),
+      limite_caracteres: z.coerce.number().int().positive().default(8000).describe('Tope del TEXTO devuelto; se ajusta al rango 200–40.000'),
+    },
+  },
+  async ({ token, buscar_en_texto, desde, max_pasajes, limite_caracteres }) => {
+    const tope = Math.min(Math.max(limite_caracteres, 200), 40_000)
+    const p = await consejo.obtenerTexto(token)
+    if (!p) {
+      return vacio(
+        'una providencia para ese token',
+        'Los tokens caducan en una hora. Repite buscar_jurisprudencia_consejo_estado y usa el que venga ahora.',
+      )
+    }
+    const cab = `Consejo de Estado${p.fichero ? ` — ${p.fichero}` : ''}\nVisor: ${p.urlVisor}`
+    // Un documento que no es PDF no es un documento vacío: el visor lo abre igual.
+    if (!p.texto) {
+      return txt(
+        `${cab}\n\nEsta actuación no se sirve como PDF (viene comprimida o en otro formato), así que aquí no hay ` +
+          `texto que extraer. Ábrela en el visor de arriba. Que no haya texto NO dice nada sobre su contenido.`,
+      )
+    }
+
+    if (buscar_en_texto) {
+      const f = fragmentos(p.texto, buscar_en_texto, 400, max_pasajes ?? 10, tope)
+      if (!f.total) {
+        return txt(`El término "${buscar_en_texto}" no aparece en esta providencia (${p.texto.length} caracteres revisados).\n${cab}`)
+      }
+      return txt(
+        `${cab}\n${f.total} aparición(es) de "${buscar_en_texto}" en ${f.pasajes} pasaje(s); se muestran ${f.mostrados}.\n` +
+          `${advertenciasVigencia(f.trozos.join(' ')).join('\n')}\n\n${f.trozos.join('\n\n---\n\n')}`,
+      )
+    }
+    const t = trocear(p.texto, desde, tope)
+    return txt(
+      `${cab}\n${p.paginas} página(s). Texto total: ${t.total} caracteres; se muestran ${t.texto.length} desde ${t.desde}` +
+        (t.omitido > 0 ? `; quedan ${t.omitido} (usa desde/limite_caracteres o buscar_en_texto).` : '.') +
+        `\n${advertenciasVigencia(t.texto).join('\n')}\n\n--- Texto ---\n${t.texto}`,
     )
   },
 )
@@ -1702,10 +1811,12 @@ server.registerTool(
         `conceptos. Es el corpus principal. NO publica estado de vigencia, y su buscador por palabras solo indexa los ` +
         `resúmenes temáticos, no el articulado: para buscar dentro de una norma, obtener_norma con buscar_en_texto.`],
       ['corte-constitucional', `- Corte Constitucional — relatoría al día, sentencias y autos con texto completo.`],
-      ['corte-suprema', `- Corte Suprema de Justicia — cuatro salas (Tutelas, Civil, Laboral, Penal) desde 1991. Entrega la referencia y ` +
-        `las normas citadas, NO el texto: la Corte publica en .docx y esta extensión no lee ese formato.`],
-      ['consejo-de-estado', `- Consejo de Estado (SAMAI) — providencias tituladas de lo contencioso administrativo, con el problema jurídico ` +
-        `y su respuesta. Tampoco entrega el texto completo; sí el enlace a la ficha del proceso.`],
+      ['corte-suprema', `- Corte Suprema de Justicia — cuatro salas (Tutelas, Civil, Laboral, Penal) desde 1991. Entrega la referencia, ` +
+        `las normas citadas y el TEXTO COMPLETO con obtener_providencia_suprema, que necesita la ruta y la misma sala ` +
+        `de la búsqueda.`],
+      ['consejo-de-estado', `- Consejo de Estado (SAMAI) — providencias tituladas de lo contencioso administrativo, con el problema jurídico, ` +
+        `su respuesta y el TEXTO COMPLETO con obtener_providencia_consejo_estado. El texto sale del PDF que publica ` +
+        `el buscador; su token caduca en una hora, así que para citar se usa el radicado, no el enlace.`],
       ['dian', `- DIAN — normograma tributario, aduanero y cambiario. Ninguna otra herramienta cubre esa materia.`],
       ['suin', `- SUIN-Juriscol (MinJusticia) — corpus histórico desde 1844 y, sobre todo, la ÚNICA fuente que publica el ` +
         `estado de vigencia como dato.`],

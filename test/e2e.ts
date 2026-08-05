@@ -100,9 +100,9 @@ after(() => c?.cerrar())
 
 // --- contrato que ve el cliente -----------------------------------------
 
-test('las 23 herramientas se declaran con esquemas utilizables', CONTRATO, async () => {
+test('las 25 herramientas se declaran con esquemas utilizables', CONTRATO, async () => {
   const { tools } = await c.peticion('tools/list')
-  assert.equal(tools.length, 23, tools.map((t: any) => t.name).join(', '))
+  assert.equal(tools.length, 25, tools.map((t: any) => t.name).join(', '))
 
   const sinTipo: string[] = []
   for (const t of tools) {
@@ -501,6 +501,47 @@ test('la Corte Suprema amplía la búsqueda en vez de decir que no hay nada', LE
     // Si hubo frase exacta, no puede anunciarse como ampliada.
     assert.doesNotMatch(r.texto, /AMPLIADA/)
   }
+})
+
+test('la búsqueda de la Corte Suprema entrega la ruta con la que se pide el texto', LENTO, async () => {
+  // La búsqueda y el texto son dos herramientas, y la segunda solo sirve si la
+  // primera entrega la ruta Y la sala. Antes la respuesta terminaba diciendo que
+  // el texto no se podía dar: si eso vuelve, esta prueba lo caza.
+  const b = await c.tool('buscar_jurisprudencia_suprema', { texto: 'despido sin justa causa', sala: 'Laboral', limite: 3 })
+  assert.equal(b.esError, false)
+  assert.doesNotMatch(b.texto, /no se puede entregar|no lee ese formato/, 'ya no es cierto que no haya texto')
+  const ruta = b.texto.match(/ruta="([^"]+)"/)?.[1]
+  assert.ok(ruta, 'la búsqueda debe decir con qué ruta pedir el texto')
+
+  const t = await c.tool('obtener_providencia_suprema', { ruta, sala: 'Laboral', limite_caracteres: 1200 })
+  assert.equal(t.esError, false)
+  assert.match(t.texto, /Texto total: \d[\d.,]* caracteres/, 'debe declarar cuánto mide y cuánto muestra')
+
+  // El troceo tiene que respetarse: devolver la providencia entera revienta el
+  // contexto, y es justo lo que hace obtener_norma en las demás fuentes.
+  const cuerpo = t.texto.split('--- Texto ---')[1] ?? ''
+  assert.ok(cuerpo.length <= 1400, `el tope de caracteres no se respetó: ${cuerpo.length}`)
+
+  const f = await c.tool('obtener_providencia_suprema', { ruta, sala: 'Laboral', buscar_en_texto: 'casación' })
+  assert.equal(f.esError, false)
+  assert.match(f.texto, /aparici[óo]n\(es\) de "casación"|no aparece en esta providencia/)
+})
+
+test('el Consejo de Estado ya no dice que no puede dar el texto', LENTO, async () => {
+  const b = await c.tool('buscar_jurisprudencia_consejo_estado', { texto: 'liquidación del contrato estatal', limite: 3 })
+  assert.equal(b.esError, false)
+  assert.doesNotMatch(b.texto, /texto completo de la providencia no se entrega/i, 'ya no es cierto')
+  // El token caduca en una hora: la respuesta tiene que decirlo, o se citará.
+  assert.match(b.texto, /CADUCAN EN UNA HORA/, 'un token caduco citado como fuente es una cita rota')
+  const token = b.texto.match(/token="([^"]+)"/)?.[1]
+  assert.ok(token, 'la búsqueda debe entregar el token con el que pedir el texto')
+
+  const t = await c.tool('obtener_providencia_consejo_estado', { token, limite_caracteres: 1000 })
+  assert.equal(t.esError, false, `obtener_providencia_consejo_estado falló: ${t.texto.slice(0, 200)}`)
+  if (/no se sirve como PDF/.test(t.texto)) return // legítimo: hay actuaciones comprimidas
+  assert.match(t.texto, /Texto total: \d[\d.,]* caracteres/)
+  const cuerpo = t.texto.split('--- Texto ---')[1] ?? ''
+  assert.ok(cuerpo.length <= 1200, `el tope de caracteres no se respetó: ${cuerpo.length}`)
 })
 
 test('el buscador sectorial nunca responde sin decir qué no cubre', LENTO, async () => {

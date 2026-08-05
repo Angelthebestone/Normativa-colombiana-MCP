@@ -221,6 +221,22 @@ export async function pedir(
 }
 
 /**
+ * Los mismos bytes, sin decodificar. Existe para los PDF: pasarlos por
+ * `decodificar` los destruye —es texto lo que espera— y bajarlos con un `fetch`
+ * suelto se salta el ritmo por dominio, los reintentos y la cadena de
+ * certificados que este módulo aporta.
+ */
+export async function pedirBytes(
+  url: string,
+  timeout = 90_000,
+  accept = 'application/pdf,*/*',
+): Promise<{ status: number; datos: Buffer; contentType: string }> {
+  const host = new URL(url).host
+  const r = await enCola(host, () => crudo(url, timeout, accept, {}))
+  return { status: r.status, datos: r.datos, contentType: r.contentType }
+}
+
+/**
  * POST de JSON y respuesta JSON, para las fuentes que hablan GraphQL. Comparte
  * el ritmo, la serialización por dominio y la cadena TLS de `pedir`.
  */

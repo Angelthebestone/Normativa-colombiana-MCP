@@ -72,9 +72,17 @@ const LINEA_BASURA =
  * ponytail: heurística acotada a las primeras 80 líneas y solo mientras las
  * líneas sean cortas; si aparece un documento que empiece con muchas líneas
  * cortas legítimas, hay que acotar por selector en vez de por contenido.
+ *
+ * Ese documento apareció: las providencias de la Corte Suprema abren con siete
+ * líneas cortas —"CORTE SUPREMA DE JUSTICIA", "Radicación n.° 46498", el
+ * ponente, "SL3772-2018"— y se descartaban enteras, con el radicado dentro, que
+ * es la clave con la que se cita. Se resolvió por donde estaba previsto, con
+ * INICIO_REAL: basta que la PRIMERA línea sea un comienzo reconocible para que
+ * no se descarte nada. El preámbulo de Word nunca empieza por CORTE, SALA ni
+ * RADICACIÓN: son "Clean", "false", "mso-…" o cifras sueltas.
  */
 const INICIO_REAL =
-  /^(LEY|DECRETO|RESOLUCI[ÓO]N|CIRCULAR|ACUERDO|SENTENCIA|CONCEPTO|AUTO|DIRECTIVA|CONSTITUCI[ÓO]N|ACTO|ART[ÍI]CULO|EL |LA |LOS |POR |REP[ÚU]BLICA|MINISTERIO|DEPARTAMENTO)/i
+  /^(LEY|DECRETO|RESOLUCI[ÓO]N|CIRCULAR|ACUERDO|SENTENCIA|CONCEPTO|AUTO|DIRECTIVA|CONSTITUCI[ÓO]N|ACTO|ART[ÍI]CULO|CORTE|SALA|RADICACI[ÓO]N|EL |LA |LOS |POR |REP[ÚU]BLICA|MINISTERIO|DEPARTAMENTO)/i
 
 function quitarPreambuloWord(lineas: string[]): string[] {
   let i = 0
