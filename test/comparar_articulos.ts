@@ -27,7 +27,7 @@ test('textos iguales devuelven el aviso de igualdad', () => {
 
 test('el cierre aclara que la clasificación no es semántica', () => {
   const salida = formatear({ anadidos: ['una línea'], eliminados: [] }, A, B)
-  assert.match(salida, /no es un análisis semántico/)
+  assert.match(salida, /sin modelo semántico/)
 })
 
 test('se citan los enlaces de ambas normas', () => {

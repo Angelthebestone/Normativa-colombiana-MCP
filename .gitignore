@@ -8,6 +8,8 @@ CHECKSUMS.txt
 
 # Notas de trabajo, no documentación del proyecto.
 PLAN.md
+IDEAS_V2_ADICIONALES.md
+GOAL.md
 
 # datos/ SÍ se versiona: es lo que npm empaqueta, y sin ello un clon limpio no
 # pasa las pruebas (se comprobó: dos e2e fallan). Además el índice de SUIN
@@ -16,3 +18,5 @@ PLAN.md
 
 # Configuración local de command-code
 .commandcode/
+.claude/
+openspec/

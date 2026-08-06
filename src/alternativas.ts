@@ -24,26 +24,34 @@ export const TESAURO: Record<string, string[]> = {
  * primer sinónimo del tesauro. Cada variante usada se declara en
  * variantesUsadas; nunca se ejecuta una búsqueda alternativa en silencio.
  */
-export async function conAlternativas<T>(
-  buscar: (termino: string) => Promise<T[]>,
+export async function conAlternativas<T, R = T[]>(
+  buscar: (termino: string) => Promise<T[] | R>,
   termino: string,
   umbral: number,
-): Promise<{ items: T[]; variantesUsadas: string[] }> {
+  /** Devuelve los "items" (para medir el umbral) desde un resultado compuesto. */
+  itemsDe?: (r: R) => T[],
+): Promise<{ items: T[]; variantesUsadas: string[]; resultado?: R }> {
   const variantes: string[] = [termino]
   const sinTildesTermino = sinTildes(termino)
   if (sinTildesTermino !== termino) variantes.push(sinTildesTermino)
   const sinonimo = TESAURO[sinTildesTermino.toLowerCase()]?.[0]
   if (sinonimo && !variantes.includes(sinonimo)) variantes.push(sinonimo)
 
+  const aItems = (r: T[] | R): T[] => (itemsDe && r instanceof Object && 'items' in (r as object) ? itemsDe(r as R) : (r as T[]))
   let mejores: T[] = []
   let conQue = termino
+  let mejorResultado: R | undefined
   for (const v of variantes) {
     const r = await buscar(v)
-    if (r.length >= umbral) return { items: r, variantesUsadas: v === termino ? [] : [v] }
-    if (r.length > mejores.length) {
-      mejores = r
+    const its = aItems(r)
+    if (its.length >= umbral) return { items: its, variantesUsadas: v === termino ? [] : [v], resultado: r as R }
+    // La primera variante (la original) puede traer metadatos útiles —como el
+    // `nucleo` que la relatoría usó— incluso cuando rinde 0. Se conservan.
+    if (v === termino || its.length > mejores.length) {
+      mejores = its
       conQue = v
+      mejorResultado = r as R
     }
   }
-  return { items: mejores, variantesUsadas: conQue === termino ? [] : [conQue] }
+  return { items: mejores, variantesUsadas: conQue === termino ? [] : [conQue], ...(mejorResultado !== undefined ? { resultado: mejorResultado } : {}) }
 }

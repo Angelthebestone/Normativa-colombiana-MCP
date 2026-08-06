@@ -157,7 +157,7 @@ Sobre la capa común de metadatos, evidencia y normalización:
 - **`validar_cita`** comprueba que una cita y su enlace son de verdad: número/año contra el título, dominio del enlace, id de la norma y existencia del artículo. Clasifica en "validada", "parcialmente validada" o "no fue posible validar"; nunca afirma vigencia.
 - **`analizar_conflicto`** reúne EVIDENCIA de un posible conflicto entre dos normas (identificación, vigencia según SUIN si consta, jerarquía, reformas anotadas, pasajes sobre un tema). **No detecta contradicciones semánticas** y el resultado es un conflicto POTENCIAL, no una conclusión jurídica.
 - **`cambios_desde`** resume los cambios (modificación, derogación, adición) que el Gestor anota sobre **las normas que se le listan**, filtrados por el año de la norma modificadora. **No rastrea novedades** por su cuenta.
-- **`comparar_articulos`** compara el texto de un artículo entre dos normas, marca lo añadido/eliminado y clasifica cada diferencia por patrones (plazo, sanción, excepción, sujeto obligado); lo no clasificado se marca "revisar manualmente". La clasificación es por patrones, no semántica.
+- **`comparar_articulos`** compara el texto de un artículo entre dos normas, marca lo añadido/eliminado, clasifica cada diferencia por patrones (plazo, sanción, excepción, sujeto obligado) y agrupa los cambios editoriales por similitud léxica (Dice sobre bigramas ≥0,92): «una línea» → «una sola línea» sale como cambio menor, no como añadido+eliminado. Lo no clasificado se marca "revisar manualmente". Sin modelo semántico.
 - **`consultar_perfil`** ejecuta una consulta con las fuentes y filtros preconfigurados de un perfil: `laboral`, `tributario`, `ambiental`, `contratacion_estatal`, `energia`. Cada perfil declara su advertencia en la respuesta.
 - **Expedientes temporales**: `expediente_crear`, `expediente_agregar` y `expediente_leer` agrupan consultas, citas y observaciones de una investigación **en memoria** (expiran en 6 h, se pierden al reiniciar). **Desactivados por defecto**: se activan con la variable de entorno `EXPEDIENTES=1`.
 
@@ -193,6 +193,8 @@ Y la regla de fondo no cambia: **verifica en el enlace antes de actuar.**
 **El enlace del Consejo de Estado caduca; el radicado no.** `buscar_jurisprudencia_consejo_estado` entrega, junto a cada providencia, un token firmado que emite el propio buscador y con el que `obtener_providencia_consejo_estado` saca el texto del PDF. Ese token **vive una hora**: sirve para leer, no para citar. Para citar se usa el radicado. Si caducó, se repite la búsqueda y sale uno nuevo.
 
 **El texto de la Corte Suprema se pide con su ruta y su sala.** `buscar_jurisprudencia_suprema` devuelve la referencia, el ponente, la fecha y las normas citadas; `obtener_providencia_suprema` devuelve el texto completo, pero exige la MISMA sala con la que apareció la providencia: el backend la busca dentro de esa sala y desde otra no la encuentra.
+
+**La relatoría no indexa frases largas.** `buscar_jurisprudencia` con varias palabras («mora querella policiva») hace que el buscador de la Corte responda con un aviso de «búsquedas flexibles» y 0 resultados. El servidor lo detecta, reintenta con la palabra más distintiva del término («querella») y lo anuncia en la respuesta: «La relatoría no indexa la frase completa; se buscó con el núcleo «X»». Verifica la pertinencia del resultado contra lo que buscabas.
 
 ## Para desarrolladores
 

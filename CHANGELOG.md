@@ -3,6 +3,22 @@
 Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/).
 Este proyecto sigue [versionado semántico](https://semver.org/lang/es/).
 
+## [1.10.1] — 2026-08-06
+
+**La relatoría dejó de mentir sobre las búsquedas de varias palabras, y `comparar_articulos` distingue cambios editoriales.** Doce búsquedas en `buscar_jurisprudencia` fallaban con el mismo error («la API devolvió algo que no es JSON»); ninguna otra herramienta fallaba.
+
+### Corregido
+
+- **`buscar_jurisprudencia` fallaba con frases de varias palabras.** El backend de la relatoría (`buscador_new/`) antepone un **aviso HTML** («No fue posible ejecutar búsquedas flexibles») a la respuesta JSON cuando una consulta con varias palabras no halla coincidencias —y devuelve 0 hits—. Ese HTML rompía el `JSON.parse` y se reportaba como «la API devolvió algo que no es JSON… pudo haber cambiado». No era un cambio de API: era el canario de «0 resultados» que el propio servidor pone.
+  - El JSON ahora se **extrae del cuerpo** aunque el aviso vaya delante (busca `{`/`[` y su cierre), y el aviso se detecta sin depender de tildes (esbuild escapa la «ú» en el bundle y el texto real la trae literal, así que comparar la forma acentuada fallaba según dónde se ejecutara).
+  - Si el aviso está, la consulta **reintenta con una sola palabra** del término —la más distintiva, medida por frecuencia en la relatoría— y devuelve resultados reales en vez de vacío o error. «mora querella policiva» se busca como «querella» (987 providencias), no como «mora» (6.554, casi todas ajenas). La palabra usada se **anuncia en la respuesta**: «La relatoría no indexa la frase completa; se buscó con el núcleo «X»».
+  - La pertinencia (el marcador «⚠ no menciona el término») se mide contra el núcleo realmente usado, no contra la frase completa que nadie buscó como tal.
+  - El error «no es JSON» ya no se tira para este caso: el vacío legítimo (0 real) se informa como texto, no como fallo de herramienta.
+
+### Añadido
+
+- **`comparar_articulos` detecta cambios editoriales.** Dos diferencias que eran el mismo cambio reescrito (ortografía, puntuación, orden de palabras) se agrupan como «EDITORIAL — «X» → «Y» (sim. N, cambio menor)» usando **similitud léxica de Dice sobre bigramas (≥0,92)**, sin modelo semántico: «multa» → «sanción pecuniaria» no se detecta y queda en «no clasificado» para revisión manual. El cierre lo dice con todas las letras.
+
 ## [1.10.0] — 2026-08-06
 
 **Nueve herramientas V2, un prompt nuevo y una capa común de metadatos, evidencia y normalización.** Se implementan las ideas de `IDEAS_V2_ADICIONALES.md` con subagentes en paralelo, y un agente de QA probó ~130 llamadas reales contra los portales antes de publicar.
