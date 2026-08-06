@@ -51,6 +51,16 @@ export type Adaptador = {
   /** Sector económico al que sirve, en las palabras que usaría quien pregunta. */
   sector: string
   portal: string
+  /** URL base https del portal que publica los actos; el dominio al que apuntan sus enlaces. */
+  dominioPermitido: string
+  /** Tipos de acto que publica esta fuente, como los nombra su propio portal. */
+  tiposDocumento: string[]
+  /** true si el texto del acto se puede leer aquí; las que publican PDF valen false. */
+  soportaTexto: boolean
+  /** true si el portal publica una señal de vigencia comprobable. */
+  soportaVigencia: boolean
+  /** Nombre del test de test/smoke.ts que cubre esta fuente. */
+  pruebasMinimas: string
   /**
    * Qué NO cubre esta fuente o qué induce a error en ella. Se emite SIEMPRE, no
    * solo cuando hay resultados: es lo que evita que un vacío se lea como
@@ -63,8 +73,33 @@ export type Adaptador = {
 /** Se rellena en `registrar()`; el orden de este mapa es el que ve quien consulta. */
 const REGISTRO = new Map<string, Adaptador>()
 
+/** El contrato se exige en runtime, no solo en tipos: un alta sin metadatos no puede entrar. */
+function validar(a: Adaptador): void {
+  let dominio: URL
+  try {
+    dominio = new URL(a.dominioPermitido)
+  } catch {
+    throw new Error(`El adaptador "${a.id}" declara un dominioPermitido inválido: "${a.dominioPermitido}".`)
+  }
+  if (dominio.protocol !== 'https:') {
+    throw new Error(`El adaptador "${a.id}" declara un dominioPermitido que no es https: "${a.dominioPermitido}".`)
+  }
+  if (!a.tiposDocumento.length) {
+    throw new Error(`El adaptador "${a.id}" no declara ningún tipoDocumento.`)
+  }
+  if (typeof a.soportaTexto !== 'boolean' || typeof a.soportaVigencia !== 'boolean') {
+    throw new Error(`El adaptador "${a.id}" debe declarar soportaTexto y soportaVigencia.`)
+  }
+  if (!a.pruebasMinimas.trim()) {
+    throw new Error(`El adaptador "${a.id}" no declara su prueba mínima (pruebasMinimas).`)
+  }
+}
+
 export function registrar(...adaptadores: Adaptador[]): void {
-  for (const a of adaptadores) REGISTRO.set(a.id, a)
+  for (const a of adaptadores) {
+    validar(a) // antes de insertar: un alta fallida no contamina el mapa
+    REGISTRO.set(a.id, a)
+  }
 }
 
 export const adaptadores = (): Adaptador[] => [...REGISTRO.values()]

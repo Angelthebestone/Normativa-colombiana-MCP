@@ -105,6 +105,11 @@ export default {
   nombre: 'Parques Nacionales Naturales de Colombia',
   sector: 'ambiente y áreas protegidas',
   portal: BASE,
+  dominioPermitido: 'https://www.parquesnacionales.gov.co',
+  tiposDocumento: ['Ley', 'Decreto', 'Circular'],
+  soportaTexto: false,
+  soportaVigencia: false,
+  pruebasMinimas: 'todo regulador sectorial declara qué NO cubre',
   advertencia:
     'Cubre solo Leyes, Decretos y Circulares de la página /normativas/. NO cubre el panel de ' +
     '"Resoluciones" de esa misma página: son decisiones individuales de registro de Reservas ' +

@@ -117,17 +117,19 @@ Después se apunta el cliente a `node /ruta/absoluta/a/Normativa-colombiana-MCP/
 
 ### Qué recibe el cliente
 
-Al conectarse, el servidor entrega **25 herramientas**, **4 prompts** y sus **propias instrucciones de uso**: a qué tipo de pregunta corresponde cada herramienta, que debe citarse siempre la fuente y que nunca debe afirmarse por cuenta propia que una norma está vigente. Los clientes que respetan el campo `instructions` del protocolo lo aprovechan sin configurar nada.
+Al conectarse, el servidor entrega **34 herramientas**, **5 prompts** y sus **propias instrucciones de uso**: a qué tipo de pregunta corresponde cada herramienta, que debe citarse siempre la fuente y que nunca debe afirmarse por cuenta propia que una norma está vigente. Los clientes que respetan el campo `instructions` del protocolo lo aprovechan sin configurar nada.
 
 | Fuente | Herramientas |
 | --- | --- |
-| Cualquiera (punto de entrada) | `resolver_cita` — cita exacta → norma o sentencia, con su vigencia si consta |
+| Cualquiera (punto de entrada) | `resolver_cita` — cita exacta → norma o sentencia, con su vigencia si consta; `validar_cita` — comprueba cita y enlace |
 | Gestor Normativo | `buscar_normas`, `buscar_por_tema`, `obtener_norma`, `listar_catalogos`, `listar_subtemas`, `explicar_relacion_tema`, `buscar_conceptos_fp`, `listar_normas_fp` |
 | Corte Constitucional | `buscar_jurisprudencia`, `obtener_sentencia` |
 | Corte Suprema | `buscar_jurisprudencia_suprema`, `obtener_providencia_suprema` |
 | Consejo de Estado | `buscar_jurisprudencia_consejo_estado`, `obtener_providencia_consejo_estado` |
 | SUIN-Juriscol | `buscar_en_suin` |
 | DIAN | `buscar_normativa_tributaria`, `obtener_documento_dian` |
+| V2 — jerarquía y conflictos | `consultar_por_jerarquia`, `analizar_conflicto`, `comparar_articulos`, `cambios_desde` |
+| V2 — perfiles y expedientes | `consultar_perfil`, `expediente_crear`, `expediente_agregar`, `expediente_leer` |
 
 ## Qué puedes preguntar
 
@@ -139,8 +141,27 @@ Al conectarse, el servidor entrega **25 herramientas**, **4 prompts** y sus **pr
 - «¿Qué dice la DIAN sobre la retención en la fuente por servicios?»
 - «Búscame tutelas de la Corte Suprema sobre teletrabajo y dime qué normas citan.»
 - «¿Existe la Ley 74 de 1923 y sigue vigente?» — está derogada, y ni el Gestor la tiene.
+- «¿Qué leyes hay sobre teletrabajo?» — `consultar_por_jerarquia` con nivel "ley".
+- «Compara el art. 2 de la Ley 909 con el art. 2.2.5.3.1 del Decreto 1083.» — `comparar_articulos`.
+- «¿Hay conflicto entre la Ley 909 de 2004 y el Decreto 1083 de 2015 en materia de encargos?» — `analizar_conflicto` (reúne evidencia, no concluye).
+- «¿Qué cambió la Ley 909 de 2004 desde 2020?» — `cambios_desde`.
+- «Normativa laboral sobre teletrabajo» — `consultar_perfil` con perfil "laboral".
 
-El servidor incluye además cuatro prompts listos, que los clientes que los soportan muestran como comandos: *¿Qué normas aplican sobre un tema?*, *¿Esta norma sigue vigente?*, *Explícame esta norma en lenguaje sencillo* y *Compara dos normas*.
+El servidor incluye además cinco prompts listos, que los clientes que los soportan muestran como comandos: *¿Qué normas aplican sobre un tema?*, *¿Esta norma sigue vigente?*, *Explícame esta norma en lenguaje sencillo*, *Compara dos normas* y *Aclarar una consulta ambigua*.
+
+### Herramientas V2 (v1.10.0)
+
+Sobre la capa común de metadatos, evidencia y normalización:
+
+- **`consultar_por_jerarquia`** filtra por nivel (constitución, ley, decreto, resolución, concepto, jurisprudencia) y explica el carácter de cada uno. El Gestor no cataloga la Constitución como tipo: para ese nivel se orienta.
+- **`validar_cita`** comprueba que una cita y su enlace son de verdad: número/año contra el título, dominio del enlace, id de la norma y existencia del artículo. Clasifica en "validada", "parcialmente validada" o "no fue posible validar"; nunca afirma vigencia.
+- **`analizar_conflicto`** reúne EVIDENCIA de un posible conflicto entre dos normas (identificación, vigencia según SUIN si consta, jerarquía, reformas anotadas, pasajes sobre un tema). **No detecta contradicciones semánticas** y el resultado es un conflicto POTENCIAL, no una conclusión jurídica.
+- **`cambios_desde`** resume los cambios (modificación, derogación, adición) que el Gestor anota sobre **las normas que se le listan**, filtrados por el año de la norma modificadora. **No rastrea novedades** por su cuenta.
+- **`comparar_articulos`** compara el texto de un artículo entre dos normas, marca lo añadido/eliminado y clasifica cada diferencia por patrones (plazo, sanción, excepción, sujeto obligado); lo no clasificado se marca "revisar manualmente". La clasificación es por patrones, no semántica.
+- **`consultar_perfil`** ejecuta una consulta con las fuentes y filtros preconfigurados de un perfil: `laboral`, `tributario`, `ambiental`, `contratacion_estatal`, `energia`. Cada perfil declara su advertencia en la respuesta.
+- **Expedientes temporales**: `expediente_crear`, `expediente_agregar` y `expediente_leer` agrupan consultas, citas y observaciones de una investigación **en memoria** (expiran en 6 h, se pierden al reiniciar). **Desactivados por defecto**: se activan con la variable de entorno `EXPEDIENTES=1`.
+
+Una regla de oro de las V2: si una cita viene sin año y el número es ambiguo ("Decreto 1072" son cuatro), la herramienta **no elige por ti**: lista los candidatos y pide el año.
 
 ## Lo que debes saber antes de confiar en una respuesta
 

@@ -93,6 +93,11 @@ export default {
   nombre: 'Ministerio de Agricultura y Desarrollo Rural',
   sector: 'agropecuario',
   portal: BASE,
+  dominioPermitido: 'https://www.minagricultura.gov.co',
+  tiposDocumento: ['Ley', 'Decreto', 'Resolución'],
+  soportaTexto: false,
+  soportaVigencia: false,
+  pruebasMinimas: 'todo regulador sectorial declara qué NO cubre',
   advertencia:
     'Solo PDF, sin texto articulado: no hay nada que extraer aquí, solo epígrafe y enlace. No publica vigencia. ' +
     'La fecha no viene estructurada: cuando el título del portal no trae un patrón "TIPO NÚMERO DE fecha" ' +

@@ -147,6 +147,11 @@ export default {
   nombre: 'Ministerio del Trabajo',
   sector: 'trabajo, empleo y seguridad social',
   portal: 'https://www.mintrabajo.gov.co/web/guest/normatividad',
+  dominioPermitido: 'https://www.mintrabajo.gov.co',
+  tiposDocumento: ['Ley', 'Decreto', 'Resolución', 'Circular'],
+  soportaTexto: false,
+  soportaVigencia: false,
+  pruebasMinimas: 'todo regulador sectorial declara qué NO cubre',
   advertencia:
     'Cubre solo lo que el Mintrabajo publica en su marco legal (leyes, decretos, resoluciones y circulares ' +
     'del Ministerio). No cubre conceptos, doctrina, ni la normativa de otras entidades. El enlace de cada ' +

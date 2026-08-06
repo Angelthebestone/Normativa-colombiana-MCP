@@ -147,6 +147,11 @@ export default {
   nombre: 'Superintendencia de Sociedades',
   sector: 'sociedades comerciales, insolvencia y vigilancia societaria',
   portal: BASE,
+  dominioPermitido: 'https://www.supersociedades.gov.co',
+  tiposDocumento: ['Resolución'],
+  soportaTexto: false,
+  soportaVigencia: false,
+  pruebasMinimas: 'todo regulador sectorial declara qué NO cubre',
   advertencia:
     'Solo cubre resoluciones de la Superintendencia de Sociedades (~480 actos). NO cubre leyes, decretos, la ' +
     'Constitución, circulares (externas ni la Circular Básica Jurídica), el Decreto Único Reglamentario Sectorial, ' +

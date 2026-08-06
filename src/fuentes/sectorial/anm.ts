@@ -121,6 +121,11 @@ export default {
   nombre: 'Agencia Nacional de Minería',
   sector: 'minería',
   portal: 'https://www.anm.gov.co',
+  dominioPermitido: 'https://www.anm.gov.co',
+  tiposDocumento: ['Resolución', 'Circular'],
+  soportaTexto: false,
+  soportaVigencia: false,
+  pruebasMinimas: 'todo regulador sectorial declara qué NO cubre',
   advertencia:
     'Solo cubre resoluciones y circulares propias de la ANM, que son las que la entidad expide. ' +
     'No incluye leyes ni decretos (el portal los enlaza, pero son del Congreso y la Presidencia), ' +

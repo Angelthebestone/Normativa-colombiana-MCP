@@ -72,6 +72,11 @@ export default {
   nombre: 'INVIMA',
   sector: 'Salud — vigilancia sanitaria de medicamentos, alimentos y dispositivos médicos',
   portal: 'https://normograma.invima.gov.co/compilacion/herramientas_busqueda.html',
+  dominioPermitido: 'https://normograma.invima.gov.co',
+  tiposDocumento: ['Ley', 'Decreto', 'Resolución', 'Concepto', 'Sentencia'],
+  soportaTexto: false,
+  soportaVigencia: false,
+  pruebasMinimas: 'todo regulador sectorial declara qué NO cubre',
   advertencia:
     'Esta fuente NO es solo lo que emite el INVIMA: es la compilación jurídica completa del sector salud que ' +
     'el buscador de su normograma indexa (leyes, decretos y resoluciones del Ministerio de Salud, conceptos, ' +

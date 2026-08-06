@@ -114,6 +114,11 @@ export default {
   nombre: 'Instituto Colombiano Agropecuario (ICA)',
   sector: 'agropecuario, sanidad animal y vegetal',
   portal: BASE,
+  dominioPermitido: 'https://www.ica.gov.co',
+  tiposDocumento: ['Resolución'],
+  soportaTexto: false,
+  soportaVigencia: false,
+  pruebasMinimas: 'todo regulador sectorial declara qué NO cubre',
   advertencia:
     'Solo PDF, sin texto articulado. No publica un campo de vigencia, aunque algunas resoluciones traen una nota ' +
     'de "Observación" en texto libre que a veces dice qué derogan; no se puede confiar en que esté siempre. ' +

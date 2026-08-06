@@ -7,7 +7,9 @@
  */
 import { strict as assert } from 'node:assert'
 import { readFileSync } from 'node:fs'
+import { createServer, get } from 'node:http'
 import test from 'node:test'
+import { gzipSync } from 'node:zlib'
 
 import { parsearCita, idTipo, rutaDeSentencia } from '../src/citas.ts'
 import { claveSuin, fichaSuin } from '../src/fuentes/suin.ts'
@@ -40,7 +42,7 @@ import {
   sinTildes,
   trocear,
 } from '../src/parse.ts'
-import { decodificar } from '../src/http.ts'
+import { cuerpoDe, decodificar } from '../src/http.ts'
 import * as gestor from '../src/fuentes/gestor.ts'
 import * as corte from '../src/fuentes/corte.ts'
 
@@ -165,6 +167,35 @@ test('decodifica windows-1252 aunque la cabecera no lo diga', () => {
   const cp1252 = Buffer.from([0x52, 0x65, 0x69, 0x74, 0x65, 0x72, 0x61, 0x63, 0x69, 0xf3, 0x6e]) // "Reiteración"
   assert.equal(decodificar(cp1252, 'text/html'), 'Reiteración')
   assert.equal(decodificar(Buffer.from('gestión', 'utf8'), 'text/html; charset=utf-8'), 'gestión')
+})
+
+/**
+ * El fallo que cubre: con `res.pipe(gunzip)`, cortar la conexión a mitad del
+ * cuerpo comprimido tumbaba el servidor (error sin listener en `res`) y dejaba
+ * la promesa colgada, y con ella la cola de ese dominio. Aquí tiene que
+ * rechazar, y rechazar pronto.
+ */
+test('una conexión cortada a mitad del gzip rechaza, no cuelga ni tumba el proceso', async () => {
+  const srv = createServer((_req, res) => {
+    res.writeHead(200, { 'content-type': 'text/html', 'content-encoding': 'gzip' })
+    res.write(gzipSync(Buffer.from('<html>a medias')).subarray(0, 10))
+    setTimeout(() => res.socket?.destroy(), 20)
+  })
+  await new Promise<void>((r) => srv.listen(0, '127.0.0.1', r))
+  const { port } = srv.address() as { port: number }
+
+  const respuesta = new Promise<Buffer>((resolve, reject) => {
+    get({ host: '127.0.0.1', port }, (res) => cuerpoDe(res).then(resolve, reject)).on('error', reject)
+  })
+  const colgada = Symbol('colgada')
+  const fin = await Promise.race([
+    respuesta.then(() => 'resuelta', (e: Error) => e),
+    new Promise((r) => setTimeout(() => r(colgada), 5000)),
+  ])
+  srv.close()
+
+  assert.notEqual(fin, colgada, 'la promesa quedó colgada: la cola del dominio se bloquea para siempre')
+  assert.ok(fin instanceof Error, 'un cuerpo gzip truncado no puede darse por bueno')
 })
 
 test('el troceado informa cuánto omite', () => {

@@ -43,6 +43,18 @@ Es el fallo más probable de este proyecto: los portales no tienen API documenta
 
 Las fuentes viven en `src/fuentes/`. Antes de escribir código, comprueba dos cosas y ponlas en el issue: qué dice el `robots.txt` del sitio y si existe una API JSON aunque no esté documentada —los bundles de JavaScript del propio sitio suelen revelarla, que es como se encontró la de la Corte Constitucional—. Sondear rutas como `/api` solo encuentra APIs que ya se anunciaban solas.
 
+## Cómo añadir una fuente sectorial
+
+Las sectoriales viven en `src/fuentes/sectorial/` (un fichero por entidad), se dan de alta en `registro.ts` y comparten el contrato `Adaptador` de `src/fuentes/sectorial.ts`. Además de `id`, `nombre`, `sector`, `portal`, `advertencia` y `buscar`, el contrato exige cinco campos de metadatos:
+
+- `dominioPermitido`: URL base https del portal que publica los actos (p. ej. `https://www.sic.gov.co`).
+- `tiposDocumento`: los tipos de acto que publica, como los nombra su propio portal (p. ej. `['Resolución', 'Circular']`).
+- `soportaTexto`: `true` solo si el texto del acto se lee aquí; hoy todas publican PDF y valen `false`.
+- `soportaVigencia`: `true` solo si el portal publica una señal de vigencia comprobable; hoy ninguna lo hace.
+- `pruebasMinimas`: el nombre del test de `test/smoke.ts` que cubre la fuente.
+
+`registrar()` valida esos campos ANTES de insertar: `dominioPermitido` debe ser una URL https válida y ninguno puede ir vacío (`tiposDocumento` con al menos un elemento); si algo falla, lanza `Error` y no deja la fuente en el registro. La firma de búsqueda es la de siempre: `buscar(opts: OpcionesSectorial): Promise<ResultadoSectorial>`, con `OpcionesSectorial` (`texto`, `anio`, `pagina`, `limite`) como entrada y `ResultadoSectorial` (`items`, `total?`, `nota?`, `url`) como salida.
+
 ## Código de conducta
 
 Al participar aceptas el [Código de Conducta](CODE_OF_CONDUCT.md).

@@ -3,6 +3,43 @@
 Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/).
 Este proyecto sigue [versionado semántico](https://semver.org/lang/es/).
 
+## [1.10.0] — 2026-08-06
+
+**Nueve herramientas V2, un prompt nuevo y una capa común de metadatos, evidencia y normalización.** Se implementan las ideas de `IDEAS_V2_ADICIONALES.md` con subagentes en paralelo, y un agente de QA probó ~130 llamadas reales contra los portales antes de publicar.
+
+### Añadido
+
+- **Herramientas V2** (34 en total, antes 25):
+  - `consultar_por_jerarquia` — filtra por nivel de autoridad (constitución, ley, decreto, resolución, concepto, jurisprudencia) y explica el carácter de cada nivel.
+  - `validar_cita` — comprueba cita y enlace (número/año, dominio, id, artículo) y clasifica en "validada / parcialmente validada / no fue posible validar".
+  - `analizar_conflicto` — reúne EVIDENCIA de un posible conflicto entre dos normas (metadatos, vigencia si consta, jerarquía, reformas, pasajes); no concluye.
+  - `cambios_desde` — resume los cambios que el Gestor anota sobre las normas listadas, filtrados por fecha; no rastrea novedades.
+  - `comparar_articulos` — compara dos artículos, marca añadido/eliminado y clasifica por patrones (plazo, sanción, excepción, sujeto); lo no clasificado se revisa a mano.
+  - `consultar_perfil` — ejecuta una consulta con las fuentes y filtros preconfigurados de un perfil (laboral, tributario, ambiental, contratación estatal, energía).
+  - `expediente_crear` / `expediente_agregar` / `expediente_leer` — expediente temporal en memoria (6 h, desactivado por defecto con `EXPEDIENTES=1`).
+- **Prompt `aclarar-consulta`**: hace las preguntas precisas (año, jurisdicción, sector, qué se busca, alcance) antes de consultar una norma ambigua.
+- **Módulos puros**: `indice` (índice temático extraído de `index.ts`), `alternativas` (tesauro + escalera sin tildes/sinónimo), `entidades` (alias institucionales), `jerarquia`, `compiladas`, `evidencia`, `diff`, `expediente`, `perfiles`.
+- **SDK de fuentes sectoriales**: el contrato `Adaptador` ahora declara `dominioPermitido`, `tiposDocumento`, `soportaTexto`, `soportaVigencia` y `pruebasMinimas`; `registrar()` valida en arranque.
+- **`scripts/probar-tools.ts`**: inspector de salidas que dispara cada herramienta contra los portales reales y vuelca el texto, para validar a ojo (con filtro por nombre y `SIN_RED=1`).
+
+### Comportamiento en herramientas existentes
+
+- `buscar_normas`: normalización de entidades ("Mintrabajo" → "Ministerio del Trabajo"; "dian" no es filtro del Gestor y se orienta a `buscar_normativa_tributaria`); la vía temática se anuncia siempre.
+- `buscar_jurisprudencia` y `buscar_en_suin`: alternativas de búsqueda (sin tildes, sinónimo del tesauro) SIEMPRE anunciadas.
+- `obtener_norma` y `resolver_cita`: aviso de normas compiladoras (Decreto Único Reglamentario o > 300.000 caracteres) con índice de artículos.
+- `resolver_cita`: validación del dominio del enlace (falla blanda).
+
+### Corregido (del QA)
+
+- **Falso canario en la DIAN**: un vacío legítimo (`No se encontraron resultados.`, que el backend manda sin comillas, no-JSON) disparaba "el portal cambió su estructura". Ahora es un vacío explicado.
+- **Ambigüedad sin año**: `cambios_desde`, `validar_cita`, `analizar_conflicto` y `comparar_articulos` elegían en silencio el primer resultado ("Decreto 1072" son 4). Nuevo `candidatosAmbiguos`: piden el año listando los candidatos.
+- `validar_cita`: validaba el enlace del item aunque el usuario pasara uno ajeno; ahora valida el enlace del usuario (dominio + id) y una URL malformada no da error de esquema.
+- `analizar_conflicto`: toda reforma salía como "MODIFICADO"; ahora usa la acción real (DEROGADO, ADICIONADO, DECLARADO…) con año, y avisa que las sentencias se resuelven con `resolver_cita`.
+- `consultar_perfil`: el vacío salía en silencio (línea en blanco); ahora explica y orienta.
+- `obtener_norma`: "desde" pasado del final devolvía un trozo vacío sin explicación, y "limite_caracteres" informaba lo mostrado con el valor no ajustado.
+- `comparar_articulos`: mezclaba las notas entre paréntesis (reformas, "Ver sentencia") como contenido; nueva `limpiarArticulo` compara solo el texto sustantivo.
+- `consultar_por_jerarquia`: "constitución" daba un vacío que ocultaba que el Gestor no cataloga ese tipo; ahora avisa y orienta.
+
 ## [1.9.0] — 2026-08-04
 
 **Las tres altas cortes entregan ya texto completo.** Eran dos; la Corte Suprema y el Consejo de Estado estaban declarados como «sin texto» y en ambos casos era falso.
