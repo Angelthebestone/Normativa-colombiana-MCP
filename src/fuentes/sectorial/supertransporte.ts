@@ -107,6 +107,11 @@ export default {
   nombre: 'Superintendencia de Transporte',
   sector: 'transporte, tránsito e infraestructura',
   portal: 'https://www.supertransporte.gov.co/index.php/transparencia-normatividad/',
+  dominioPermitido: 'https://www.supertransporte.gov.co',
+  tiposDocumento: ['Resolución', 'Circular'],
+  soportaTexto: false,
+  soportaVigencia: false,
+  pruebasMinimas: 'todo regulador sectorial declara qué NO cubre',
   advertencia:
     'Cubre las resoluciones y circulares que la Supertransporte publica por año en su portal (resoluciones ' +
     'generales y circulares). NO cubre la Biblioteca Jurídica (un iframe a una aplicación con backend de ' +

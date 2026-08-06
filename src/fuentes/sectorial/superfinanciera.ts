@@ -132,6 +132,11 @@ export default {
   nombre: 'Superintendencia Financiera de Colombia',
   sector: 'Sector financiero, asegurador y bursátil',
   portal: INDICE,
+  dominioPermitido: 'https://www.superfinanciera.gov.co',
+  tiposDocumento: ['Circular Externa', 'Carta Circular', 'Resolución'],
+  soportaTexto: false,
+  soportaVigencia: false,
+  pruebasMinimas: 'todo regulador sectorial declara qué NO cubre',
   advertencia:
     'Solo cubre Circulares Externas, Cartas Circulares y Resoluciones desde 2005 (antes de eso, nada publicado ' +
     'aquí). No incluye la Circular Básica Jurídica, la Financiera ni la Contable y Financiera: esas son ' +

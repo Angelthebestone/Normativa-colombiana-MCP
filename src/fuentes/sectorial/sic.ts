@@ -135,6 +135,11 @@ export default {
   nombre: 'Superintendencia de Industria y Comercio',
   sector: 'protección al consumidor, competencia, propiedad industrial y protección de datos personales',
   portal: BASE,
+  dominioPermitido: 'https://www.sic.gov.co',
+  tiposDocumento: ['Resolución', 'Circular', 'Ley', 'Decreto'],
+  soportaTexto: false,
+  soportaVigencia: false,
+  pruebasMinimas: 'todo regulador sectorial declara qué NO cubre',
   advertencia:
     'Cubre el repositorio de normatividad de la SIC (leyes, decretos, resoluciones, circulares y doctrina que el ' +
     'propio portal indexa allí), pero NO la Circular Única completa como texto navegable —solo sus títulos y ' +

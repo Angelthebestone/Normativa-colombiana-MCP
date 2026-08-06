@@ -5,9 +5,12 @@
  * no por orden alfabético: primero el sector primario, luego el secundario, el
  * terciario y el transversal.
  *
- * Añadir una entidad es añadir una línea aquí y un fichero al lado. Lo que NO se
- * puede añadir en silencio es una fuente sin `advertencia`: el contrato la exige
- * porque es lo que impide que un vacío se lea como «esa norma no existe».
+ * Añadir una entidad es añadir un fichero al lado y una línea aquí. Cada fuente
+ * declara además cinco campos de metadatos (dominioPermitido, tiposDocumento,
+ * soportaTexto, soportaVigencia y pruebasMinimas) que `registrar()` valida antes
+ * de dar de alta. Lo que NO se puede añadir en silencio es una fuente sin
+ * `advertencia`: el contrato la exige porque es lo que impide que un vacío se
+ * lea como «esa norma no existe».
  */
 import { registrar } from '../sectorial.ts'
 
