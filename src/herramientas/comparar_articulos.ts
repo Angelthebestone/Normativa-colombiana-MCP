@@ -5,8 +5,8 @@
 import { z } from 'zod'
 
 import { clasificarDiferencia, diffArticulos } from '../diff.ts'
-import { idTipo, parsearCita } from '../citas.ts'
-import { articulo as extraerArticulo } from '../parse.ts'
+import { idTipo, parsearCita, candidatosAmbiguos } from '../citas.ts'
+import { articulo as extraerArticulo, limpiarArticulo } from '../parse.ts'
 import * as gestor from '../fuentes/gestor.ts'
 
 export const TITULO = 'Comparar dos artículos de normas distintas'
@@ -46,6 +46,16 @@ async function articuloDe(cita: string, numero: string): Promise<{ articulo: Art
     }
   }
   const r = await gestor.buscar({ tipo: idTipo(c.tipo) ?? c.tipo, numero: c.numero, anio: c.anio })
+  // Sin año, el número no identifica la norma: se pide el año en vez de elegir.
+  if (!c.anio) {
+    const ambiguos = candidatosAmbiguos(r.items)
+    if (ambiguos.length) {
+      return {
+        articulo: { texto: null, url: '', titulo: '' },
+        nota: `La cita «${cita}» es ambigua: el Gestor tiene ${ambiguos.length} normas con ese tipo y número, de años distintos. Repite con el año, por ejemplo «${ambiguos[0]!.titulo}».`,
+      }
+    }
+  }
   const primero = r.items[0]
   if (!primero) {
     return { articulo: { texto: null, url: '', titulo: '' }, nota: `No encontré la norma «${cita}» en el Gestor Normativo.` }
@@ -58,7 +68,9 @@ async function articuloDe(cita: string, numero: string): Promise<{ articulo: Art
       nota: `No encontré el artículo ${numero} en «${n.titulo}» (${n.url}).`,
     }
   }
-  return { articulo: { texto, url: n.url, titulo: n.titulo }, nota: '' }
+  // Se compara el texto sustantivo, sin las notas entre paréntesis que el
+  // portal incrusta (reformas, "Ver sentencia"): son ruido editorial, no contenido.
+  return { articulo: { texto: limpiarArticulo(texto), url: n.url, titulo: n.titulo }, nota: '' }
 }
 
 /**

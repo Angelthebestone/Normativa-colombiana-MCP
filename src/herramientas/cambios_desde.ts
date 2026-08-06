@@ -3,7 +3,7 @@
  * filtrados por el año de la norma modificadora.
  */
 import { z } from 'zod'
-import { idTipo, parsearCita } from '../citas.ts'
+import { idTipo, parsearCita, candidatosAmbiguos } from '../citas.ts'
 import * as gestor from '../fuentes/gestor.ts'
 import { historial, type Cambio } from '../parse.ts'
 
@@ -56,6 +56,22 @@ async function cambiosDe(cita: string, desde: string): Promise<string> {
   const r = await gestor.buscar({ tipo: idTipo(c.tipo) ?? c.tipo, numero: c.numero, anio: c.anio })
   const item = r.items[0]
   if (!item) return `- ${cita}: no se encontró en el Gestor.`
+
+  // Sin año, el número no identifica la norma: se pide el año en vez de elegir.
+  if (!c.anio) {
+    const ambiguos = candidatosAmbiguos(r.items)
+    if (ambiguos.length) {
+      return (
+        `- La cita "${cita}" es ambigua: el Gestor tiene ${ambiguos.length} normas con ese tipo y número, de años ` +
+        `distintos. No se elige una por ti:\n` +
+        ambiguos
+          .sort((a, b) => Number(b.anio) - Number(a.anio))
+          .map((x) => `  - ${x.titulo} (id ${x.id})\n    ${x.url}`)
+          .join('\n') +
+        `\n  Repite con el año ("${c.tipo} ${c.numero} de ${ambiguos[0]!.anio}").`
+      )
+    }
+  }
 
   const cambios = historial((await gestor.obtenerNorma(item.id)).texto)
   const anioMinimo = Number(desde.slice(0, 4))

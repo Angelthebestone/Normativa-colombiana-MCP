@@ -236,6 +236,22 @@ export function articulo(texto: string, numero: string): string | null {
 }
 
 /**
+ * Deja el texto "sustantivo" de un artículo: quita las notas entre paréntesis
+ * que el portal incrusta ("(Modificado por el Art. 3 de la Ley 2418 de 2024)",
+ * "(Ver Sentencia T-800 de 2011)"). Para COMPARAR dos artículos, esas notas son
+ * ruido editorial, no contenido; el texto limpio es el que debe contrastarse.
+ */
+export function limpiarArticulo(texto: string): string {
+  return texto
+    .split('\n')
+    .map((l) =>
+      l.replace(/\([^)\n]{0,200}\)/g, ' ').replace(/\s+/g, ' ').trim(),
+    )
+    .filter(Boolean)
+    .join('\n')
+}
+
+/**
  * La vigencia no es un campo: va incrustada en el articulado. El Decreto 1083
  * trae 155 "Modificado por" y 17 "Derogado". Citar un artículo derogado como
  * vigente es el error caro, así que se advierte sobre el fragmento devuelto.

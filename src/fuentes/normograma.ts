@@ -86,6 +86,14 @@ export async function buscar(texto: string, limite = 15, desde = 0): Promise<{ t
   const r = await pedir(`${BUSCADOR}?texto=${encodeURIComponent(q)}`, 90_000, 'application/json,*/*')
   if (r.status !== 200) throw new CanarioError(`el buscador de la DIAN respondió ${r.status}`)
 
+  // El backend devuelve HTTP 200 con el literal (sin comillas, no es JSON)
+  // `No se encontraron resultados.` cuando no hay coincidencias: es un vacío
+  // legítimo, no un cambio de estructura.
+  if (/no se encontraron resultados/i.test(r.cuerpo)) {
+    cache.set(q.toLowerCase(), [])
+    return { total: 0, items: [] }
+  }
+
   let j: unknown
   try {
     j = JSON.parse(r.cuerpo)

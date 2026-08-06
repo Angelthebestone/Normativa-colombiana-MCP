@@ -99,6 +99,21 @@ export function parsearCita(texto: string): Cita | null {
 export const idTipo = (tipo: string): number | undefined => TIPOS[normaliza(tipo)]
 
 /**
+ * Si la cita vino SIN año, el número no identifica la norma: "Decreto 1072"
+ * existe en 2025, 2015, 2004 y 1999, y el Gestor devuelve primero el más
+ * reciente. Entregar ese como si fuera "el" Decreto 1072 es el error caro.
+ * Devuelve una lista de candidatos { titulo, id, anio, url } cuando hay varios
+ * años, o vacío si la cita ya trae año o no hay ambigüedad. Las herramientas V2
+ * la usan para pedir el año en vez de elegir en silencio.
+ */
+export function candidatosAmbiguos(items: { titulo: string; id: string; url: string }[]): { titulo: string; id: string; anio: string; url: string }[] {
+  const conAnio = items
+    .map((i) => ({ ...i, anio: i.titulo.match(/\bde\s+(\d{4})\b/i)?.[1] ?? '' }))
+    .filter((x) => x.anio)
+  return new Set(conAnio.map((x) => x.anio)).size > 1 ? conAnio : []
+}
+
+/**
  * Ruta de la relatoría para una cita de sentencia: "C-337/11" → "2011/C-337-11.htm".
  * ponytail: se construye por convención de nombres, que es la que sigue el
  * sitio; si alguna providencia se sale del patrón, obtenerTexto la reporta como

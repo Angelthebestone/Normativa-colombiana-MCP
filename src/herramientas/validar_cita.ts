@@ -1,6 +1,6 @@
 import { z } from 'zod'
 
-import { idTipo, parsearCita } from '../citas.ts'
+import { idTipo, parsearCita, candidatosAmbiguos } from '../citas.ts'
 import { clasificarValidacion, validarArticulo, validarNumeroAnio, validarUrl } from '../evidencia.ts'
 import * as gestor from '../fuentes/gestor.ts'
 
@@ -14,7 +14,9 @@ export const DESCRIPCION =
 
 export const schema = {
   cita: z.string().describe('Cita a validar, ej. "Ley 909 de 2004"'),
-  url: z.string().url().optional().describe('Enlace a comprobar; si no se da, se usa el de la fuente'),
+  // Sin .url(): una URL malformada se reporta como "no fue posible validar",
+  // no como un error de esquema.
+  url: z.string().optional().describe('Enlace a comprobar; si no se da, se usa el de la fuente'),
 }
 
 export const SIN_FORMA =
@@ -50,9 +52,29 @@ export async function escribir({ cita, url }: z.infer<ReturnType<typeof z.object
     return 'No fue posible validar: la cita no se encontró en el Gestor Normativo. Que no aparezca NO significa que la norma no exista; pruébala en SUIN con resolver_cita.'
   }
 
+  // Sin año, el número no identifica la norma: se pide el año en vez de elegir.
+  if (!c.anio) {
+    const ambiguos = candidatosAmbiguos(r.items)
+    if (ambiguos.length) {
+      return (
+        `No fue posible validar: la cita "${cita}" es ambigua. El Gestor tiene ${ambiguos.length} normas con ese ` +
+        `tipo y número, de años distintos; no se elige una por ti:\n` +
+        ambiguos
+          .sort((a, b) => Number(b.anio) - Number(a.anio))
+          .map((x) => `- ${x.titulo} (id ${x.id})\n  ${x.url}`)
+          .join('\n') +
+        `\n\nRepite con el año ("${c.tipo} ${c.numero} de ${ambiguos[0]!.anio}").`
+      )
+    }
+  }
+
   const comprobaciones: { nombre: string; ok: boolean }[] = [
     { nombre: 'número y año', ok: validarNumeroAnio(item.titulo, c.numero, c.anio) },
+    // El dominio a comprobar es SIEMPRE el enlace que el usuario dio (si lo dio):
+    // validar el del item cuando el usuario pasó uno ajeno sería un falso positivo.
     { nombre: 'dominio del enlace', ok: validarUrl(url ?? item.url, 'funcionpublica.gov.co') },
+    // Si el usuario dio un enlace, además debe apuntar al MISMO id de la norma.
+    ...(url ? [{ nombre: 'el enlace corresponde a esta norma', ok: url.includes(`i=${item.id}`) }] : []),
   ]
   if (c.articulo) {
     const norma = await gestor.obtenerNorma(item.id)

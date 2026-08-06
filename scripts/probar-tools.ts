@@ -47,11 +47,15 @@ const CASOS: { tool: string; args: Record<string, unknown>; red: boolean; nota?:
   { tool: 'consultar_por_jerarquia', args: { nivel: 'jurisprudencia', texto: 'teletrabajo', limite: 3 }, red: true },
   { tool: 'analizar_conflicto', args: { norma_a: 'Ley 909 de 2004', norma_b: 'Decreto 1083 de 2015', sobre: 'encargo' }, red: true },
   { tool: 'cambios_desde', args: { normas: ['Ley 909 de 2004'], desde: '2020-01-01' }, red: true },
+  { tool: 'cambios_desde', args: { normas: ['Decreto 1072'], desde: '2020-01-01' }, red: true, nota: 'F2: cita sin año ambigua' },
   { tool: 'validar_cita', args: { cita: 'Ley 909 de 2004' }, red: true },
+  { tool: 'validar_cita', args: { cita: 'Ley 909 de 2004', url: 'https://evil.example.com/norma.php?i=31431' }, red: true, nota: 'F3: enlace ajeno no debe ser "validada"' },
+  { tool: 'validar_cita', args: { cita: 'Ley 909 de 2004', url: 'noesunaurl' }, red: true, nota: 'F3b: URL malformada no debe dar isError' },
   { tool: 'validar_cita', args: { cita: 'Ley 909 de 2004', url: 'https://www.funcionpublica.gov.co/eva/gestornormativo/norma.php?i=31431' }, red: true },
   { tool: 'validar_cita', args: { cita: 'Ley 99999999 de 1800' }, red: true, nota: 'no validable' },
   { tool: 'comparar_articulos', args: { norma_a: 'Ley 909 de 2004', articulo_a: '2', norma_b: 'Decreto 1083 de 2015', articulo_b: '2' }, red: true },
   { tool: 'consultar_perfil', args: { perfil: 'laboral', texto: 'teletrabajo', limite: 3 }, red: true },
+  { tool: 'consultar_perfil', args: { perfil: 'laboral', texto: 'zzzzznada', limite: 3 }, red: true, nota: 'F5: vacío en silencio' },
   { tool: 'consultar_perfil', args: { perfil: 'tributario', texto: 'retención', limite: 3 }, red: true },
   { tool: 'consultar_perfil', args: { perfil: 'no-existe', texto: 'x' }, red: false, nota: 'perfil inválido' },
   { tool: 'expediente_crear', args: {}, red: false },
@@ -59,6 +63,8 @@ const CASOS: { tool: string; args: Record<string, unknown>; red: boolean; nota?:
   { tool: 'expediente_leer', args: { id: 'abc' }, red: false },
   { tool: 'buscar_normativa_sectorial', args: { entidad: 'sic', texto: 'protección al consumidor', limite: 3 }, red: true },
   { tool: 'buscar_resoluciones_creg', args: { texto: 'solar', anio: '2024', limite: 3 }, red: true },
+  { tool: 'buscar_normativa_tributaria', args: { texto: 'retención', limite: 3 }, red: true },
+  { tool: 'buscar_normativa_tributaria', args: { texto: 'zzzzznada', limite: 3 }, red: true, nota: 'F1: vacío legítimo, no canario' },
 ]
 
 // --- cliente JSON-RPC mínimo ---------------------------------------------

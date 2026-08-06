@@ -20,6 +20,8 @@ const evidencia = (parcial: Partial<Evidencia> = {}): Evidencia => ({
   reformas: [],
   pasajes: [],
   noEncontrada: false,
+  ambigua: false,
+  candidatos: [],
   ...parcial,
 })
 

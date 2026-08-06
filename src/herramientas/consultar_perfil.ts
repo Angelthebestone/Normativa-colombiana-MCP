@@ -38,8 +38,13 @@ export function formatear(
   if (resultado === null) {
     return `No existe un perfil llamado "${id}". Disponibles: ${disponibles.join(', ')}.`
   }
+  // El canario nunca devuelve un vacío en silencio: si el perfil no encontró
+  // nada, se dice y se orienta, en vez de dejar una línea en blanco arriba.
+  const cuerpo = resultado.trim()
+    ? resultado
+    : `No encontré resultados para esta consulta en el perfil "${id}". Prueba otro término o usa resolver_cita para una norma concreta.`
   return (
-    `${resultado}\n\nPerfil: ${nombre} — ${sector}\n` +
+    `${cuerpo}\n\nPerfil: ${nombre} — ${sector}\n` +
     `Advertencia: ${advertencia}\n` +
     'Esto no es asesoría jurídica; verifica en el enlace antes de actuar.'
   )

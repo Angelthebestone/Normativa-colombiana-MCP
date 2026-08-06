@@ -425,8 +425,9 @@ server.registerTool(
     const subtema = idOnombre('sub', subtemaCrudo)
     // Idea 6 — normalización de entidades: un alias se resuelve al nombre que
     // el catálogo del Gestor entiende ("Mintrabajo" → "Ministerio del Trabajo").
-    // Los que el Gestor NO cataloga ("dian") no se resuelven ni se inyectan: se
-    // deja el valor del usuario y se avisa hacia dónde ir.
+    // Los que el Gestor NO cataloga ("dian") no se resuelven ni se inyectan: el
+    // propio Gestor avisa "No reconocí entidad"; aquí solo se orienta hacia la
+    // herramienta que sí cubre esa entidad.
     const ent = entidad ? normalizarEntidad(entidad) : null
     const claveEntidad = entidad ? sinTildes(entidad.trim().toLowerCase()) : ''
     const fueraDelGestor = NO_EN_GESTOR.has(claveEntidad)
@@ -435,16 +436,15 @@ server.registerTool(
     if (ent?.aliasUsado && !fueraDelGestor) {
       notas.push(`Entidad normalizada: «${ent.aliasUsado}» → «${ent.oficial}».`)
     } else if (fueraDelGestor) {
-      notas.push(
-        `«${entidad}» no está en el catálogo de entidades del Gestor; no se aplicó como filtro. ` +
-          `Para normativa de la DIAN usa buscar_normativa_tributaria.`,
-      )
+      notas.push(`Para normativa de «${entidad}» usa buscar_normativa_tributaria (no es un filtro del Gestor).`)
     }
 
     // El índice de palabras del portal es pobrísimo: "teletrabajo" solo casa con
     // 3 documentos en todo el corpus, y con ninguno de los 43 conceptos que sí
     // están clasificados bajo ese subtema. Cuando la búsqueda por palabras rinde
     // poco, se reintenta por la vía temática, que es la que de verdad encuentra.
+    // El aviso sale SIEMPRE que se use la vía temática, aunque no añada
+    // documentos nuevos: la lista final mezcla dos catálogos del portal.
     if (palabras && r.items.length < 5 && !subtema) {
       const par = temaDelIndice(palabras)
       if (par) {
@@ -454,11 +454,11 @@ server.registerTool(
             const via = await gestor.buscar({ tipo: tipo_documento, numero, anio, entidad, subtema: sub })
             const vistos = new Set(r.items.map((i) => i.id))
             const extra = via.items.filter((i) => !vistos.has(i.id))
-            if (extra.length) {
+            if (via.items.length) {
               r.items.push(...extra)
               notas.push(
                 `La búsqueda por palabras solo halló ${r.total}. Se reconsultó con el subtema "${normalizarRotulo(par.s)}" ` +
-                  `(id ${conPrefijo('sub', sub)}) del catálogo de búsqueda y se añadieron ${extra.length} documentos. Ese catálogo y el de ` +
+                  `(id ${conPrefijo('sub', sub)}) del catálogo de búsqueda${extra.length ? ` y se añadieron ${extra.length} documentos` : ', que ya estaban entre los de palabras'}. Ese catálogo y el de ` +
                   `buscar_por_tema son taxonomías distintas del portal, así que allí estos documentos pueden aparecer ` +
                   `bajo otro tema.`,
               )
@@ -684,9 +684,14 @@ server.registerTool(
       const t = trocear(n.texto, desde, tope)
       cuerpo = t.texto
       const arts = indiceArticulos(n.texto)
+      // F7: lo mostrado se mide con t.texto.length (el tope ya se ajustó al
+      // rango 200-40.000); F6: un "desde" pasado del final no es un vacío.
       avisoTexto =
         `Texto total: ${t.total} caracteres. Se muestran ${t.texto.length} desde la posición ${t.desde}` +
         (t.omitido > 0 ? `; quedan ${t.omitido} sin mostrar (usa desde/limite_caracteres o buscar_en_texto).` : '.') +
+        (t.texto.length === 0 && t.total > 0
+          ? `\nEl "desde" (${desde}) está más allá del final del texto: pide uno menor o usa buscar_en_texto.`
+          : '') +
         (arts.length ? `\nArtículos detectados: ${arts.join(', ')}` : '')
     }
 

@@ -29,7 +29,17 @@ export type BuscadorNormas = (nivel: Nivel, texto: string, limite: number) => Pr
 
 export function formatear(items: { titulo: string; url: string }[], nivel: Nivel, texto: string): string {
   if (!items.length) {
-    return `No encontré nada de nivel ${nivel} para "${texto}" en las fuentes consultadas. Prueba otro término o usa buscar_por_tema.`
+    // "constitución" no es un tipo del catálogo del Gestor: el vacío no es que
+    // no exista normativa, es que ese nivel no se puede filtrar ahí.
+    const avisoNivel =
+      nivel === 'constitucion'
+        ? ' El Gestor no cataloga la Constitución como tipo de documento: para el texto de la Constitución usa resolver_cita con "Constitución Política", y para jurisprudencia constitucional usa buscar_jurisprudencia.'
+        : ''
+    return (
+      `No encontré nada de nivel ${nivel} para "${texto}" en las fuentes consultadas.` +
+      avisoNivel +
+      '\nPrueba otro término o usa buscar_por_tema.'
+    )
   }
   return (
     items.map((i) => `- ${i.titulo}\n  ${i.url}`).join('\n') +
