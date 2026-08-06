@@ -1,9 +1,20 @@
-import { readFileSync } from 'node:fs'
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { z } from 'zod'
 
 import { idTipo, parsearCita } from './citas.ts'
+import { cargarIndice, temaDelIndice, frescura } from './indice.ts'
+import { normalizarEntidad } from './entidades.ts'
+import { esCompiladora, avisoCompiladora } from './compiladas.ts'
+import { conAlternativas } from './alternativas.ts'
+import { validarUrl } from './evidencia.ts'
+import * as consultarJerarquia from './herramientas/consultar_jerarquia.ts'
+import * as analizarConflicto from './herramientas/analizar_conflicto.ts'
+import * as cambiosDesde from './herramientas/cambios_desde.ts'
+import * as validarCita from './herramientas/validar_cita.ts'
+import * as compararArticulos from './herramientas/comparar_articulos.ts'
+import * as expedientes from './herramientas/expedientes.ts'
+import * as consultarPerfil from './herramientas/consultar_perfil.ts'
 import {
   advertenciasVigencia,
   avisoSinTexto,
@@ -52,36 +63,7 @@ const vacio = (que: string, sugerencia: string) =>
 
 // --- índice temático empaquetado -----------------------------------------
 
-// El título solo viene en las ocho primeras normas de cada fila; ver
-// scripts/generar-indice.ts. Los ids están todos.
-type Indice = { generado: string; filas: { t: string; s: string; ts: string; n: [string, string?][] }[] }
-let indice: Indice | null | undefined
-
-function cargarIndice(): Indice | null {
-  if (indice !== undefined) return indice
-  try {
-    // El bundle vive en server/index.js y el índice en datos/, junto al manifiesto.
-    indice = JSON.parse(readFileSync(new URL('../datos/indice-tematico.json', import.meta.url), 'utf8')) as Indice
-  } catch {
-    indice = null // sin índice se consulta el portal; no es un fallo fatal
-  }
-  return indice
-}
-
-/**
- * Par tema/subtema del índice que mejor case con el término. Entre varios se
- * prefiere el que agrupa más normas: "teletrabajo" existe como tema propio con
- * 1 documento y como subtema de EMPLEO con 55, y el útil es el segundo.
- */
-function temaDelIndice(termino: string): { t: string; s: string } | null {
-  const idx = cargarIndice()
-  const q = sinTildes(termino).toLowerCase().trim()
-  if (!idx || !q) return null
-  const candidatas = idx.filas.filter((f) => sinTildes(f.s).toLowerCase().includes(q))
-  if (!candidatas.length) return null
-  const exacta = candidatas.filter((f) => sinTildes(f.s).toLowerCase() === q)
-  return (exacta.length ? exacta : candidatas).sort((a, b) => b.n.length - a.n.length)[0] ?? null
-}
+// --- servidor ------------------------------------------------------------
 
 /**
  * Los tres catálogos temáticos del portal numeran cada uno por su cuenta, así
@@ -125,13 +107,6 @@ function sinPrefijo(c: Catalogo, valor: string): string {
   )
 }
 
-function frescura(generado: string): string {
-  const meses = (Date.now() - Date.parse(generado)) / (30 * 24 * 3600 * 1000)
-  return meses > 3
-    ? `\n\nAVISO: el índice temático empaquetado se generó el ${generado} (hace ~${Math.round(meses)} meses). Puede faltar normativa reciente; actualiza la extensión.`
-    : ''
-}
-
 // --- servidor ------------------------------------------------------------
 
 /**
@@ -171,6 +146,15 @@ Reglas al responder:
 - Un documento sin texto NO es un documento que no diga nada. Si la respuesta avisa de que es un escaneo o de que el portal no publicó el texto, dilo así y remite al enlace; no concluyas nada sobre su contenido.
 - Nunca inventes números de norma, artículos ni sentencias. Si no aparecen en una respuesta, no existen para efectos de esta conversación.
 - Los ids temáticos vienen con prefijo y no son intercambiables: "ts-" de buscar_por_tema (va en explicar_relacion_tema), "sub-" de listar_subtemas (va en buscar_normas) y "tema-" de listar_catalogos. Pégalos tal cual, con el prefijo: son tres numeraciones distintas del portal que reutilizan los mismos números.
+
+Herramientas V2:
+- Filtrar por rango de la jerarquía (leyes, decretos, conceptos, jurisprudencia) → consultar_por_jerarquia; la respuesta explica el carácter (vinculante/orientador/informativo).
+- Comprobar que una cita y su enlace son de verdad → validar_cita. Clasifica en "validada", "parcialmente validada" o "no fue posible validar", y nunca afirma vigencia.
+- Comparar dos normas o dos artículos → analizar_conflicto (reúne EVIDENCIA; no concluye) y comparar_articulos (diferencia por patrones; lo no clasificado se revisa a mano).
+- Resumir qué le pasó a normas listadas desde una fecha → cambios_desde. NO descubre normas nuevas: solo lee lo que el Gestor anota.
+- Consultar por sector preconfigurado → consultar_perfil (laboral, tributario, ambiental, contratación, energía); cada perfil declara su advertencia.
+- Expedientes temporales (EXPEDIENTES=1): expediente_crear / expediente_agregar / expediente_leer. Son memoria de sesión con expiración, no almacenamiento.
+- Una consulta ambigua → el prompt aclarar-consulta hace las preguntas precisas antes de buscar.
 
 Esto no es asesoría jurídica.`
 
@@ -329,6 +313,12 @@ server.registerTool(
     }
 
     const n = r.items[0]!
+    // Idea 11 — el dominio del enlace se comprueba siempre (falla blanda): si
+    // no coincide con el esperado, se avisa en vez de devolver un enlace a ciegas.
+    const dominioOk = validarUrl(n.url, 'funcionpublica.gov.co')
+    const avisoDominio = dominioOk
+      ? ''
+      : `\nAVISO: el enlace devuelto no pertenece al dominio esperado (funcionpublica.gov.co): ${n.url}. Verifícalo antes de citarlo.`
 
     // La vigencia solo la publica SUIN, y solo si el índice empaquetado tiene
     // esta norma. Que falte no es un fallo: se calla y sigue mandando la regla
@@ -399,7 +389,8 @@ server.registerTool(
         (n.resumen
           ? `Extracto de un tema asociado (NO resume la norma; usa obtener_norma para su objeto y articulado): ${n.resumen}\n`
           : '') +
-        `URL: ${n.url}${vig}${extra}`,
+        (esCompiladora(n.titulo, 0) ? '\nAVISO: esta es una norma compilada que incorpora reformas; para un tema concreto usa obtener_norma con buscar_en_texto.\n' : '') +
+        `URL: ${n.url}${avisoDominio}${vig}${extra}`,
     )
   },
 )
@@ -432,8 +423,14 @@ server.registerTool(
     // rechaza en vez de resolverse contra el tema equivocado.
     const tema = idOnombre('tema', temaCrudo)
     const subtema = idOnombre('sub', subtemaCrudo)
-    const r = await gestor.buscar({ palabras, tipo: tipo_documento, numero, anio, entidad, tema, subtema })
+    // Idea 6 — normalización de entidades: "dian" se resuelve a su nombre
+    // oficial antes de consultar, y el alias usado se anuncia en la respuesta.
+    const ent = entidad ? normalizarEntidad(entidad) : null
+    const r = await gestor.buscar({ palabras, tipo: tipo_documento, numero, anio, entidad: ent?.oficial ?? entidad, tema, subtema })
     const notas = r.nota ? [r.nota] : []
+    if (ent?.aliasUsado && ent.aliasUsado !== ent.oficial) {
+      notas.push(`Entidad normalizada: «${ent.aliasUsado}» → «${ent.oficial}».`)
+    }
 
     // El índice de palabras del portal es pobrísimo: "teletrabajo" solo casa con
     // 3 documentos en todo el corpus, y con ninguno de los 43 conceptos que sí
@@ -646,6 +643,11 @@ server.registerTool(
       )
     }
 
+    // Idea 7 — una norma compiladora se avisa y se orienta a su articulado.
+    // Solo cuando se pide el texto general (no un artículo ni una búsqueda ni
+    // el historial): ahí el aviso de "no lo devuelvo entero" ya viene implícito.
+    const compiladora = !articulo && !buscar_en_texto && !pedirHistorial && esCompiladora(n.titulo, n.texto.length)
+
     let cuerpo: string
     let avisoTexto = ''
 
@@ -700,7 +702,7 @@ server.registerTool(
       : ''
 
     return txt(
-      `${cab}\n${avisoTexto ? `\n${avisoTexto}\n` : ''}${avisos.length ? `\n${avisos.join('\n')}\n` : ''}` +
+      `${cab}\n${compiladora ? `\n${avisoCompiladora(n.titulo, n.texto)}\n` : ''}${avisoTexto ? `\n${avisoTexto}\n` : ''}${avisos.length ? `\n${avisos.join('\n')}\n` : ''}` +
         `\n--- Texto ---\n${cuerpo}${temas}`,
     )
   },
@@ -766,7 +768,18 @@ server.registerTool(
   },
   async ({ termino, desde, hasta, tipos, limite }) => {
     const porDefecto: ('C' | 'T' | 'SU')[] = ['C', 'T', 'SU']
-    const r = await corte.buscar({ termino, desde, hasta, tipos: tipos ?? porDefecto, limite })
+    // Idea 5 — si el término rinde poco, se prueba sin tildes y con sinónimo,
+    // y la variante usada se anuncia en la respuesta.
+    const { items, variantesUsadas } = await conAlternativas(
+      (t) => corte.buscar({ termino: t, desde, hasta, tipos: tipos ?? porDefecto, limite }).then((r) => r.items),
+      termino,
+      1,
+    )
+    const r = { items, total: items.length, nota: undefined }
+    const avisoAlternativa = variantesUsadas.length
+      ? `La búsqueda exacta de "${termino}" no rindió resultados; se usó «${variantesUsadas[0]}». ` +
+        `Verifica que sea lo que buscabas.\n\n`
+      : ''
     if (!r.items.length) return vacio(`providencias sobre "${termino}"`, 'Prueba un término más general o revisa el rango de fechas.')
     // Al acotar por fechas, el buscador de la relatoría devuelve providencias
     // que no mencionan el término. Se señalan en vez de presentarlas como
@@ -795,7 +808,7 @@ server.registerTool(
             `aparece de pasada. Prueba un término más específico${tipos?.length === 1 && tipos[0] === 'A' ? ', o sin restringir a autos, que suelen ser de trámite' : ''}.`)
       : ''
     return txt(
-      `${r.total} providencia(s) coinciden; se muestran ${r.items.length}.\n\n${lista}${aviso}\n\n` +
+      `${avisoAlternativa}${r.total} providencia(s) coinciden; se muestran ${r.items.length}.\n\n${lista}${aviso}\n\n` +
         `Para el texto completo usa obtener_sentencia con la ruta.`,
     )
   },
@@ -1299,7 +1312,19 @@ server.registerTool(
     },
   },
   async ({ texto, vigencia, sector, desde, limite }) => {
-    const r = await suin.buscar({ texto, vigencia, sector, desde, limite })
+    // Idea 5 — si la búsqueda rinde cero, se prueba el sinónimo del tesauro y
+    // se anuncia: el índice de SUIN tiene huecos conocidos ("Teletrabajo" da 0
+    // pese a existir la Ley 1221 de 2008), así que el vacío no es palabra final.
+    const { items, variantesUsadas } = await conAlternativas(
+      (t) => suin.buscar({ texto: t, vigencia, sector, desde, limite }).then((r) => r.items),
+      texto,
+      1,
+    )
+    const r = { items, total: items.length }
+    const avisoAlternativa = variantesUsadas.length
+      ? `La búsqueda de "${texto}" no rindió resultados; se usó «${variantesUsadas[0]}». Si no es lo que buscabas, ` +
+        `no concluyas que el documento no existe: el índice de SUIN tiene huecos.\n\n`
+      : ''
     if (!r.total) {
       return vacio(
         `documentos en SUIN para "${texto}"`,
@@ -1312,7 +1337,7 @@ server.registerTool(
     }
     const fin = desde + r.items.length
     return txt(
-      `${r.total} documento(s) en SUIN-Juriscol; se muestran ${desde + 1}–${fin}.\n\n` +
+      `${avisoAlternativa}${r.total} documento(s) en SUIN-Juriscol; se muestran ${desde + 1}–${fin}.\n\n` +
         r.items
           .map(
             (d) =>
@@ -1919,13 +1944,61 @@ server.registerTool(
         `ANLA—; los demás que aparecen en la lista de FUENTES se consultan por el parámetro entidad de ` +
         `buscar_normativa_sectorial (${sectorial.ids().join(', ')}). Fuera de esas dos listas no hay nada: NO están ` +
         `la CRC, la Superservicios, la Supersalud ni las demás comisiones y superintendencias. Que este MCP tenga ` +
-        `"algo sectorial" no significa que tenga lo sectorial.\n\n` +
+        `"algo sectorial" no significa que tenga lo sectorial.\n` +
+        `- El RASTREO AUTOMÁTICO DE NOVEDADES: ninguna fuente publica un feed de cambios; cambios_desde solo resume ` +
+        `lo que el Gestor anota sobre las normas que se le listan.\n` +
+        `- La DETECCIÓN SEMÁNTICA DE CONFLICTOS entre normas: analizar_conflicto reúne evidencia, no concluye.\n\n` +
         `CÓMO LEER UN VACÍO: que una búsqueda no devuelva nada significa que no se encontró en ESTAS fuentes, con ` +
         `estos índices y con estos huecos. No significa que la norma no exista. El corpus del Gestor no cubre todo ` +
         `el país, y el índice de SUIN tiene agujeros conocidos.`,
     )
   },
 )
+
+// --- herramientas V2 (módulos de la Ola 1) -------------------------------
+
+// El formato común (fecha, descargo, aviso de versión, logging) lo pone `txt`;
+// cada módulo solo exporta título, descripción, esquema y el texto puro.
+type HerramientaV2 = {
+  TITULO: string
+  DESCRIPCION: string
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  schema: any
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  escribir: (p: any) => Promise<string>
+}
+
+const registrarHerramienta = (nombre: string, m: HerramientaV2) =>
+  server.registerTool(
+    nombre,
+    { title: m.TITULO, description: m.DESCRIPCION, inputSchema: m.schema },
+    (async (p: never) => txt(await m.escribir(p))) as never,
+  )
+
+registrarHerramienta('consultar_por_jerarquia', consultarJerarquia as never)
+registrarHerramienta('analizar_conflicto', analizarConflicto as never)
+registrarHerramienta('cambios_desde', cambiosDesde as never)
+registrarHerramienta('validar_cita', validarCita as never)
+registrarHerramienta('comparar_articulos', compararArticulos as never)
+registrarHerramienta('consultar_perfil', consultarPerfil as never)
+registrarHerramienta('expediente_crear', {
+  TITULO: expedientes.expedienteCrearTITULO,
+  DESCRIPCION: expedientes.expedienteCrearDESCRIPCION,
+  schema: expedientes.expedienteCrearSchema,
+  escribir: expedientes.expedienteCrearEscribir,
+} as never)
+registrarHerramienta('expediente_agregar', {
+  TITULO: expedientes.expedienteAgregarTITULO,
+  DESCRIPCION: expedientes.expedienteAgregarDESCRIPCION,
+  schema: expedientes.expedienteAgregarSchema,
+  escribir: expedientes.expedienteAgregarEscribir,
+} as never)
+registrarHerramienta('expediente_leer', {
+  TITULO: expedientes.expedienteLeerTITULO,
+  DESCRIPCION: expedientes.expedienteLeerDESCRIPCION,
+  schema: expedientes.expedienteLeerSchema,
+  escribir: expedientes.expedienteLeerEscribir,
+} as never)
 
 // --- prompts (aparecen como comandos en Claude Desktop) ------------------
 
@@ -2010,6 +2083,35 @@ server.registerPrompt(
         content: {
           type: 'text',
           text: `Compara "${primera}" y "${segunda}": qué regula cada una, en qué se solapan y en qué se contradicen. Consulta ambas y cita con enlaces.`,
+        },
+      },
+    ],
+  }),
+)
+
+// Idea 9 — aclarar la consulta antes de buscar, para no elegir una norma
+// ambigua ni consultar fuentes de más. Es texto que guía al modelo.
+server.registerPrompt(
+  'aclarar-consulta',
+  {
+    title: 'Aclarar una consulta ambigua',
+    description: 'Haz las preguntas precisas antes de consultar una norma.',
+    argsSchema: { consulta: z.string() },
+  },
+  ({ consulta }) => ({
+    messages: [
+      {
+        role: 'user',
+        content: {
+          type: 'text',
+          text:
+            `Antes de responder a "${consulta}", si falta algún dato, pregunta lo siguiente:\n` +
+            `1. ¿Qué año de la norma necesitas? (el número solo no identifica la norma: "Decreto 1072" son varios)\n` +
+            `2. ¿Qué jurisdicción aplica? (nacional, sectorial, de una alta corte…)\n` +
+            `3. ¿Qué sector o entidad está involucrado?\n` +
+            `4. ¿Buscas texto, vigencia, historial o jurisprudencia?\n` +
+            `5. ¿Necesitas la norma completa o solo un artículo?\n` +
+            `Haz solo las preguntas que falten; no repitas las que ya estén respondidas. Luego consulta con las herramientas de este MCP.`,
         },
       },
     ],

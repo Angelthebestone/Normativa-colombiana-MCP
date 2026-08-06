@@ -100,9 +100,9 @@ after(() => c?.cerrar())
 
 // --- contrato que ve el cliente -----------------------------------------
 
-test('las 25 herramientas se declaran con esquemas utilizables', CONTRATO, async () => {
+test('las 34 herramientas se declaran con esquemas utilizables', CONTRATO, async () => {
   const { tools } = await c.peticion('tools/list')
-  assert.equal(tools.length, 25, tools.map((t: any) => t.name).join(', '))
+  assert.equal(tools.length, 34, tools.map((t: any) => t.name).join(', '))
 
   const sinTipo: string[] = []
   for (const t of tools) {
@@ -131,7 +131,7 @@ test('las 25 herramientas se declaran con esquemas utilizables', CONTRATO, async
 
 test('los prompts se declaran y se resuelven', CONTRATO, async () => {
   const { prompts } = await c.peticion('prompts/list')
-  assert.equal(prompts.length, 4)
+  assert.equal(prompts.length, 5)
   const p = await c.peticion('prompts/get', { name: 'sigue-vigente', arguments: { norma: 'Ley 909 de 2004' } })
   assert.match(p.messages[0].content.text, /Ley 909 de 2004/)
 })
@@ -579,4 +579,44 @@ test('listar_catalogos dice de quién son sus catálogos', CONTRATO, async () =>
   const t = tools.find((x: any) => x.name === 'listar_catalogos')
   assert.match(t.description, /Gestor Normativo de Función Pública/)
   assert.match(t.description, /buscar_normativa_tributaria/)
+})
+
+// --- herramientas V2 ------------------------------------------------------
+
+test('las herramientas V2 se declaran con esquema y sin red no mienten', CONTRATO, async () => {
+  const { tools } = await c.peticion('tools/list')
+  const nombres = [
+    'consultar_por_jerarquia',
+    'analizar_conflicto',
+    'cambios_desde',
+    'validar_cita',
+    'comparar_articulos',
+    'consultar_perfil',
+    'expediente_crear',
+    'expediente_agregar',
+    'expediente_leer',
+  ]
+  for (const n of nombres) {
+    const t = tools.find((x: any) => x.name === n)
+    assert.ok(t, `falta la herramienta V2 ${n}`)
+    assert.ok(t.description?.length > 40, `${n} necesita una descripción útil`)
+    assert.ok(t.inputSchema?.properties && Object.keys(t.inputSchema.properties).length >= 0, `${n} schema roto`)
+  }
+  // Expedientes sin EXPEDIENTES=1: capacidad ausente, no fallo.
+  const crear = await c.tool('expediente_crear', {})
+  assert.equal(crear.esError, false)
+  assert.match(crear.texto, /desactivada|EXPEDIENTES=1/)
+})
+
+test('consultar_perfil responde el perfil y su advertencia', LENTO, async () => {
+  const r = await c.tool('consultar_perfil', { perfil: 'tributario', texto: 'retención', limite: 3 })
+  assert.equal(r.esError, false)
+  assert.match(r.texto, /Perfil:/)
+  assert.match(r.texto, /Advertencia:/)
+})
+
+test('validar_cita clasifica sin afirmar vigencia', LENTO, async () => {
+  const r = await c.tool('validar_cita', { cita: 'Ley 909 de 2004' })
+  assert.equal(r.esError, false)
+  assert.match(r.texto, /Resultado: (cita validada|cita parcialmente validada|no fue posible validar)/)
 })

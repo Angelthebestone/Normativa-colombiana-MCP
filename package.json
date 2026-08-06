@@ -8,7 +8,7 @@
     "build": "node scripts/construir.ts",
     "generar-indice": "node scripts/generar-indice.ts",
     "generar-indice-suin": "node scripts/generar-indice-suin.ts",
-    "test": "node --test test/smoke.ts",
+    "test": "node --test test/smoke.ts test/indice-alternativas.ts test/entidades.ts test/jerarquia.ts test/compiladas.ts test/evidencia.ts test/sectorial-sdk.ts test/diff.ts test/expediente.ts test/perfiles.ts test/consultar_jerarquia.ts test/analizar_conflicto.ts test/cambios_desde.ts test/validar_cita.ts test/comparar_articulos.ts test/expedientes-herramientas.ts test/consultar_perfil.ts",
     "pack": "npm run build && npx @anthropic-ai/mcpb pack . normativa-colombia.mcpb",
     "medir": "npm run build && node scripts/medir.ts",
     "typecheck": "tsc --noEmit",

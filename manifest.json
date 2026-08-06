@@ -129,6 +129,42 @@
     {
       "name": "describir_fuentes",
       "description": "Declara el alcance real: qué fuente responde cada pregunta, qué NO está cubierto y con qué fecha se generaron los índices que viajan empaquetados."
+    },
+    {
+      "name": "consultar_por_jerarquia",
+      "description": "Busca normativa colombiana por nivel de autoridad (constitución, ley, decreto, resolución, concepto o jurisprudencia) y explica el carácter de cada nivel: vinculante, orientador o informativo."
+    },
+    {
+      "name": "analizar_conflicto",
+      "description": "Reúne para dos normas la EVIDENCIA de un posible conflicto: identificación en el Gestor, vigencia según SUIN cuando consta, nivel en la jerarquía y carácter, reformas anotadas en el texto y pasajes que mencionan un tema."
+    },
+    {
+      "name": "cambios_desde",
+      "description": "Resume los cambios (modificación, derogación, adición) que el Gestor anota sobre LAS NORMAS QUE SE LISTAN, filtrándolos por el año de la norma modificadora."
+    },
+    {
+      "name": "validar_cita",
+      "description": "Comprueba que la cita (tipo, número, año y artículo, si se indica) coincide con lo que devuelve el Gestor Normativo y que el dominio del enlace es el esperado (funcionpublica.gov.co)."
+    },
+    {
+      "name": "comparar_articulos",
+      "description": "Compara el texto de un artículo entre dos normas, marca lo añadido y lo eliminado, y clasifica cada diferencia por patrones de texto (plazo, sanción, excepción, sujeto obligado); lo que no encaja se marca «revisar manualmente»."
+    },
+    {
+      "name": "consultar_perfil",
+      "description": "Ejecuta una consulta con las fuentes y los filtros preconfigurados de un perfil: laboral, tributario, ambiental, contratación estatal o energía."
+    },
+    {
+      "name": "expediente_crear",
+      "description": "Crea un expediente EN MEMORIA para agrupar consultas, citas y observaciones de una investigación; es TEMPORAL (expira en 6 h, se pierde al reiniciar el servidor) y está DESACTIVADO por defecto (se activa con EXPEDIENTES=1)."
+    },
+    {
+      "name": "expediente_agregar",
+      "description": "Agrega una pregunta, fuente, documento, cita, decisión u observación a un expediente crea un expediente EN MEMORIA para agrupar consultas, citas y observaciones de una investigación; es TEMPORAL (expira en 6 h, se pierde al reiniciar el servidor) y está DESACTIVADO por defecto (se activa con EXPEDIENTES=1)."
+    },
+    {
+      "name": "expediente_leer",
+      "description": "Lee el contenido de un expediente creado con expediente_crear: crea un expediente EN MEMORIA para agrupar consultas, citas y observaciones de una investigación; es TEMPORAL (expira en 6 h, se pierde al reiniciar el servidor) y está DESACTIVADO por defecto (se activa con EXPEDIENTES=1)."
     }
   ],
   "prompts": [
