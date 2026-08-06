@@ -4,7 +4,7 @@ import { z } from 'zod'
 
 import { idTipo, parsearCita } from './citas.ts'
 import { cargarIndice, temaDelIndice, frescura } from './indice.ts'
-import { normalizarEntidad } from './entidades.ts'
+import { normalizarEntidad, NO_EN_GESTOR } from './entidades.ts'
 import { esCompiladora, avisoCompiladora } from './compiladas.ts'
 import { conAlternativas } from './alternativas.ts'
 import { validarUrl } from './evidencia.ts'
@@ -423,13 +423,22 @@ server.registerTool(
     // rechaza en vez de resolverse contra el tema equivocado.
     const tema = idOnombre('tema', temaCrudo)
     const subtema = idOnombre('sub', subtemaCrudo)
-    // Idea 6 — normalización de entidades: "dian" se resuelve a su nombre
-    // oficial antes de consultar, y el alias usado se anuncia en la respuesta.
+    // Idea 6 — normalización de entidades: un alias se resuelve al nombre que
+    // el catálogo del Gestor entiende ("Mintrabajo" → "Ministerio del Trabajo").
+    // Los que el Gestor NO cataloga ("dian") no se resuelven ni se inyectan: se
+    // deja el valor del usuario y se avisa hacia dónde ir.
     const ent = entidad ? normalizarEntidad(entidad) : null
-    const r = await gestor.buscar({ palabras, tipo: tipo_documento, numero, anio, entidad: ent?.oficial ?? entidad, tema, subtema })
+    const claveEntidad = entidad ? sinTildes(entidad.trim().toLowerCase()) : ''
+    const fueraDelGestor = NO_EN_GESTOR.has(claveEntidad)
+    const r = await gestor.buscar({ palabras, tipo: tipo_documento, numero, anio, entidad: ent && !fueraDelGestor ? ent.oficial : entidad, tema, subtema })
     const notas = r.nota ? [r.nota] : []
-    if (ent?.aliasUsado && ent.aliasUsado !== ent.oficial) {
+    if (ent?.aliasUsado && !fueraDelGestor) {
       notas.push(`Entidad normalizada: «${ent.aliasUsado}» → «${ent.oficial}».`)
+    } else if (fueraDelGestor) {
+      notas.push(
+        `«${entidad}» no está en el catálogo de entidades del Gestor; no se aplicó como filtro. ` +
+          `Para normativa de la DIAN usa buscar_normativa_tributaria.`,
+      )
     }
 
     // El índice de palabras del portal es pobrísimo: "teletrabajo" solo casa con

@@ -7,15 +7,22 @@
 import { strict as assert } from 'node:assert'
 import test from 'node:test'
 
-import { normalizarEntidad } from '../src/entidades.ts'
+import { normalizarEntidad, NO_EN_GESTOR } from '../src/entidades.ts'
 
 test('el alias se resuelve sin importar mayúsculas ni tildes', () => {
-  const mayusculas = normalizarEntidad('DIAN')
-  const minusculas = normalizarEntidad('dian')
-  assert.equal(mayusculas.oficial, 'Unidad Administrativa Especial Dirección de Impuestos y Aduanas Nacionales')
-  assert.equal(mayusculas.aliasUsado, 'DIAN')
+  const mayusculas = normalizarEntidad('Mintrabajo')
+  const minusculas = normalizarEntidad('mintrabajo')
+  assert.equal(mayusculas.oficial, 'Ministerio del Trabajo')
+  assert.equal(mayusculas.aliasUsado, 'Mintrabajo')
   assert.equal(minusculas.oficial, mayusculas.oficial)
   assert.notEqual(minusculas.aliasUsado, null)
+})
+
+test('un alias que el Gestor no cataloga se marca en NO_EN_GESTOR', () => {
+  // "dian" no está en el catálogo de entidades del Gestor: el filtro no debe
+  // inyectarse con su nombre largo, que el portal rechaza.
+  assert.ok(NO_EN_GESTOR.has('dian'))
+  assert.ok(!NO_EN_GESTOR.has('mintrabajo'))
 })
 
 test('lo que no es un alias se devuelve tal cual, sin aliasUsado', () => {
