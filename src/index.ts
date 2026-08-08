@@ -764,8 +764,11 @@ server.registerTool(
   {
     title: 'Buscar jurisprudencia de la Corte Constitucional',
     description:
-      'Busca en la relatoría de la Corte Constitucional (49.409 providencias, actualizada a diario). ' +
-      'Úsala para sentencias y autos: el Gestor Normativo tiene muy poca jurisprudencia reciente.',
+      'Busca sentencias y autos en la relatoría de la Corte Constitucional (49.409 providencias, ' +
+      'actualizada a diario). Es la herramienta indicada para jurisprudencia constitucional reciente: el ' +
+      'Gestor Normativo tiene muy poca. Devuelve sentencia, tipo, fecha, síntesis y la ruta para ' +
+      'obtener_sentencia. Es de la CORTE CONSTITUCIONAL, no de la Suprema ni del Consejo de Estado: para ' +
+      'esos tribunales usa buscar_jurisprudencia_suprema o buscar_jurisprudencia_consejo_estado.',
     inputSchema: {
       termino: z.string().describe('Obligatorio. Términos a buscar en la relatoría, ej. "teletrabajo"'),
       desde: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional().describe('Fecha inicial AAAA-MM-DD (por defecto 1992-01-01)'),
@@ -777,7 +780,7 @@ server.registerTool(
           'Tipos a incluir. Por defecto C, T y SU (doctrina). Los autos (A) son mayoría por volumen y suelen ' +
             'ser trámite, así que hay que pedirlos explícitamente: ["A"] o ["C","T","SU","A"].',
         ),
-      limite: z.coerce.number().int().min(1).max(100).default(10),
+      limite: z.coerce.number().int().min(1).max(100).default(10).describe('Cuántas providencias mostrar (hasta 100)'),
     },
   },
   async ({ termino, desde, hasta, tipos, limite }) => {
@@ -968,7 +971,7 @@ server.registerTool(
       link: z.string().describe('Nombre del archivo, ej. "decreto_1625_2016.htm"'),
       buscar_en_texto: z.string().optional().describe('Devuelve solo los fragmentos que mencionan este término'),
       desde: z.coerce.number().int().min(0).default(0),
-      max_pasajes: z.coerce.number().int().positive().optional(),
+      max_pasajes: z.coerce.number().int().positive().optional().describe('Máximo de pasajes con buscar_en_texto (por defecto 10)'),
       limite_caracteres: z.coerce.number().int().positive().default(8000).describe('Tope del TEXTO devuelto; se ajusta al rango 200–40.000'),
     },
   },
@@ -1112,7 +1115,7 @@ server.registerTool(
       sala: z.enum(suprema.SALAS).describe('La MISMA sala con la que se encontró la providencia'),
       buscar_en_texto: z.string().optional().describe('Devuelve solo los fragmentos que mencionan este término'),
       desde: z.coerce.number().int().min(0).default(0),
-      max_pasajes: z.coerce.number().int().positive().optional(),
+      max_pasajes: z.coerce.number().int().positive().optional().describe('Máximo de pasajes con buscar_en_texto (por defecto 10)'),
       limite_caracteres: z.coerce.number().int().positive().default(8000).describe('Tope del TEXTO devuelto; se ajusta al rango 200–40.000'),
     },
   },
@@ -1260,7 +1263,7 @@ server.registerTool(
       token: z.string().describe('El token que acompaña a cada providencia en buscar_jurisprudencia_consejo_estado'),
       buscar_en_texto: z.string().optional().describe('Devuelve solo los fragmentos que mencionan este término'),
       desde: z.coerce.number().int().min(0).default(0),
-      max_pasajes: z.coerce.number().int().positive().optional(),
+      max_pasajes: z.coerce.number().int().positive().optional().describe('Máximo de pasajes con buscar_en_texto (por defecto 10)'),
       limite_caracteres: z.coerce.number().int().positive().default(8000).describe('Tope del TEXTO devuelto; se ajusta al rango 200–40.000'),
     },
   },
@@ -1446,7 +1449,7 @@ server.registerTool(
       numero: z.string().optional().describe('Número del concepto, como texto. Ej.: "036201"'),
       anio: z.coerce.string().regex(/^\d{4}$/).optional().describe('Año de cuatro dígitos, como texto. Ej.: "2004"'),
       desde: z.coerce.number().int().min(0).default(0).describe('Cuántos saltarse antes de empezar: pide el siguiente tramo sin repetir los ya vistos'),
-      limite: z.coerce.number().int().min(1).max(100).default(20),
+      limite: z.coerce.number().int().min(1).max(100).default(20).describe('Cuántos conceptos mostrar (hasta 100; por defecto 20)'),
     },
   },
   async ({ numero, anio, desde, limite }) => {
@@ -1525,10 +1528,13 @@ server.registerTool(
   {
     title: 'Buscar normativa de la ANH (hidrocarburos)',
     description:
-      'Resoluciones, acuerdos y circulares de la Agencia Nacional de Hidrocarburos: contratos de exploración y ' +
-      'producción, regalías, derechos económicos, fiscalización y reservas. Son 785 documentos. ' +
-      'NO devuelve el texto: la ANH publica en PDF; se entrega el epígrafe completo y el enlace. ' +
-      'Por defecto OCULTA los actos de personal (nombramientos y encargos), que son dos de cada tres.',
+      'Busca las resoluciones, acuerdos y circulares de la Agencia Nacional de Hidrocarburos: contratos de ' +
+      'exploración y producción, regalías, derechos económicos, fiscalización y reservas (785 documentos). ' +
+      'ÚSALA para la regulación de hidrocarburos y regalías; NO devuelve el texto (la ANH publica en PDF): ' +
+      'se entrega el epígrafe completo y el enlace al PDF y a la ficha. NO sirve para leyes o decretos ' +
+      'nacionales de cualquier sector: para esos usa resolver_cita o buscar_normas. ' +
+      'Por defecto OCULTA los actos de personal (nombramientos y encargos), que son dos de cada tres; ' +
+      'pídelos con incluir_administrativos=true si de verdad los buscas.',
     inputSchema: {
       texto: z.string().optional().describe('Palabra clave, ej. "regalías", "fiscalización"'),
       tipo: z.enum(Object.keys(anh.TIPOS) as [anh.TipoAnh, ...anh.TipoAnh[]]).optional(),
@@ -1629,11 +1635,13 @@ server.registerTool(
   {
     title: 'Buscar resoluciones de la CREG (energía y gas)',
     description:
-      'Resoluciones de la Comisión de Regulación de Energía y Gas, donde vive la regulación operativa del sector: ' +
-      'tarifas, conexión, comercialización, plantas solares, gas natural. ' +
-      'Es la ÚNICA fuente sectorial cuyo texto se puede leer aquí (usa obtener_resolucion_creg con la ruta). ' +
-      'Y la única que publica una señal de vigencia: la CREG mantiene compilaciones separadas de resoluciones ' +
-      'no derogadas y derogadas. Esa señal se traslada literal; no la conviertas en un sí o un no.',
+      'Busca las resoluciones de la Comisión de Regulación de Energía y Gas, donde vive la regulación operativa ' +
+      'del sector: tarifas, conexión, comercialización, plantas solares y gas natural. ' +
+      'ÚSALA para la regulación energética y de gas. Es la ÚNICA fuente sectorial cuyo texto se puede leer aquí ' +
+      '(usa obtener_resolucion_creg con la ruta) y la única que publica una señal de vigencia: la CREG mantiene ' +
+      'compilaciones separadas de resoluciones no derogadas y derogadas. Esa señal se traslada literal; no la ' +
+      'conviertas en un sí o un no. NO sirve para leyes o decretos nacionales de otros sectores: para esos usa ' +
+      'resolver_cita o buscar_normas.',
     inputSchema: {
       texto: z.string().optional().describe('Filtra por número, año o epígrafe. Ej.: "solar", "gas natural", "101-104"'),
       compilacion: z
@@ -1645,7 +1653,7 @@ server.registerTool(
         .regex(/^\d{4}$/)
         .optional()
         .describe('Año de cuatro dígitos, desde 1994. SIN ÉL solo se mira el año en curso, que trae muy pocas.'),
-      limite: z.coerce.number().int().min(1).max(50).default(15),
+      limite: z.coerce.number().int().min(1).max(50).default(15).describe('Cuántas resoluciones mostrar (hasta 50)'),
     },
   },
   async ({ texto, compilacion, anio, limite }) => {
@@ -1690,7 +1698,7 @@ server.registerTool(
       ruta: z.string().describe('Ej.: "docs/resolucion_creg_101-104_2026.htm"'),
       buscar_en_texto: z.string().optional().describe('Devuelve solo los fragmentos que mencionan este término'),
       desde: z.coerce.number().int().min(0).default(0),
-      max_pasajes: z.coerce.number().int().positive().optional(),
+      max_pasajes: z.coerce.number().int().positive().optional().describe('Máximo de pasajes con buscar_en_texto (por defecto 10)'),
       limite_caracteres: z.coerce.number().int().positive().default(8000).describe('Tope del TEXTO devuelto; rango 200–40.000'),
     },
   },

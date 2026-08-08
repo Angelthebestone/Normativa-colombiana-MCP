@@ -52,7 +52,7 @@
     },
     {
       "name": "buscar_jurisprudencia",
-      "description": "Busca en la relatoría de la Corte Constitucional (49.409 providencias, actualizada a diario)."
+      "description": "Busca sentencias y autos en la relatoría de la Corte Constitucional (49.409 providencias, actualizada a diario)."
     },
     {
       "name": "obtener_sentencia",
@@ -104,7 +104,7 @@
     },
     {
       "name": "buscar_normativa_anh",
-      "description": "Resoluciones, acuerdos y circulares de la Agencia Nacional de Hidrocarburos: contratos de exploración y producción, regalías, derechos económicos, fiscalización y reservas."
+      "description": "Busca las resoluciones, acuerdos y circulares de la Agencia Nacional de Hidrocarburos: contratos de exploración y producción, regalías, derechos económicos, fiscalización y reservas (785 documentos)."
     },
     {
       "name": "buscar_normativa_upme",
@@ -112,7 +112,7 @@
     },
     {
       "name": "buscar_resoluciones_creg",
-      "description": "Resoluciones de la Comisión de Regulación de Energía y Gas, donde vive la regulación operativa del sector: tarifas, conexión, comercialización, plantas solares, gas natural."
+      "description": "Busca las resoluciones de la Comisión de Regulación de Energía y Gas, donde vive la regulación operativa del sector: tarifas, conexión, comercialización, plantas solares y gas natural."
     },
     {
       "name": "obtener_resolucion_creg",
@@ -160,11 +160,11 @@
     },
     {
       "name": "expediente_agregar",
-      "description": "Agrega una pregunta, fuente, documento, cita, decisión u observación a un expediente crea un expediente EN MEMORIA para agrupar consultas, citas y observaciones de una investigación; es TEMPORAL (expira en 6 h, se pierde al reiniciar el servidor) y está DESACTIVADO por defecto (se activa con EXPEDIENTES=1)."
+      "description": "Agrega una pregunta, fuente, documento, cita, decisión u observación a un expediente YA CREADO con expediente_crear; no crea expedientes."
     },
     {
       "name": "expediente_leer",
-      "description": "Lee el contenido de un expediente creado con expediente_crear: crea un expediente EN MEMORIA para agrupar consultas, citas y observaciones de una investigación; es TEMPORAL (expira en 6 h, se pierde al reiniciar el servidor) y está DESACTIVADO por defecto (se activa con EXPEDIENTES=1)."
+      "description": "Lee el contenido completo de un expediente de investigación creado con expediente_crear, agrupado por sección (preguntas, fuentes, citas…)."
     }
   ],
   "prompts": [

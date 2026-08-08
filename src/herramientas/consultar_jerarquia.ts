@@ -13,12 +13,21 @@ export const TITULO = 'Consultar normativa por nivel de autoridad'
 export const DESCRIPCION =
   'Busca normativa colombiana por nivel de autoridad (constitución, ley, decreto, resolución, ' +
   'concepto o jurisprudencia) y explica el carácter de cada nivel: vinculante, orientador o ' +
-  'informativo. No es asesoría jurídica: verifica siempre en el enlace.'
+  'informativo. Devuelve los documentos de ese nivel con su título y su enlace, y el carácter del ' +
+  'nivel. ÚSALA cuando la pregunta pida un nivel concreto (p. ej. "¿qué leyes hay sobre X?"); para ' +
+  'buscar sin nivel usa buscar_normas o buscar_por_tema. No es asesoría jurídica: verifica siempre ' +
+  'en el enlace.'
 
 export const schema = {
   nivel: z.enum(NIVELES).describe('Nivel de autoridad: constitución, ley, decreto, resolución, concepto o jurisprudencia'),
   texto: z.string().min(1).describe('Términos a buscar dentro del nivel, ej. "teletrabajo"'),
-  limite: z.coerce.number().int().min(1).max(20).default(10),
+  limite: z.coerce
+    .number()
+    .int()
+    .min(1)
+    .max(20)
+    .default(10)
+    .describe('Cuántos documentos devolver (máximo 20; por defecto 10)'),
 }
 
 /** El schema como ZodObject: de él se deriva el tipo de los parámetros resueltos. */

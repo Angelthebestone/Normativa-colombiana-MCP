@@ -211,6 +211,8 @@ Las pruebas consultan los portales oficiales. `SIN_RED=1 npm test` corre solo la
 
 No hay integración continua: `npm run check` se corre a mano antes de publicar. Conviene ejecutarlo cada tanto aunque no se haya tocado el código, porque es lo que detecta que un portal cambió su HTML.
 
+El fichero `glama.json` de la raíz declara los metadatos del servidor en el [registro de Glama](https://glama.ai/mcp/servers/Angelthebestone/Normativa-colombiana-MCP) (schema oficial con `maintainers`); se empaqueta en el `.mcpb` y viaja en el paquete npm. El checklist de calidad y el diagnóstico de las descripciones de las herramientas viven en `CALIDAD_HERRAMIENTAS_GLAMA.md` (nota de trabajo, no se publica en npm).
+
 Estructura:
 
 | Archivo | Responsabilidad |

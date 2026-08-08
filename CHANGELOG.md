@@ -3,6 +3,30 @@
 Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/).
 Este proyecto sigue [versionado semántico](https://semver.org/lang/es/).
 
+## [1.10.2] — 2026-08-08
+
+**Perfil de Glama al 88 %: se añade `glama.json` y se reescriben las descripciones de las herramientas peor puntuadas.** Cambio no destructivo: ningún contrato de herramienta (nombres, parámetros, tipos, defaults ni respuestas) cambia.
+
+### Añadido
+
+- **`glama.json`** en la raíz, siguiendo el [schema oficial de Glama](https://glama.ai/mcp/schemas/server.json) (`$schema` + `maintainers`). Se empaqueta en el `.mcpb` y viaja en el paquete npm.
+- **Sección "Cómo llegar al 100 % del checklist"** en `CALIDAD_HERRAMIENTAS_GLAMA.md`: documenta el sembrado de uso con "Try in Browser" como único paso manual pendiente ("No recent usage"), sin depender de que los portales del Estado estén en línea.
+
+### Mejorado (descripciones de herramientas, sin romper contrato)
+
+Reescritas siguiendo el diagnóstico de `CALIDAD_HERRAMIENTAS_GLAMA.md` (la nota de Glama es 60 % media + 40 % mínimo, así que las peores arrastran el conjunto):
+
+- `expediente_agregar` (2.6 → objetivo >4): ahora declara que el expediente DEBE existir (creado con `expediente_crear`), que es de solo escritura, el almacenamiento temporal (6 h) y la activación con `EXPEDIENTES=1`; los 3 parámetros llevan `describe()`.
+- `expediente_leer` (3.2): se elimina la cláusula confusa heredada de `expediente_crear` y se aclara el origen del `id`.
+- `buscar_normativa_anh`, `buscar_resoluciones_creg`, `buscar_jurisprudencia`, `consultar_perfil` y `consultar_por_jerarquia`: propósito con verbo + recurso, cuándo-usar/cuándo-no-usar con alternativas nombradas, y comportamiento (qué devuelve).
+- Parámetros sin `describe()` cubiertos: `limite` en `consultar_perfil`, `consultar_jerarquia`, `buscar_conceptos_fp`, CREG y jurisprudencia; `max_pasajes` en los 4 `obtener_*` que lo tenían sin descripción.
+
+### Verificado
+
+- `npm run typecheck` y `npm run lint`: limpios.
+- `npm test` (smoke) 112 pass / 0 fail y `npm run test:e2e` 42 pass / 0 fail (1 skip por SUIN caído, no por código).
+- `git diff` confirma que ningún `inputSchema` cambió nombres, tipos, required/optional ni defaults: solo texto de `description`/`describe()`.
+
 ## [1.10.0] — 2026-08-06
 
 **Nueve herramientas V2, un prompt nuevo y una capa común de metadatos, evidencia y normalización.** Se implementan las ideas de `IDEAS_V2_ADICIONALES.md` con subagentes en paralelo, y un agente de QA probó ~130 llamadas reales contra los portales antes de publicar.

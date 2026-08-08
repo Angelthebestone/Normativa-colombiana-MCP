@@ -16,3 +16,9 @@ PLAN.md
 
 # Configuración local de command-code
 .commandcode/
+.claude/
+claude.md
+openspec/
+GOAL.md
+IDEAS_V2_ADICIONALES.md
+CALIDAD_HERRAMIENTAS_GLAMA.md

@@ -9,11 +9,6 @@ const AVISO_DESACTIVADO =
   'La capacidad de expedientes está desactivada en esta instalación. Se activa con la ' +
   'variable de entorno EXPEDIENTES=1. No es un fallo: es una capacidad ausente.'
 
-const ADVERTENCIA_TEMPORAL =
-  ' crea un expediente EN MEMORIA para agrupar consultas, citas y observaciones de una ' +
-  'investigación; es TEMPORAL (expira en 6 h, se pierde al reiniciar el servidor) y está ' +
-  'DESACTIVADO por defecto (se activa con EXPEDIENTES=1).'
-
 export const expedienteCrearTITULO = 'Crear un expediente temporal de investigación'
 export const expedienteCrearDESCRIPCION = 'Crea un expediente EN MEMORIA para agrupar consultas, citas y observaciones de una investigación; es TEMPORAL (expira en 6 h, se pierde al reiniciar el servidor) y está DESACTIVADO por defecto (se activa con EXPEDIENTES=1).'
 export const expedienteCrearSchema = z.object({})
@@ -28,11 +23,14 @@ export function expedienteCrearEscribir(): string {
 
 export const expedienteAgregarTITULO = 'Agregar una entrada a un expediente'
 export const expedienteAgregarDESCRIPCION =
-  'Agrega una pregunta, fuente, documento, cita, decisión u observación a un expediente' + ADVERTENCIA_TEMPORAL
+  'Agrega una pregunta, fuente, documento, cita, decisión u observación a un expediente YA CREADO con ' +
+  'expediente_crear; no crea expedientes. Es de SOLO ESCRITURA: no modifica ninguna fuente ni respuesta. ' +
+  'El expediente es TEMPORAL (expira en 6 h, se pierde al reiniciar el servidor) y está DESACTIVADO por ' +
+  'defecto (se activa con EXPEDIENTES=1). Si el id no existe o ya expiró, lo dice y no agrega nada.'
 export const expedienteAgregarSchema = z.object({
-  id: z.string().describe('Id devuelto por expediente_crear'),
-  campo: z.enum(['preguntas', 'fuentes', 'documentos', 'citas', 'decisiones', 'observaciones']),
-  texto: z.string().min(1),
+  id: z.string().describe('Id que devuelve expediente_crear; debe existir y no haber expirado'),
+  campo: z.enum(['preguntas', 'fuentes', 'documentos', 'citas', 'decisiones', 'observaciones']).describe('Sección del expediente donde se guarda la entrada'),
+  texto: z.string().min(1).describe('Contenido de la entrada a guardar, tal cual'),
 })
 export function expedienteAgregarEscribir(args: { id: string; campo: keyof Expediente; texto: string }): string {
   if (!habilitado()) return AVISO_DESACTIVADO
@@ -44,8 +42,13 @@ export function expedienteAgregarEscribir(args: { id: string; campo: keyof Exped
 
 export const expedienteLeerTITULO = 'Leer un expediente temporal'
 export const expedienteLeerDESCRIPCION =
-  'Lee el contenido de un expediente creado con expediente_crear:' + ADVERTENCIA_TEMPORAL
-export const expedienteLeerSchema = z.object({ id: z.string() })
+  'Lee el contenido completo de un expediente de investigación creado con expediente_crear, ' +
+  'agrupado por sección (preguntas, fuentes, citas…). Es de SOLO LECTURA: no modifica nada. ' +
+  'El expediente es TEMPORAL (expira en 6 h, se pierde al reiniciar el servidor) y está DESACTIVADO por ' +
+  'defecto (se activa con EXPEDIENTES=1). Si el id no existe o ya expiró, lo dice.'
+export const expedienteLeerSchema = z.object({
+  id: z.string().describe('Id que devuelve expediente_crear; debe existir y no haber expirado'),
+})
 export function expedienteLeerEscribir(args: { id: string }): string {
   if (!habilitado()) return AVISO_DESACTIVADO
   const datos = leer(args.id)

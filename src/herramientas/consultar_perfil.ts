@@ -9,13 +9,21 @@ export const TITULO = 'Consultar un perfil sectorial preconfigurado'
 
 export const DESCRIPCION =
   'Ejecuta una consulta con las fuentes y los filtros preconfigurados de un perfil: laboral, tributario, ' +
-  'ambiental, contratación estatal o energía. Cada perfil declara su sector y sus límites; para el listado de ' +
-  'perfiles disponibles usa describir_fuentes o pide el listado. NO uses un perfil para lo que no cubre.'
+  'ambiental, contratación estatal o energía. Devuelve los resultados del perfil con su sector y su ' +
+  'advertencia, fechados y con descargo. Cada perfil declara su sector y sus límites; para el listado de ' +
+  'perfiles disponibles usa describir_fuentes o pide el listado. NO uses un perfil para lo que no cubre: ' +
+  'si la consulta es de otra materia, usa buscar_normas o resolver_cita.'
 
 export const schema = {
   perfil: z.string().describe('Id del perfil: laboral, tributario, ambiental, contratacion_estatal, energia'),
   texto: z.string().describe('Consulta dentro del perfil, ej. "teletrabajo"'),
-  limite: z.coerce.number().int().min(1).max(20).default(10),
+  limite: z.coerce
+    .number()
+    .int()
+    .min(1)
+    .max(20)
+    .default(10)
+    .describe('Cuántos resultados devolver (máximo 20; por defecto 10)'),
 }
 
 /** El schema como ZodObject: de él se deriva el tipo de los parámetros resueltos. */
