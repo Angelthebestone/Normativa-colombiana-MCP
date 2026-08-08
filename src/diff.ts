@@ -69,3 +69,66 @@ export function diffArticulos(a: string, b: string): { anadidos: string[]; elimi
   for (let k = 0; k < n; k++) if (!lcsA.has(k)) eliminados.push(A[k]!)
   return { anadidos, eliminados }
 }
+
+const normalizarLexico = (s: string): string =>
+  sinTildes(s).toLowerCase().replace(/[^a-z0-9\s]/g, ' ').replace(/\s+/g, ' ').trim()
+
+const bigramas = (s: string): string[] => {
+  const n = normalizarLexico(s)
+  if (n.length < 2) return n ? [n] : []
+  const r: string[] = []
+  for (let k = 0; k < n.length - 1; k++) r.push(n.slice(k, k + 2))
+  return r
+}
+
+export function similitudLexica(a: string, b: string): number {
+  const A = bigramas(a)
+  const B = bigramas(b)
+  if (!A.length && !B.length) return 1
+  if (!A.length || !B.length) return 0
+  const m = new Map<string, number>()
+  for (const x of B) m.set(x, (m.get(x) ?? 0) + 1)
+  let inter = 0
+  for (const x of A) {
+    const c = m.get(x) ?? 0
+    if (c > 0) {
+      inter++
+      m.set(x, c - 1)
+    }
+  }
+  return (2 * inter) / (A.length + B.length)
+}
+
+export const UMBRAL_EDITORIAL = 0.92
+
+export function esCambioEditorial(a: string, b: string, umbral = UMBRAL_EDITORIAL): boolean {
+  return similitudLexica(a, b) >= umbral
+}
+
+export function agruparEditoriales(
+  anadidos: string[],
+  eliminados: string[],
+  umbral = UMBRAL_EDITORIAL,
+): { editoriales: { de: string; a: string; sim: number }[]; anadidos: string[]; eliminados: string[] } {
+  const editoriales: { de: string; a: string; sim: number }[] = []
+  const disp = [...anadidos]
+  const restElim: string[] = []
+  for (const e of eliminados) {
+    let best = -1
+    let bestSim = 0
+    for (let k = 0; k < disp.length; k++) {
+      const s = similitudLexica(e, disp[k]!)
+      if (s > bestSim) {
+        bestSim = s
+        best = k
+      }
+    }
+    if (best >= 0 && bestSim >= umbral) {
+      editoriales.push({ de: e, a: disp[best]!, sim: bestSim })
+      disp.splice(best, 1)
+    } else {
+      restElim.push(e)
+    }
+  }
+  return { editoriales, anadidos: disp, eliminados: restElim }
+}

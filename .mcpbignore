@@ -22,5 +22,8 @@ CHECKSUMS.txt
 # producto. Quien instala la extensión no tiene por qué recibirlas.
 CLAUDE.md
 PLAN.md
+GOAL.md
+IDEAS_V2_ADICIONALES.md
+openspec/
 .commandcode/
 .claude/

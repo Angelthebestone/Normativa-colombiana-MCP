@@ -767,8 +767,10 @@ server.registerTool(
       'Busca sentencias y autos en la relatoría de la Corte Constitucional (49.409 providencias, ' +
       'actualizada a diario). Es la herramienta indicada para jurisprudencia constitucional reciente: el ' +
       'Gestor Normativo tiene muy poca. Devuelve sentencia, tipo, fecha, síntesis y la ruta para ' +
-      'obtener_sentencia. Es de la CORTE CONSTITUCIONAL, no de la Suprema ni del Consejo de Estado: para ' +
-      'esos tribunales usa buscar_jurisprudencia_suprema o buscar_jurisprudencia_consejo_estado.',
+      'obtener_sentencia. La relatoría no indexa frases largas: con varias palabras se reintenta con la ' +
+      'más distintiva y la respuesta lo anuncia ("se buscó con el núcleo «X»"). Es de la CORTE ' +
+      'CONSTITUCIONAL, no de la Suprema ni del Consejo de Estado: para esos tribunales usa ' +
+      'buscar_jurisprudencia_suprema o buscar_jurisprudencia_consejo_estado.',
     inputSchema: {
       termino: z.string().describe('Obligatorio. Términos a buscar en la relatoría, ej. "teletrabajo"'),
       desde: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional().describe('Fecha inicial AAAA-MM-DD (por defecto 1992-01-01)'),
@@ -787,21 +789,27 @@ server.registerTool(
     const porDefecto: ('C' | 'T' | 'SU')[] = ['C', 'T', 'SU']
     // Idea 5 — si el término rinde poco, se prueba sin tildes y con sinónimo,
     // y la variante usada se anuncia en la respuesta.
-    const { items, variantesUsadas } = await conAlternativas(
-      (t) => corte.buscar({ termino: t, desde, hasta, tipos: tipos ?? porDefecto, limite }).then((r) => r.items),
+    const { items, variantesUsadas, resultado } = await conAlternativas(
+      (t) => corte.buscar({ termino: t, desde, hasta, tipos: tipos ?? porDefecto, limite }),
       termino,
       1,
+      (r) => r.items,
     )
+    // La relatoría no indexa frases largas: si la consulta extensa no rindió,
+    // el núcleo devuelve resultados reales. Se anuncia como el resto de variantes.
+    const nucleo = resultado?.nucleo
     const r = { items, total: items.length, nota: undefined }
     const avisoAlternativa = variantesUsadas.length
       ? `La búsqueda exacta de "${termino}" no rindió resultados; se usó «${variantesUsadas[0]}». ` +
         `Verifica que sea lo que buscabas.\n\n`
-      : ''
+      : nucleo && nucleo !== termino
+        ? `La relatoría no indexa la frase completa; se buscó con el núcleo «${nucleo}». Verifica que sea lo que buscabas.\n\n`
+        : ''
     if (!r.items.length) return vacio(`providencias sobre "${termino}"`, 'Prueba un término más general o revisa el rango de fechas.')
-    // Al acotar por fechas, el buscador de la relatoría devuelve providencias
-    // que no mencionan el término. Se señalan en vez de presentarlas como
-    // pertinentes: quien pregunta por teletrabajo no espera un impedimento.
-    const aguja = sinTildes(termino).toLowerCase()
+    // La pertinencia se mide contra lo que REALMENTE se buscó: si la relatoría
+    // no indexó la frase y se usó el núcleo, es el núcleo el que debe aparecer
+    // en tema/síntesis, no la frase completa (que nadie buscó como tal).
+    const aguja = sinTildes(nucleo ?? termino).toLowerCase()
     const menciona = (p: (typeof r.items)[number]) =>
       sinTildes(`${p.tema} ${p.sintesis} ${p.sentencia}`).toLowerCase().includes(aguja)
     const flojas = r.items.filter((p) => !menciona(p)).map((p) => p.sentencia)
@@ -818,7 +826,7 @@ server.registerTool(
     // consulta a quitar algo que no puso.
     const porFechas = Boolean(desde || hasta)
     const aviso = flojas.length
-      ? `\n\nAtención: ${flojas.join(', ')} no mencionan "${termino}" en su tema ni en su síntesis. ` +
+      ? `\n\nAtención: ${flojas.join(', ')} no mencionan "${nucleo ?? termino}" en su tema ni en su síntesis. ` +
         (porFechas
           ? `El buscador de la relatoría pierde precisión al acotar por fechas: prueba sin desde/hasta.`
           : `El buscador de la relatoría indexa el texto completo, así que devuelve providencias donde el término ` +

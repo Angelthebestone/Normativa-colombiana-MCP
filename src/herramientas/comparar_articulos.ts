@@ -4,7 +4,7 @@
  */
 import { z } from 'zod'
 
-import { clasificarDiferencia, diffArticulos } from '../diff.ts'
+import { agruparEditoriales, clasificarDiferencia, diffArticulos } from '../diff.ts'
 import { idTipo, parsearCita, candidatosAmbiguos } from '../citas.ts'
 import { articulo as extraerArticulo, limpiarArticulo } from '../parse.ts'
 import * as gestor from '../fuentes/gestor.ts'
@@ -12,9 +12,10 @@ import * as gestor from '../fuentes/gestor.ts'
 export const TITULO = 'Comparar dos artículos de normas distintas'
 
 export const DESCRIPCION =
-  'Compara el texto de un artículo entre dos normas, marca lo añadido y lo eliminado, y clasifica cada ' +
-  'diferencia por patrones de texto (plazo, sanción, excepción, sujeto obligado); lo que no encaja se marca ' +
-  '«revisar manualmente». La clasificación no es un análisis semántico.'
+  'Compara el texto de un artículo entre dos normas, marca lo añadido y lo eliminado, clasifica cada ' +
+  'diferencia por patrones de texto (plazo, sanción, excepción, sujeto obligado) y detecta cambios ' +
+  'editoriales por similitud léxica (Dice bigramas, ≥0,92); lo que no encaja se marca «revisar manualmente». ' +
+  'Sin modelo semántico.'
 
 const esquema = z.object({
   norma_a: z.string().describe('Cita de la primera norma, ej. "Ley 909 de 2004"'),
@@ -31,7 +32,7 @@ type Params = z.infer<typeof esquema>
 type Articulo = { texto: string | null; url: string; titulo: string }
 
 const CIERRE =
-  'La clasificación es por patrones de texto, no es un análisis semántico: lo marcado como «no clasificado» hay que revisarlo manualmente.'
+  'Los cambios «editorial» son léxicos (Dice ≥0,92, sin modelo semántico): «multa»→«sanción pecuniaria» no se detecta como tal y queda en «no clasificado» para revisión manual.'
 
 /**
  * Trae el texto de un artículo de una norma citada. Si la cita o el artículo
@@ -74,18 +75,21 @@ async function articuloDe(cita: string, numero: string): Promise<{ articulo: Art
 }
 
 /**
- * Formatea el resultado de una comparación: una línea por diferencia (con su
- * clasificación por patrones), los enlaces de ambas normas y el cierre fijo.
+ * Formatea el resultado de una comparación: empareja cambios editoriales por
+ * similitud léxica y lista el resto como añadido/eliminado con su patrón.
  */
 export function formatear(
   comparacion: { anadidos: string[]; eliminados: string[] },
   a: { titulo: string; url: string },
   b: { titulo: string; url: string },
 ): string {
+  const { editoriales, anadidos, eliminados } = agruparEditoriales(comparacion.anadidos, comparacion.eliminados)
   const lineas: string[] = []
-  for (const f of comparacion.anadidos) lineas.push(`AÑADIDO en ${b.titulo} — ${clasificarDiferencia(f)}: «${f}»`)
-  for (const f of comparacion.eliminados) lineas.push(`ELIMINADO de ${a.titulo} — ${clasificarDiferencia(f)}: «${f}»`)
-  if (!lineas.length) lineas.push('Los dos artículos son textualmente iguales.')
+  for (const e of editoriales)
+    lineas.push(`EDITORIAL — «${e.de}» → «${e.a}» (sim. ${e.sim.toFixed(2)}, cambio menor)`)
+  for (const f of anadidos) lineas.push(`AÑADIDO en ${b.titulo} — ${clasificarDiferencia(f)}: «${f}»`)
+  for (const f of eliminados) lineas.push(`ELIMINADO de ${a.titulo} — ${clasificarDiferencia(f)}: «${f}»`)
+  if (!lineas.length && !editoriales.length) lineas.push('Los dos artículos son textualmente iguales.')
   lineas.push('', `- ${a.titulo}: ${a.url}`, `- ${b.titulo}: ${b.url}`)
   lineas.push('', CIERRE)
   return lineas.join('\n')
