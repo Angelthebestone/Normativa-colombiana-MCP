@@ -22,18 +22,20 @@ const UA = `normativa-colombia-mcp/${VERSION} (+https://github.com/Angelthebesto
 // --- ritmo ---------------------------------------------------------------
 
 /**
- * Una petición por segundo sostenida y ráfagas de hasta cinco, por dominio.
+ * Una petición por segundo por dominio, sin ráfagas.
  *
- * Ninguno de los dos portales declara `Crawl-delay`, así que la cifra es
- * criterio propio: una interacción real encadena entre dos y cuatro peticiones
- * (resolver la cita, traer la norma; o buscar, resolver el subtema, reconsultar)
- * y con cinco fichas salen sin demora perceptible, mientras el techo sostenido
- * queda por debajo de lo que genera una persona navegando.
+ * Ningún portal declara `Crawl-delay`, así que la cifra es criterio propio. La
+ * capacidad vale 1 —no 5— porque el lote de citas y las pestañas de la Unidad
+ * de Víctimas encadenan varias peticiones a la MISMA fuente en una sola
+ * interacción: el techo sostenido ya era 1/s con la ráfaga de 5, pero la ráfaga
+ * convierte ese techo en "primera consulta instantánea, después 1/s", y con
+ * varios lotes en paralelo (dos clientes del MCP) la ráfaga se repite por
+ * cubo. El costo es una demora de 1 s en la primera petición de cada lote.
  *
- * Más importante que la tasa: una sola petición en vuelo por dominio. Eso es lo
- * que impide apilar carga sobre un servicio público.
+ * Lo que de verdad impide apilar carga sobre un servicio público es la
+ * serialización: una sola petición en vuelo por dominio.
  */
-const CAPACIDAD = 5
+const CAPACIDAD = 1
 const RELLENO_MS = 1000
 
 type Cubo = { fichas: number; ultimo: number }
@@ -58,11 +60,27 @@ async function ficha(host: string): Promise<void> {
   c.fichas -= 1
 }
 
-/** Serializa por dominio: nunca hay dos peticiones simultáneas al mismo sitio. */
-function enCola<T>(host: string, fn: () => Promise<T>): Promise<T> {
+/**
+ * Timestamps en que cada petición de `host` recibió su ficha (cuando salió de
+ * la cola), para que las pruebas verifiquen el espaciado sin tocar la red.
+ */
+const despegues = new Map<string, number[]>()
+
+/** Timestamps de salida de `host` en el orden en que ocurrieron. */
+export function ritmoPorDominio(host: string): number[] {
+  return [...(despegues.get(host) ?? [])]
+}
+
+/**
+ * Serializa por dominio: nunca hay dos peticiones simultáneas al mismo sitio,
+ * y cada una espera su ficha (1/s sostenido) antes de salir a la red.
+ * Exportada para que las pruebas midan el ritmo con un `pedir` mockeado.
+ */
+export async function enCola<T>(host: string, fn: () => Promise<T>): Promise<T> {
   const previa = colas.get(host) ?? Promise.resolve()
   const tarea = previa.then(async () => {
     await ficha(host)
+    despegues.set(host, [...(despegues.get(host) ?? []), Date.now()])
     return fn()
   })
   colas.set(
@@ -70,6 +88,69 @@ function enCola<T>(host: string, fn: () => Promise<T>): Promise<T> {
     tarea.catch(() => {}),
   )
   return tarea
+}
+
+// --- circuit breaker por host -------------------------------------------
+
+/**
+ * Tres fallos seguidos (error de red o 5xx) en una ventana marcan el host
+ * "degradado" durante 60 s: las llamadas en ese tramo ni tocan la red y
+ * lanzan un error que declara cuándo se vuelve a intentar. Al vencer la
+ * ventana se reintenta y, si acierta, el host se restablece.
+ */
+const DEGRADADO_MS = 60_000
+const UMBRAL_FALLOS = 3
+
+type Breaker = { fallos: number; desde: number; hasta: number | null }
+const breakers = new Map<string, Breaker>()
+
+function breaker(host: string): Breaker {
+  let b = breakers.get(host)
+  if (!b) {
+    b = { fallos: 0, desde: Date.now(), hasta: null }
+    breakers.set(host, b)
+  }
+  return b
+}
+
+/** Estado declarado de un host: si está degradado y cuándo se vuelve a intentar. */
+export function estadoDe(host: string): { degradado: boolean; reintentaEnMs?: number } {
+  const b = breaker(host)
+  const ahora = Date.now()
+  if (b.hasta !== null && ahora >= b.hasta) {
+    b.fallos = 0
+    b.desde = ahora
+    b.hasta = null
+  }
+  return b.hasta === null ? { degradado: false } : { degradado: true, reintentaEnMs: b.hasta - ahora }
+}
+
+/** Anota un fallo de red o 5xx y devuelve el estado resultante del host. */
+export function anotarFallo(host: string): void {
+  const b = breaker(host)
+  const ahora = Date.now()
+  if (b.hasta !== null && ahora >= b.hasta) {
+    b.fallos = 0
+    b.desde = ahora
+    b.hasta = null
+  }
+  b.fallos += 1
+  if (b.fallos >= UMBRAL_FALLOS) {
+    b.hasta = ahora + DEGRADADO_MS
+    b.fallos = 0
+  }
+}
+
+/** Marca el host como sano tras una petición que sí respondió. */
+export function restablecer(host: string): void {
+  breakers.delete(host)
+}
+
+/** Error con el que se corta la llamada mientras el host está degradado. */
+export function errorDegradado(host: string, reintentaEnMs: number): Error {
+  return new Error(
+    `La fuente ${host} está degradada; reintentando en ${Math.max(1, Math.round(reintentaEnMs / 1000))} s.`,
+  )
 }
 
 // --- decodificación ------------------------------------------------------
@@ -221,6 +302,12 @@ export async function pedir(
 ): Promise<Respuesta> {
   const host = new URL(url).host
 
+  // Fuente degradada: no se pega a la red, se declara el estado y cuándo
+  // reintentar. Las excepciones del breaker no entran en el circuito de
+  // reintentos por 429/503, que solo se alimenta de respuestas reales.
+  const est = estadoDe(host)
+  if (est.degradado) throw errorDegradado(host, est.reintentaEnMs!)
+
   for (let intento = 0; ; intento++) {
     const r = await enCola(host, () => crudo(url, timeout, accept, extra, cuerpo))
 
@@ -237,7 +324,13 @@ export async function pedir(
         `El portal está limitando las consultas (${r.status}). Espera un momento y vuelve a intentarlo.`,
       )
     }
+    // 5xx: cuenta para el breaker, que tras tres seguidos corta sin pegar a la red.
+    if (r.status >= 500) {
+      anotarFallo(host)
+      throw new Error(`El portal respondió ${r.status}.`)
+    }
 
+    restablecer(host)
     return {
       status: r.status,
       cuerpo: decodificar(r.datos, r.contentType),
@@ -259,8 +352,18 @@ export async function pedirBytes(
   accept = 'application/pdf,*/*',
 ): Promise<{ status: number; datos: Buffer; contentType: string }> {
   const host = new URL(url).host
-  const r = await enCola(host, () => crudo(url, timeout, accept, {}))
-  return { status: r.status, datos: r.datos, contentType: r.contentType }
+  const est = estadoDe(host)
+  if (est.degradado) throw errorDegradado(host, est.reintentaEnMs!)
+  try {
+    const r = await enCola(host, () => crudo(url, timeout, accept, {}))
+    if (r.status >= 500) anotarFallo(host)
+    else restablecer(host)
+    return { status: r.status, datos: r.datos, contentType: r.contentType }
+  } catch (e) {
+    // Fallo de red (no una respuesta): cuenta para el breaker.
+    if (!(e instanceof Error && /degradada/.test(e.message))) anotarFallo(host)
+    throw e
+  }
 }
 
 /**

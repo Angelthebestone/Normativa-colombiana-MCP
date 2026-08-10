@@ -11,10 +11,16 @@
  * scripts/generar-indice-suin.ts. Sin índice, esta fuente simplemente no opina.
  */
 import { readFileSync } from 'node:fs'
-import { CanarioError, cargar, limpiarTermino, textoDe } from '../nucleo/parse.ts'
+import { CanarioError, cargar, limpiarTermino, sinTildes, textoDe } from '../nucleo/parse.ts'
 import { pedir } from '../nucleo/http.ts'
 
 const BASE = 'https://www.suin-juriscol.gov.co'
+
+/** Palabras vacías del español; igual que en el Gestor y la Corte Constitucional. */
+const STOPWORDS = new Set([
+  'a', 'al', 'ante', 'con', 'de', 'del', 'e', 'el', 'en', 'la', 'las', 'lo', 'los',
+  'o', 'para', 'por', 'que', 'se', 'su', 'sus', 'un', 'una', 'unos', 'unas', 'y',
+])
 
 export const claveSuin = (tipo: string, numero: string, anio: string): string =>
   `${tipo.toLowerCase()} ${Number(numero)} ${anio}`
@@ -271,4 +277,102 @@ export async function vigencia(tipo: string, numero: string, anio: string): Prom
   // devuelve: ya está descargado y es lo único que hay cuando el Gestor no tiene
   // la norma.
   return { ...ficha, url, generado: idx.generado, texto: textoDe(cargar(r.cuerpo), 'body') }
+}
+
+// --- búsqueda por texto con índice de leyes ----------------------------------
+
+/** Clave normalizada (sin tildes, minúsculas) del epígrafe de una ley. */
+const normaliza = (s: string): string => sinTildes(s).toLowerCase().replace(/\s+/g, ' ').trim()
+
+/**
+ * Búsqueda por texto sobre el índice de leyes empaquetado. A diferencia del
+ * buscador de Azure, no normaliza tildes ni deriva: "Teletrabajo" no casa con
+ * "trabajo remoto", así que una ley solo aparece si su título contiene la
+ * palabra exacta, sin tildes. Si la búsqueda no rinde, `buscar_en_suin` cae al
+ * buscador vivo.
+ */
+export function buscarEnIndice(texto: string, limite = 15): { total: number; items: ResultadoSuin[] } {
+  const idx = cargarIndice()
+  const aguja = normaliza(texto)
+  if (!idx || !aguja) return { total: 0, items: [] }
+  // Sin las vacías: "ley 1221 de 2008" no debe exigir la palabra "de" en la clave.
+  const palabras = aguja.split(' ').filter((p) => !STOPWORDS.has(p))
+  const pedido = aguja.match(/\b(19|20)\d{2}\b/)?.[0] ?? ''
+  const sinAño = palabras.filter((p) => !/^(19|20)\d{2}$/.test(p)).join(' ')
+  const items: ResultadoSuin[] = []
+  for (const [clave, id] of Object.entries(idx.normas)) {
+    if (items.length >= limite) break
+    // La clave es "tipo numero anio". La búsqueda debe caber en ella sin vacías:
+    // "ley 1221 de 2008" → "ley 1221" + año 2008 exacto.
+    if (pedido) {
+      if (!clave.endsWith(pedido) || !clave.includes(sinAño)) continue
+    } else if (!clave.includes(sinAño)) {
+      continue
+    }
+    const m = clave.match(/^(.+?)\s+(\d+)\s+(\d{4})$/)
+    const tipo = m?.[1] ?? ''
+    const numero = m?.[2] ?? ''
+    const anio = m?.[3] ?? ''
+    items.push({
+      id,
+      titulo: `${tipo.toUpperCase()} ${numero} de ${anio}`.trim(),
+      subtipo: tipo,
+      epigrafe: '',
+      vigencia: '',
+      entidad: '',
+      url: `${BASE}/viewDocument.asp?id=${id}`,
+    })
+  }
+  return { total: items.length, items }
+}
+
+/**
+ * Búsqueda por texto que primero prueba el índice de leyes empaquetado y, si
+ * rinde 0, cae al buscador vivo de Azure (que sí normaliza y deriva: encuentra
+ * la Ley 1221 de 2008 para "teletrabajo"). El hueco del índice se declara en la
+ * respuesta; si el fallback tampoco encuentra nada, la norma puede existir
+ * igual: ese vacío no es palabra final.
+ */
+export async function buscarEnSuin(
+  deps: { buscar?: typeof buscar },
+  opts: {
+    texto: string
+    vigencia?: string | undefined
+    sector?: string | undefined
+    desde?: number | undefined
+    limite?: number | undefined
+  },
+): Promise<{ total: number; items: ResultadoSuin[]; nota?: string | undefined; aplicados: string[] }> {
+  const aplicados: string[] = []
+  const notas: string[] = []
+
+  const delIndice = buscarEnIndice(opts.texto, opts.limite ?? 15)
+  if (delIndice.items.length) {
+    aplicados.push('índice de leyes empaquetado')
+    return { total: delIndice.total, items: delIndice.items, aplicados }
+  }
+
+  // El índice solo cubre un subconjunto (leyes del sitemap de leyes). Antes de
+  // concluir "no existe", se consulta el buscador del portal: es OTRO índice y
+  // normaliza tildes y derivación.
+  const vivo = await (deps.buscar ?? buscar)({
+    texto: opts.texto,
+    ...(opts.vigencia ? { vigencia: opts.vigencia } : {}),
+    ...(opts.sector ? { sector: opts.sector } : {}),
+    ...(opts.desde ? { desde: opts.desde } : {}),
+    ...(opts.limite ? { limite: opts.limite } : {}),
+  })
+  aplicados.push('buscador del portal (Azure)')
+  if (vivo.items.length) {
+    notas.push(
+      'El índice empaquetado no cubría el término; se consultó el buscador del portal, que normaliza tildes y derivación.',
+    )
+  } else {
+    notas.push(
+      'El índice empaquetado no cubría el término y el buscador del portal tampoco lo encontró. ' +
+        'Eso NO significa que la norma no exista: el índice tiene huecos y el buscador solo indexa título, epígrafe ' +
+        'y materia. Prueba con buscar_por_tema (Gestor Normativo) o resuelve la cita con resolver_cita.',
+    )
+  }
+  return { total: vivo.total, items: vivo.items, nota: notas.join(' ') || undefined, aplicados }
 }

@@ -1,6 +1,6 @@
 {
   "name": "normativa-colombia-mcp",
-  "version": "1.11.0",
+  "version": "1.11.1",
   "description": "MCP para consultar la normativa y la jurisprudencia colombiana: Gestor Normativo de Función Pública, Corte Constitucional, Corte Suprema, SUIN-Juriscol (vigencia) y normograma de la DIAN",
   "license": "MIT",
   "type": "module",
@@ -16,6 +16,7 @@
     "check": "npm run typecheck && npm run lint && npm test && npm run test:e2e",
     "test:e2e": "npm run build && node --test test/e2e.ts",
     "test:red": "npm run build && node --test --test-force-exit test/red-gestor.ts test/red-tribunales.ts test/red-v2.ts",
+    "test:disruptivo": "npm run build && node --test --test-force-exit test/red-v3-disruptivo.ts",
     "prepublishOnly": "npm run check && npm run build"
   },
   "devDependencies": {

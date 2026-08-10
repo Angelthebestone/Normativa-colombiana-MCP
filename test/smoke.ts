@@ -651,10 +651,12 @@ test('los índices empaquetados no se degradan en silencio', () => {
 })
 
 test('el Consejo de Estado devuelve providencias citables, no texto suelto', RED, async () => {
-  const r = await consejo.buscar('liquidación del contrato', 2)
+  const r = await consejo.buscar('liquidación del contrato', 5)
   assert.ok(r.paginas > 100, `páginas: ${r.paginas}`)
-  assert.equal(r.items.length, 2)
+  assert.ok(r.items.length >= 1, `sin items: ${r.items.length}`)
   assert.equal(r.pagina, 1)
+  // El filtro local AND (spec) exige TODOS los términos sobre problema/respuesta/nota.
+  if (r.nota) assert.match(r.nota, /Se exigieron TODOS los términos/)
   for (const p of r.items) {
     // Sin radicado y fecha no se puede citar, que es para lo que existe.
     assert.match(p.radicado, /^\d{15,25}$/, `radicado raro: ${p.radicado}`)

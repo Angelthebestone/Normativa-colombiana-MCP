@@ -23,6 +23,7 @@
  * y además no hace falta ninguna.
  */
 import { CanarioError, cargar, textoDe } from '../../nucleo/parse.ts'
+import { quitarStopwords } from '../gestor.ts'
 import { pedirJson } from '../../nucleo/http.ts'
 
 const API = 'https://consultaprovidenciasbk.cortesuprema.gov.co/api'
@@ -96,9 +97,14 @@ export async function buscar(opts: {
   exacto?: boolean | undefined
   desde?: number | undefined
   limite?: number | undefined
-}): Promise<{ total: number; items: Providencia[]; exacto: boolean; brutos: number }> {
-  const texto = opts.texto.trim()
-  if (!texto) throw new Error('Indica un término para buscar en la Corte Suprema.')
+}): Promise<{ total: number; items: Providencia[]; exacto: boolean; brutos: number; descartadas?: string[] }> {
+  // El backend busca sobre el texto completo y no descarta palabras vacías:
+  // "de" solo devuelve 69.454 providencias. Para los términos poco distintivos
+  // se descartan antes de consultar, como en el Gestor. Un término que queda
+  // vacío no se consulta: no hay nada significativo que buscar.
+  const { usadas, descartadas } = quitarStopwords(opts.texto)
+  if (!usadas) throw new Error('El término solo contiene palabras vacías; indica una palabra distintiva.')
+  const texto = usadas.trim()
   const sala = opts.sala ?? 'Tutelas'
 
   const j = await pedirJson<{
@@ -153,6 +159,9 @@ export async function buscar(opts: {
     // repite tanto que una página de diez puede quedar en dos providencias, y
     // si no se dice, "quedan N resultados" promete documentos que no existen.
     brutos: r.searchResults.length,
+    // Se declara qué se descartó: el usuario pidió "despido sin justa causa"
+    // y el backend buscó "despido justa causa".
+    ...(descartadas.length ? { descartadas } : {}),
   }
 }
 

@@ -40,6 +40,8 @@ export type ResultadoSectorial = {
 export type OpcionesSectorial = {
   texto?: string | undefined
   anio?: string | undefined
+  /** Categoría o tipo de acto (cada adaptador declara cuáles soporta). */
+  categoria?: string | undefined
   pagina?: number | undefined
   limite?: number | undefined
 }

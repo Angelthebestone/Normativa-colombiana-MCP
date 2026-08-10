@@ -10,6 +10,7 @@
 import { strict as assert } from 'node:assert'
 import test from 'node:test'
 
+import { sinTildes } from '../src/nucleo/parse.ts'
 import { adaptadores, registrar } from '../src/fuentes/sectorial.ts'
 import type { Adaptador } from '../src/fuentes/sectorial.ts'
 
@@ -116,4 +117,46 @@ test('Unidad de Víctimas busca en su biblioteca y devuelve documentos con el sh
     assert.ok(x.epigrafe, `fila sin epígrafe (título): ${JSON.stringify(x)}`)
     assert.ok(x.url.startsWith('https://www.unidadvictimas.gov.co'), `url fuera del dominio: ${x.url}`)
   }
+})
+
+test('Unidad de Víctimas agrega TODAS las categorías del portal, no solo la pestaña visible', { skip: process.env['SIN_RED'] ? 'requiere red (SIN_RED=1)' : false }, async () => {
+  await import('../src/fuentes/sectorial/registro.ts')
+  const s = adaptadores().find((a) => a.id === 'unidadvictimas')!
+  const r = await s.buscar({ limite: 100 })
+  assert.ok(r.items.length > 0, 'debería devolver documentos')
+  const tipos = new Set(r.items.map((x) => sinTildes(x.tipo).toLowerCase()))
+  // El portal trae trece pestañas en una misma página; el listado sin filtro
+  // tiene que mezclar categorías y no solo la pestaña visible por defecto.
+  assert.ok(tipos.size >= 2, `se esperaban items de varias categorías; llegó solo: ${[...tipos].join(', ')}`)
+  assert.ok(
+    tipos.has('informes'),
+    `la categoría por defecto (informes) debería seguir apareciendo: ${[...tipos].join(', ')}`,
+  )
+})
+
+test('Unidad de Víctimas filtra por categoria y solo devuelve esa', { skip: process.env['SIN_RED'] ? 'requiere red (SIN_RED=1)' : false }, async () => {
+  await import('../src/fuentes/sectorial/registro.ts')
+  const s = adaptadores().find((a) => a.id === 'unidadvictimas')!
+  const r = await s.buscar({ categoria: 'Resoluciones', limite: 100 })
+  assert.ok(r.items.length > 0, `debería haber resoluciones en la biblioteca (${JSON.stringify(r.items[0] ?? null)})`)
+  const aguja = sinTildes('resoluciones').toLowerCase()
+  for (const x of r.items) {
+    const tipo = sinTildes(x.tipo).toLowerCase()
+    assert.ok(
+      tipo.includes(aguja) || tipo.includes('resoluci'),
+      `item de otra categoría: tipo="${x.tipo}" epígrafe="${x.epigrafe}"`,
+    )
+  }
+})
+
+test('Unidad de Víctimas: texto sin coincidencias devuelve vacío con la advertencia', { skip: process.env['SIN_RED'] ? 'requiere red (SIN_RED=1)' : false }, async () => {
+  await import('../src/fuentes/sectorial/registro.ts')
+  const s = adaptadores().find((a) => a.id === 'unidadvictimas')!
+  const r = await s.buscar({ texto: 'zzz_ningun_documento_con_esto', limite: 5 })
+  assert.equal(r.items.length, 0, 'un término inexistente no debería devolver filas')
+  // El adaptador emite la nota (categoría consultada / qué filtra); el vacío
+  // nunca viaja en silencio: la advertencia de la fuente se declara en el
+  // adaptador y el servidor la pega SIEMPRE en la respuesta.
+  assert.ok(s.advertencia.length > 40, 'debe declarar qué NO cubre')
+  assert.ok(r.url.startsWith('https://www.unidadvictimas.gov.co'), 'la respuesta debe decir qué se consultó')
 })

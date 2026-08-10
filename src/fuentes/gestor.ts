@@ -108,12 +108,44 @@ export async function resolver(valor: string | number | undefined, cual: keyof C
 
 export type Filtros = {
   palabras?: string | undefined
+  /**
+   * `true`: el resultado solo conserva los documentos que contienen TODOS los
+   * términos (filtro local sobre título+resumen, sin tildes). Por defecto el
+   * portal une con OR, como en la web.
+   */
+  todos?: boolean | undefined
   tipo?: string | number | undefined
   numero?: string | number | undefined
   anio?: string | number | undefined
   entidad?: string | number | undefined
   tema?: string | number | undefined
   subtema?: string | number | undefined
+}
+
+/**
+ * Términos significativos (sin vacías, sin tildes, en minúsculas) de una
+ * frase. Cuando todas las palabras son vacías no queda nada que exigir.
+ */
+export function terminosSignificativos(frase: string): string[] {
+  const { usadas, descartadas } = quitarStopwords(frase)
+  const palabras = limpiarTermino(frase).split(' ').filter(Boolean)
+  if (descartadas.length && descartadas.length === palabras.length) return []
+  return [...new Set(usadas.split(' ').filter(Boolean).map((t) => sinTildes(t).toLowerCase()))]
+}
+
+/**
+ * Filtro local AND sobre lo que el portal devolvió con OR. Sobre título y
+ * resumen, sin tildes y en minúsculas: los resultados de esta herramienta solo
+ * traen esos dos campos, y ahí es donde el usuario busca.
+ */
+export function contienenTodos(items: Resultado[], frase: string): { items: Resultado[]; exigidos: string[]; omitidos: number } {
+  const exigidos = terminosSignificativos(frase)
+  if (exigidos.length < 2) return { items, exigidos, omitidos: 0 }
+  const quedan = items.filter((i) => {
+    const heno = sinTildes(`${i.titulo} ${i.resumen}`).toLowerCase()
+    return exigidos.every((t) => heno.includes(t))
+  })
+  return { items: quedan, exigidos, omitidos: items.length - quedan.length }
 }
 
 async function consultar(p: URLSearchParams, termino = ''): Promise<{ total: number; items: Resultado[] }> {
@@ -243,6 +275,19 @@ export async function buscar(
           `el portal une los términos con OR, así que coincidió solo el resto.`,
       )
     }
+  }
+
+  // Modo AND local: el portal consultado une con OR, así que cuando se piden
+  // TODOS los términos el filtro es local y posterior, sobre título+resumen.
+  if (f.todos && f.palabras && items.length) {
+    const { items: filtrados, exigidos, omitidos } = contienenTodos(items, f.palabras)
+    const excluidos = omitidos > 0 ? ` Se descartaron ${omitidos} por no contener todos los términos.` : ''
+    notas.push(
+      `Se exigieron TODOS los términos (${exigidos.join(', ')}) sobre título y resumen; ` +
+        `el portal los une con OR, así que esto es un filtro local de pertinencia.${excluidos}`,
+    )
+    items = filtrados
+    total = filtrados.length
   }
 
   return { total, items, nota: notas.join(' ') || undefined, aplicados }

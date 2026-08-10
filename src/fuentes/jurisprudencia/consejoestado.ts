@@ -25,7 +25,8 @@
  * sentencia".
  */
 import * as cheerio from 'cheerio/slim'
-import { CanarioError, limpiarTermino } from '../../nucleo/parse.ts'
+import { CanarioError, limpiarTermino, sinTildes } from '../../nucleo/parse.ts'
+import { terminosSignificativos } from '../gestor.ts'
 import { pedir, pedirBytes } from '../../nucleo/http.ts'
 
 const BASE = 'https://samai.consejodeestado.gov.co'
@@ -57,6 +58,27 @@ export type Providencia = {
 }
 
 const limpio = (s: string): string => s.replace(/\s+/g, ' ').trim()
+
+/** Texto de una providencia sobre el que se filtra: problema jurídico, respuesta y nota. */
+const textoDe = (p: Providencia): string =>
+  p.titulaciones.map((t) => `${t.problema} ${t.respuesta} ${t.nota}`).join(' ')
+
+/**
+ * Filtro local AND. SAMAI une los términos con OR, así que el filtro que exige
+ * TODOS los términos va aquí, después de la consulta, sobre el texto que el
+ * buscador sí publica en cada resultado (problema jurídico, respuesta y nota).
+ * Las vacías no se exigen: "nulidad electoral" no debe descartar una providencia
+ * por no traer la palabra "de".
+ */
+export function contienenTodas(items: Providencia[], frase: string): { items: Providencia[]; exigidos: string[]; omitidos: number } {
+  const exigidos = terminosSignificativos(frase)
+  if (exigidos.length < 2) return { items, exigidos, omitidos: 0 }
+  const quedan = items.filter((p) => {
+    const heno = sinTildes(textoDe(p)).toLowerCase()
+    return exigidos.every((t) => heno.includes(t))
+  })
+  return { items: quedan, exigidos, omitidos: items.length - quedan.length }
+}
 
 /**
  * El enlace permanente que genera la propia página. Los paréntesis delimitan la
@@ -152,7 +174,7 @@ export async function buscar(
   texto: string,
   limite = 5,
   pagina = 1,
-): Promise<{ paginas: number; pagina: number; items: Providencia[]; url: string }> {
+): Promise<{ paginas: number; pagina: number; items: Providencia[]; url: string; nota?: string | undefined; omitidos: number }> {
   const q = limpiarTermino(texto)
   if (!q) throw new Error('Indica un término para buscar en el Consejo de Estado.')
 
@@ -192,7 +214,18 @@ export async function buscar(
         `(los identificadores del repetidor cambiaron)`,
     )
   }
-  return { ...res, pagina: n, url }
+
+  // SAMAI une los términos con OR, así que exigir TODOS es un filtro local sobre
+  // el texto que el buscador publica. De la página pedida solo quedan las
+  // providencias que tratan todo el asunto, no las que rozan una palabra.
+  const { items: filtrados, exigidos, omitidos } = contienenTodas(res.items, q)
+  const nota =
+    exigidos.length >= 2
+      ? `Se exigieron TODOS los términos (${exigidos.join(', ')}) sobre el problema jurídico, la respuesta y la nota ` +
+        `de relatoría: SAMAI los une con OR, así que esto es un filtro local de pertinencia.`
+      : undefined
+
+  return { ...res, items: filtrados, pagina: n, url, ...(nota ? { nota } : {}), omitidos }
 }
 
 /** Página que abre la providencia con el token del buscador. No pide verificación. */

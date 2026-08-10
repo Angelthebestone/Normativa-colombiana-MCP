@@ -126,8 +126,9 @@ Qué herramienta usar:
 - Antes de decirle a alguien que una norma "no existe", o para saber si el índice de vigencia sigue fresco → describir_fuentes. Declara qué cubre cada fuente y qué NO, sin consultar la red.
 - Energía, gas, tarifas o conexión → buscar_resoluciones_creg (y obtener_documento con fuente="creg" para el texto). Hidrocarburos, regalías o contratos E&P → buscar_normativa_anh. Planeación minero energética → buscar_normativa_upme. Qué normas aplican a un tema ambiental → listar_normativa_ambiental_anla, y resuelve cada cita con resolver_cita.
 - Cuatro reguladores tienen herramienta propia (CREG, ANH, UPME y ANLA) y otros doce se consultan con buscar_normativa_sectorial y su parámetro entidad (la SIC, la Superfinanciera, la Supersalud, la ANT y la Unidad para las Víctimas entre ellos): pide la lista a describir_fuentes. Para lo que no esté en ninguna de las dos listas —la CRC, la Superservicios— este MCP no tiene nada, y un vacío no prueba que la norma no exista.
+- Leer el acto de un regulador sectorial → obtener_documento con fuente="sectorial", entidad=<el id de la búsqueda> y url=<el enlace del acto>. El texto se extrae si es PDF o Word; si es un escaneo, se avisa y se remite al enlace. Para guardar el documento en disco, añade entero=true (devuelve la ruta del archivo y un trozo para leer, nunca el documento entero) o ruta_destino=<carpeta> (descarga el archivo sin devolver texto). En las fuentes con enlace directo (dian con link, sectorial con url) entero y ruta_destino descargan el archivo original; en gestor/corte/suprema/creg, entero reconstruye el texto y lo escribe como .txt.
 
-Nota de versión: los nombres de las herramientas de lectura se unificaron. Antes eran obtener_norma, obtener_sentencia, obtener_providencia_suprema, obtener_providencia_consejo_estado, obtener_documento_dian y obtener_resolucion_creg; ahora es una sola obtener_documento con el parámetro fuente ("gestor", "corte", "suprema", "consejo", "dian" o "creg"). Los subtemas y los conceptos de Función Pública viven en listar_catalogos (catalogo="subtemas" y catalogo="conceptos_fp"); validar_cita es resolver_cita con validar=true; y los expedientes son expediente con accion="crear|agregar|leer".
+Nota de versión: los nombres de las herramientas de lectura se unificaron. Antes eran obtener_norma, obtener_sentencia, obtener_providencia_suprema, obtener_providencia_consejo_estado, obtener_documento_dian y obtener_resolucion_creg; ahora es una sola obtener_documento con el parámetro fuente ("gestor", "corte", "suprema", "consejo", "dian", "creg" o "sectorial"). Los subtemas y los conceptos de Función Pública viven en listar_catalogos (catalogo="subtemas" y catalogo="conceptos_fp"); validar_cita es resolver_cita con validar=true; y los expedientes son expediente con accion="crear|agregar|leer".
 
 Reglas al responder:
 - Cita siempre el enlace y la fecha de consulta que devuelven las herramientas. Una afirmación normativa sin fuente verificable no sirve.
@@ -199,9 +200,14 @@ server.registerTool(
     description:
       'Ruta rápida y exacta para citas como "Ley 909 de 2004", "Decreto 1083", "C-337/11", "T-099/24" o ' +
       '"artículo 6 de la Ley 1221 de 2008". Úsala SIEMPRE que la pregunta mencione una norma concreta: ' +
-      'evita el buscador por palabras, que es impreciso.',
+      'evita el buscador por palabras, que es impreciso. Acepta también un LOTE de citas con el parámetro ' +
+      'citas (["Ley 909 de 2004", "C-337/11"]), que resuelve cada una con su enlace en una sola llamada.',
     inputSchema: {
-      cita: z.string().describe('Ej.: "Ley 909 de 2004", "C-337/11", "art. 6 de la Ley 1221 de 2008"'),
+      cita: z.string().optional().describe('Ej.: "Ley 909 de 2004", "C-337/11", "art. 6 de la Ley 1221 de 2008"'),
+      citas: z
+        .array(z.string())
+        .optional()
+        .describe('Varias citas a la vez, ej. ["Ley 909 de 2004", "C-337/11"]: cada una se resuelve y se devuelve con su enlace'),
       validar: z
         .boolean()
         .optional()
@@ -213,9 +219,18 @@ server.registerTool(
       url: z.string().optional().describe('Enlace a comprobar (solo con validar=true)'),
     },
   },
-  async ({ cita, validar, url }) => {
+  async ({ cita, citas, validar, url }) => {
     if (validar) {
-      return txt(await validarCita.escribir({ cita, url }))
+      return txt(
+        await validarCita.escribir({
+          ...(cita !== undefined ? { cita } : {}),
+          ...(citas !== undefined ? { citas } : {}),
+          ...(url !== undefined ? { url } : {}),
+        }),
+      )
+    }
+    if (!cita) {
+      return vacio('una cita normativa', 'Escríbela como "Ley 909 de 2004" o "C-337/11" (y varias a la vez con citas), o usa buscar_normas.')
     }
     const c = parsearCita(cita)
     if (!c) return vacio(`una cita normativa en "${cita}"`, 'Escríbela como "Ley 909 de 2004" o "C-337/11", o usa buscar_normas.')
@@ -1338,15 +1353,19 @@ server.registerTool(
         .describe('Regulador a consultar. Usa describir_fuentes para ver qué sector cubre cada uno.'),
       texto: z.string().optional().describe('Filtra por número, año o epígrafe'),
       anio: z.string().regex(/^\d{4}$/).optional().describe('Año de cuatro dígitos'),
+      categoria: z
+        .string()
+        .optional()
+        .describe('Tipo de acto o categoría (cada fuente declara cuáles soporta; solo Unidad de Víctimas lo filtra hoy)'),
       pagina: z.coerce.number().int().min(1).default(1),
       limite: z.coerce.number().int().min(1).max(100).default(15),
     },
   },
-  async ({ entidad, texto, anio, pagina, limite }) => {
+  async ({ entidad, texto, anio, pagina, limite, categoria }) => {
     const a = sectorial.adaptador(entidad)
     if (!a) return vacio(`un regulador llamado "${entidad}"`, `Disponibles: ${sectorial.ids().join(', ')}.`)
 
-    const r = await a.buscar({ texto, anio, pagina, limite })
+    const r = await a.buscar({ texto, anio, pagina, limite, categoria })
     // La advertencia de la fuente viaja SIEMPRE, haya resultados o no: es lo que
     // impide que un vacío de un regulador se lea como que la norma no existe.
     // A partir de la segunda página se abrevia: paginar 480 resoluciones de 15 en

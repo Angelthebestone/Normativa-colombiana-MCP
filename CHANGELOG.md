@@ -3,6 +3,38 @@
 Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/).
 Este proyecto sigue [versionado semántico](https://semver.org/lang/es/).
 
+## [1.11.1] — 2026-08-10
+
+**Soporte DOC/DOCX, todas las pestañas de la Unidad de Víctimas, descargas a ruta local, buscadores por palabras más precisos, documentos completos, expedientes persistentes y lote de citas.** Cambio no destructivo: ningún contrato de herramienta (nombres, parámetros, tipos, defaults ni respuestas) cambia.
+
+### Añadido
+
+- **Lector de Word vendoreado** (`src/fuentes/sectorial/word.ts`): extrae el texto de `.docx` vía ZIP manual + `node:zlib` (cero dependencias); el `.doc` binario (OLE2) avisa "sin texto extraíble" en vez de inventar texto.
+- **Descargas a ruta local** (`src/nucleo/descargas.ts`): `descargarA` valida el dominio contra el adaptador, deriva un nombre de archivo seguro (sin `..` ni separadores), no sobrescribe (sufijo `_1`) y devuelve `{ rutaAbsoluta, bytes }`.
+- **`obtener_documento` con `fuente="sectorial"`**: lee el acto de cualquier regulador sectorial por `entidad` + `url` (PDF, Word o HTML), con la advertencia de la fuente siempre presente.
+- **`entero=true` y `ruta_destino`**: en vez de trocear, se escribe el documento completo a disco (ruta dada o temporal) y se devuelve la ruta con un trozo de lectura; en `dian`/`sectorial` descarga el archivo original. Nunca se envía el documento entero por stdio.
+- **Citas navegables**: el texto devuelto por `obtener_documento` detecta menciones a otras normas (`parsearCita`) y añade "Este documento menciona: …" con recordatorio de `resolver_cita`; sin menciones no añade nada.
+- **Lote de citas**: `resolver_cita` acepta `citas: ["Ley 909 de 2004", "C-337/11"]` y resuelve cada una con su enlace en una sola llamada; una cita inválida no tumba el lote.
+- **Stopwords compartidas** (`src/nucleo/stopwords.ts`): ~100 palabras vacías del español, usadas por los buscadores y el federado.
+- **Abreviaturas jurídicas** (`src/nucleo/alternativas.ts`): SMLMV, DUR, CPC, CCA, CPACA, CGP… se expanden con clave sin tildes y la expansión se declara en la salida.
+- **Infraestructura de ritmo/cache** (`src/nucleo/http.ts`, `src/nucleo/cache.ts`): ritmo garantizado de 1 llamada/s por dominio, circuit breaker por fuente (tras N fallos se degrada T min y las llamadas lo declaran sin pegar a la red) y cache de búsquedas con TTL corto.
+- **Barrido disruptivo** (`scripts/barrido-disruptivo.ts` + `test/red-v3-disruptivo.ts` + `npm run test:disruptivo`): recorre `tools/list`, llama a cada tool con adversariales (números como texto, vacíos, límites fuera de rango, ids cruzados, `entero`, `ruta_destino`, `categoria`) y verifica el texto crudo (`content[0].text`): sin `undefined`/`NaN`/`[object Object]`, sin nombres viejos, con fecha y descargo.
+
+### Mejorado
+
+- **Unidad de Víctimas** lee TODAS las categorías de la biblioteca (taxonomía `categoria_biblioteca`, no solo la pestaña visible) y acepta el filtro `categoria`.
+- **Gestor Normativo y Consejo de Estado**: los buscadores por palabras usan AND local (exigen TODOS los términos) en vez de unir con OR; el número de páginas ya no se presenta como pertinencia.
+- **Corte Suprema**: descarta stopwords para términos poco distintivos.
+- **SUIN**: cuando el índice empaquetado devuelve 0, se consulta el buscador vivo (API Azure) que sí encuentra la Ley 1221 de 2008 para "teletrabajo"; si el fallback no rinde, se declara el hueco sin concluir que la norma no existe.
+- **Expedientes**: persistencia opcional en disco (`EXPEDIENTES_DIR`, JSON por expediente, carga al arrancar), TTL configurable (sin la fija de 6 h) y `expediente(accion="exportar", ruta)` que vuelca el expediente a markdown/JSON.
+
+### Verificado
+
+- `npm run check` verde: typecheck, lint (0 errores), tests del change 73/73 y smoke 54 pass + 1 skip por SUIN-Juriscol caído (deuda externa conocida).
+- `npm run test:red` verde: 43/43 con red real.
+- `npm run test:disruptivo` verde: barrido 24/24 herramientas sin problemas.
+- `npm run medir`: bundle `server/index.js` 2319 KB (objetivo `+6–12 KB` del spec, delta +24 KB sobre 2295 KB), `npm audit` 0 vulnerabilidades.
+
 ## [1.11.0] — 2026-08-10
 
 **La superficie de herramientas se reduce de 34 a 24, se lee texto de PDFs sectoriales, se federan las búsquedas y se añaden la ANT y la Unidad para las Víctimas.** Cambio BREAKING en nombres de herramientas: los 6 `obtener_*` pasan a una sola `obtener_documento(fuente)`, los 3 `expediente_*` a `expediente(accion)`, `validar_cita` a `resolver_cita(validar)`, y `listar_subtemas`/`buscar_conceptos_fp`/`listar_normas_fp` a catálogos de `listar_catalogos`. Las descripciones y `INSTRUCCIONES` incluyen el mapeo viejo→nuevo.

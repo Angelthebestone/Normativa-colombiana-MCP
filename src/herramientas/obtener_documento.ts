@@ -1,15 +1,20 @@
 /**
- * `obtener_documento`: un solo punto de lectura para las seis fuentes con
- * texto. Antes eran seis herramientas con el mismo esquema y el mismo cuerpo
+ * `obtener_documento`: un solo punto de lectura para las fuentes con texto.
+ * Antes eran seis herramientas con el mismo esquema y el mismo cuerpo
  * (fragmentos + trocear + advertenciasVigencia + avisoSinTexto) repetido;
  * aquí el discriminador es `fuente` y los extras que cada una exige.
  *
  * El esquema común (buscar_en_texto/desde/max_pasajes/limite_caracteres) se
  * define una vez; cada fuente añade lo suyo (id/articulo/historial en gestor,
  * ruta/seccion en corte, sala en suprema, token en consejo, link en dian,
- * ruta en creg). El texto se trocea igual en todas, informando
- * total/mostrado/omitido, y las advertencias de vigencia viajan siempre.
+ * ruta en creg, entidad/url en sectorial). El texto se trocea igual en todas,
+ * informando total/mostrado/omitido, y las advertencias de vigencia viajan
+ * siempre. Con `entero=true` se escribe el documento a disco y se devuelve la
+ * ruta con un trozo de lectura; con `ruta_destino` se descarga tal cual.
  */
+import { mkdir, mkdtemp, writeFile } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { z } from 'zod'
 
 import {
@@ -29,6 +34,11 @@ import {
 } from '../nucleo/parse.ts'
 import { NoExisteError } from '../nucleo/parse.ts'
 import { pedir as pedirHttp } from '../nucleo/http.ts'
+import { descargarA } from '../nucleo/descargas.ts'
+import { parsearCita } from '../nucleo/citas.ts'
+import { extraerTextoWord } from '../fuentes/sectorial/word.ts'
+import { textoDePdfSectorial, avisoEscaneo } from '../fuentes/sectorial/pdf.ts'
+import { adaptador } from '../fuentes/sectorial.ts'
 import * as gestor from '../fuentes/gestor.ts'
 import * as corte from '../fuentes/jurisprudencia/corte.ts'
 import * as suprema from '../fuentes/jurisprudencia/cortesuprema.ts'
@@ -40,13 +50,15 @@ import { esCompiladora, avisoCompiladora } from '../nucleo/compiladas.ts'
 export const TITULO = 'Obtener el texto de un documento por fuente'
 
 export const DESCRIPCION =
-  'Devuelve el texto (troceado, nunca entero) de un documento de una de las seis fuentes con texto: ' +
+  'Devuelve el texto (troceado, nunca entero) de un documento de una de las siete fuentes con texto: ' +
   '"gestor" (normas del Gestor Normativo por id), "corte" (sentencias de la Corte Constitucional por ruta o ' +
   'cita), "suprema" (Corte Suprema por ruta + sala), "consejo" (Consejo de Estado por token), "dian" ' +
-  '(normograma de la DIAN por link) y "creg" (resoluciones CREG por ruta). Usa buscar_en_texto para encontrar ' +
+  '(normograma de la DIAN por link), "creg" (resoluciones CREG por ruta) y "sectorial" (actos de un ' +
+  'regulador sectorial por entidad + url del acto, PDF o Word). Usa buscar_en_texto para encontrar ' +
   'un término dentro del documento, articulo/seccion para una parte puntual, o historial (solo gestor) para ' +
   'los cambios anotados. Nunca devuelve el documento entero: respeta limite_caracteres (200–40.000, default ' +
-  '8000) e informa total/mostrado/omitido.'
+  '8000) e informa total/mostrado/omitido. Con entero=true escribe el documento a disco y devuelve la ruta ' +
+  'con un trozo de lectura; con ruta_destino lo descarga a esa carpeta sin devolver el texto.'
 
 /** El esquema común a todas las fuentes. */
 const comun = {
@@ -63,7 +75,7 @@ const comun = {
 
 export const schema = {
   fuente: z
-    .enum(['gestor', 'corte', 'suprema', 'consejo', 'dian', 'creg'])
+    .enum(['gestor', 'corte', 'suprema', 'consejo', 'dian', 'creg', 'sectorial'])
     .describe('De qué fuente sale el documento'),
   ...comun,
   // Extras por fuente (opcionales; el handler valida cuál aplica según fuente).
@@ -81,10 +93,29 @@ export const schema = {
   sala: z.string().optional().describe('Solo suprema: la MISMA sala con la que se encontró'),
   token: z.string().optional().describe('Solo consejo: token que devuelve buscar_jurisprudencia_consejo_estado'),
   link: z.string().optional().describe('Solo dian: nombre del archivo, ej. "decreto_1625_2016.htm"'),
+  entidad: z
+    .string()
+    .optional()
+    .describe('Solo sectorial: id del regulador (los lista buscar_normativa_sectorial)'),
+  url: z
+    .string()
+    .optional()
+    .describe('Solo sectorial: enlace del acto a leer, tal como lo devuelve buscar_normativa_sectorial'),
+  entero: z
+    .boolean()
+    .optional()
+    .describe('En vez de trocear, escribe el documento a disco y devuelve la ruta con un trozo del texto'),
+  ruta_destino: z
+    .string()
+    .optional()
+    .describe('Carpeta donde guardar el archivo (con entero o para descargar el PDF/Word sin devolver texto)'),
 }
 
 const schemaCompleto = z.object(schema)
-type Parametros = z.infer<typeof schemaCompleto>
+/** El tipo de entrada (los valores con default se resuelven al validar). */
+type Parametros = z.input<typeof schemaCompleto>
+/** Ya validado y con los defaults aplicados (desde/limite_caracteres resueltos). */
+type Resueltas = z.infer<typeof schemaCompleto>
 
 const topeDe = (l: number | undefined): number => Math.min(Math.max(l ?? 8000, 200), 40_000)
 
@@ -100,7 +131,7 @@ function cuerpo(t: { texto: string; total: number; desde: number; omitido: numbe
     `Texto total: ${t.total} caracteres; se muestran ${t.texto.length} desde ${t.desde}` +
     (t.omitido > 0 ? `; quedan ${t.omitido} (usa desde/limite_caracteres o buscar_en_texto).` : '.') +
     (avisos ? `\n${avisos}` : '') +
-    `\n\n${t.texto}\n\nURL: ${url}`
+    `\n\n${t.texto}\n\nURL: ${url}${mencionesDe(t.texto)}`
   )
 }
 
@@ -117,16 +148,44 @@ function pasajes(
   if (!f.total) {
     return `${cabecera}El término "${termino}" no aparece en el documento (${texto.length} caracteres revisados).\nURL: ${url}`
   }
+  const mostrado = f.trozos.join('\n\n---\n\n')
   return (
     `${cabecera}${f.total} aparición(es) de "${termino}", agrupadas en ${f.pasajes} pasaje(s); se muestran ${f.mostrados}` +
     (f.mostrados < f.pasajes ? ` (los demás no caben en ${tope} caracteres: sube limite_caracteres o afina el término).` : '.') +
-    `\n${advertenciasVigencia(f.trozos.join(' ')).join('\n')}\n\n${f.trozos.join('\n\n---\n\n')}\n\nURL: ${url}`
+    `\n${advertenciasVigencia(mostrado).join('\n')}\n\n${mostrado}\n\nURL: ${url}${mencionesDe(mostrado)}`
   )
 }
 
+/**
+ * Citas a otras normas detectadas en un texto, en forma canónica y sin
+ * repetir. Se devuelve la línea final lista para pegar, o '' si no hay nada.
+ */
+export function mencionesDe(texto: string): string {
+  const vistos = new Set<string>()
+  const anadir = (trozo: string) => {
+    const c = parsearCita(trozo)
+    if (!c) return
+    vistos.add(c.sentencia ?? `${c.tipo.charAt(0).toUpperCase()}${c.tipo.slice(1)} ${c.numero}${c.anio ? ` de ${c.anio}` : ''}`)
+  }
+  // Normas con su tipo: "Ley 100 de 1993", "Decreto 1072 de 2015", "art. 6 de
+  // la Ley 1221". El trozo se ciñe al patrón tipo+número(+año) para que una
+  // sentencia incrustada en la misma frase no se trague la cita de la norma.
+  const RE_TIPO =
+    /\b(?:acto legislativo|circular conjunta|circular externa|circular unificada|constituci[oó]n pol[ií]tica|concepto marco|criterio unificado|decreto ley|documento conpes|acuerdo|auto|circular|concepto|decreto|directiva|estatutos|ley|reglamento|resoluci[oó]n|sentencia)\b\s*(?:n[ºo°.]?\s*)?\d+(?:\s*(?:de|del|\/)\s*\d{2,4})?/gi
+  for (const m of texto.matchAll(RE_TIPO)) anadir(m[0])
+  // Las sentencias también se citan en corto, sin la palabra "sentencia":
+  // "C-337/11", "T-099/24". La aduana de parsearCita descarta los falsos.
+  for (const m of texto.matchAll(/\b(?:C|T|SU|A)[\s.-]*\d{1,4}(?:\s*(?:[/-]|\s+de\s+)\s*\d{2,4})?/gi)) anadir(m[0])
+  if (!vistos.size) return ''
+  return `\n\nEste documento menciona: ${[...vistos].join('; ')} (resuélvelas con resolver_cita).`
+}
+
+/** Añade la línea de menciones cuando el texto citado las tiene. */
+const conMenciones = (s: string, texto: string): string => s + mencionesDe(texto)
+
 // --- fuentes --------------------------------------------------------------
 
-async function gestorDocumento(p: Parametros, tope: number): Promise<string> {
+async function gestorDocumento(p: Resueltas, tope: number): Promise<string> {
   if (!p.id) throw new Error('Para fuente="gestor" hace falta id.')
   let n: Awaited<ReturnType<typeof gestor.obtenerNorma>>
   try {
@@ -240,11 +299,11 @@ async function gestorDocumento(p: Parametros, tope: number): Promise<string> {
 
   return (
     `${cab}\n${compiladora ? `\n${avisoCompiladora(n.titulo, n.texto)}\n` : ''}${avisoTexto ? `\n${avisoTexto}\n` : ''}${avisos.length ? `\n${avisos.join('\n')}\n` : ''}` +
-    `\n--- Texto ---\n${cuerpo}${temas}`
+    `\n--- Texto ---\n${cuerpo}${temas}${mencionesDe(cuerpo)}`
   )
 }
 
-async function corteDocumento(p: Parametros, tope: number): Promise<string> {
+async function corteDocumento(p: Resueltas, tope: number): Promise<string> {
   if (!p.ruta) throw new Error('Para fuente="corte" hace falta ruta.')
   let doc: Awaited<ReturnType<typeof corte.obtenerTexto>>
   try {
@@ -277,7 +336,7 @@ async function corteDocumento(p: Parametros, tope: number): Promise<string> {
   return `Providencia ${p.ruta}\n${cuerpo(trocear(doc.texto, p.desde, tope), doc.url)}`
 }
 
-async function supremaDocumento(p: Parametros, tope: number): Promise<string> {
+async function supremaDocumento(p: Resueltas, tope: number): Promise<string> {
   if (!p.ruta || !p.sala) throw new Error('Para fuente="suprema" hacen falta ruta y sala.')
   const doc = await suprema.obtenerTexto(p.ruta, p.sala as (typeof suprema.SALAS)[number])
   if (!doc) {
@@ -292,7 +351,7 @@ async function supremaDocumento(p: Parametros, tope: number): Promise<string> {
   return `${cab}\n${cuerpo(trocear(doc.texto, p.desde, tope), p.ruta)}`
 }
 
-async function consejoDocumento(p: Parametros, tope: number): Promise<string> {
+async function consejoDocumento(p: Resueltas, tope: number): Promise<string> {
   if (!p.token) throw new Error('Para fuente="consejo" hace falta token.')
   const doc = await consejo.obtenerTexto(p.token)
   if (!doc) {
@@ -326,7 +385,7 @@ async function dianDocumento(p: Parametros, tope: number): Promise<string> {
   return `${p.link}\n${cuerpo(trocear(texto, p.desde, tope), url)}`
 }
 
-async function cregDocumento(p: Parametros, tope: number): Promise<string> {
+async function cregDocumento(p: Resueltas, tope: number): Promise<string> {
   if (!p.ruta) throw new Error('Para fuente="creg" hace falta ruta.')
   const d = await creg.obtenerTexto(p.ruta)
   if (d.texto.length < 200) return `${p.ruta}\n\n${sinTexto(d.texto.length, d.url)}`
@@ -334,16 +393,159 @@ async function cregDocumento(p: Parametros, tope: number): Promise<string> {
   return `${p.ruta}\n${cuerpo(trocear(d.texto, p.desde, tope), d.url)}`
 }
 
-const POR_FUENTE = {
+// --- sectorial y guardado a disco ----------------------------------------
+
+/** Cómo se extrae el texto de un enlace sectorial, según el formato del archivo. */
+function esFormatoWord(url: string): boolean {
+  const nombre = url.split(/[?#]/)[0]!.toLowerCase()
+  return nombre.endsWith('.doc') || nombre.endsWith('.docx') || nombre.endsWith('.zip')
+}
+const esPdf = (url: string): boolean => url.split(/[?#]/)[0]!.toLowerCase().endsWith('.pdf')
+
+/**
+ * Dependencias inyectables para probar sin red: los extractores sectoriales y
+ * la descarga aceptan las suyas, y aquí se propagan. El servidor llama sin
+ * ellas; los tests las pasan para no depender de portales.
+ */
+export type DepsLectura = {
+  pedirBytes?: typeof import('../nucleo/http.ts')['pedirBytes']
+  extraerPdf?: (bytes: Uint8Array) => Promise<string>
+  descomprimirZip?: (bytes: Uint8Array) => Promise<Uint8Array | null>
+}
+
+/**
+ * Sectorial sin entero ni ruta_destino: extrae el texto (PDF o Word) y lo
+ * trocea como el resto de fuentes, con la advertencia de la fuente siempre
+ * presente y las menciones a otras normas detectadas al final.
+ */
+async function sectorialDocumento(p: Resueltas, tope: number, deps: DepsLectura = {}): Promise<string> {
+  if (!p.entidad || !p.url) throw new Error('Para fuente="sectorial" hacen falta entidad y url.')
+  const a = adaptador(p.entidad)
+  if (!a) {
+    return `No hay un regulador sectorial llamado "${p.entidad}". Pide la lista a describir_fuentes o a buscar_normativa_sectorial.`
+  }
+  const cab = `Fuente: ${a.nombre} (${a.sector}).\nQué NO cubre: ${a.advertencia}`
+  if (esPdf(p.url)) {
+    const r = await textoDePdfSectorial(a, p.url, {
+      ...(deps.pedirBytes ? { pedirBytes: deps.pedirBytes } : {}),
+      ...(deps.extraerPdf ? { extraer: deps.extraerPdf } : {}),
+    })
+    if ('escaneo' in r) return `${cab}\n\n${avisoEscaneo(r.url)}`
+    return `${cab}\n${conMenciones(cuerpo(trocear(r.texto, p.desde, tope), r.url), r.texto)}`
+  }
+  if (esFormatoWord(p.url)) {
+    const r = await extraerTextoWord(a, p.url, {
+      ...(deps.pedirBytes ? { pedirBytes: deps.pedirBytes } : {}),
+      ...(deps.descomprimirZip ? { descomprimirZip: deps.descomprimirZip } : {}),
+    })
+    if ('sinTexto' in r) {
+      return `${cab}\n\n${avisoSinTexto(0, r.url)} (los .doc binarios de Office no se pueden leer aquí).`
+    }
+    return `${cab}\n${conMenciones(cuerpo(trocear(r.texto, p.desde, tope), r.url), r.texto)}`
+  }
+  // El resto de formatos (HTML de un normograma, sobre todo) se lee como página.
+  const r = await pedirHttp(p.url, 90_000)
+  if (r.status !== 200) throw new Error(`El enlace respondió ${r.status}: no se pudo leer ${p.url}.`)
+  const texto = textoDe(cargar(r.cuerpo), 'body')
+  if (texto.length < 200) return `${cab}\n\n${sinTexto(texto.length, p.url)}`
+  if (p.buscar_en_texto) return pasajes(texto, p.buscar_en_texto, p.max_pasajes, tope, p.url, `${cab}\n`)
+  return `${cab}\n${conMenciones(cuerpo(trocear(texto, p.desde, tope), p.url), texto)}`
+}
+
+/** La URL del archivo que se puede bajar en las fuentes con enlace directo. */
+function urlDeDescarga(p: Resueltas): string | null {
+  if (p.fuente === 'dian') return p.link ? dian.urlDocumento(p.link) : null
+  if (p.fuente === 'sectorial') return p.url ?? null
+  return null
+}
+
+/** El dominio que autoriza la descarga de cada fuente. */
+function dominioDe(p: Resueltas): string {
+  switch (p.fuente) {
+    case 'gestor':
+      return 'https://www.funcionpublica.gov.co'
+    case 'corte':
+      return 'https://www.corteconstitucional.gov.co'
+    case 'creg':
+      return 'https://gestornormativo.creg.gov.co'
+    case 'dian':
+      return 'https://normograma.dian.gov.co'
+    case 'sectorial':
+      return adaptador(p.entidad ?? '')?.dominioPermitido ?? ''
+    default:
+      return ''
+  }
+}
+
+/** Directorio temporal de una llamada: normativa-<algo>, limpio al terminar. */
+async function temporal(): Promise<string> {
+  return mkdtemp(join(tmpdir(), 'normativa-'))
+}
+
+/**
+ * `entero=true`: se escribe el documento a disco (con descargarA cuando hay
+ * enlace directo, o reconstruyendo el texto de las fuentes de texto) y se
+ * devuelve la ruta absoluta con un trozo de lectura; nunca el documento entero.
+ */
+async function enteroDocumento(p: Resueltas, tope: number, deps: DepsLectura = {}): Promise<string> {
+  const destino = p.ruta_destino ?? (await temporal())
+  const url = urlDeDescarga(p)
+  if (url) {
+    const dominio = dominioDe(p)
+    if (!dominio) throw new Error(`Para fuente="${p.fuente}" hace falta un enlace: usa dian con link o sectorial con url.`)
+    const { rutaAbsoluta, bytes } = await descargarA(dominio, url, destino, deps.pedirBytes ? { pedirBytes: deps.pedirBytes } : {})
+    return `Archivo guardado en: ${rutaAbsoluta} (${bytes} bytes).\n\nURL de origen: ${url}`
+  }
+
+  // Fuentes de texto sin enlace directo: se reconstruye el documento y se
+  // escribe como texto; el trozo de lectura evita los 2 MB por stdio.
+  let texto: string
+  let origen = ''
+  if (p.fuente === 'gestor') {
+    if (!p.id) throw new Error('Para fuente="gestor" hace falta id.')
+    const n = await gestor.obtenerNorma(p.id)
+    texto = n.texto
+    origen = n.url
+  } else if (p.fuente === 'corte') {
+    if (!p.ruta) throw new Error('Para fuente="corte" hace falta ruta.')
+    const d = await corte.obtenerTexto(p.ruta)
+    texto = d.texto
+    origen = d.url
+  } else if (p.fuente === 'creg') {
+    if (!p.ruta) throw new Error('Para fuente="creg" hace falta ruta.')
+    const d = await creg.obtenerTexto(p.ruta)
+    texto = d.texto
+    origen = d.url
+  } else if (p.fuente === 'suprema') {
+    if (!p.ruta || !p.sala) throw new Error('Para fuente="suprema" hacen falta ruta y sala.')
+    const d = await suprema.obtenerTexto(p.ruta, p.sala as (typeof suprema.SALAS)[number])
+    if (!d) throw new Error(`No encontré la providencia "${p.ruta}" en la sala ${p.sala}: no se puede guardar.`)
+    texto = d.texto
+    origen = p.ruta
+  } else {
+    throw new Error(`Fuente="${p.fuente}" sin enlace directo ni texto reconstruible: usa entero solo con gestor, corte, suprema, creg, dian o sectorial.`)
+  }
+  await mkdir(destino, { recursive: true })
+  const txt = join(destino, `texto-${p.fuente}.txt`)
+  await writeFile(txt, texto, 'utf8')
+  return `Archivo guardado en: ${txt} (${texto.length} caracteres).\n\nURL de origen: ${origen}\n\n--- Texto (primeros caracteres) ---\n${trocear(texto, 0, tope).texto}`
+}
+
+const POR_FUENTE: Record<Resueltas['fuente'], (p: Resueltas, tope: number, deps: DepsLectura) => Promise<string>> = {
   gestor: gestorDocumento,
   corte: corteDocumento,
   suprema: supremaDocumento,
   consejo: consejoDocumento,
   dian: dianDocumento,
   creg: cregDocumento,
-} as const
+  sectorial: sectorialDocumento,
+}
 
-export async function escribir(p: Parametros): Promise<string> {
-  const tope = topeDe(p.limite_caracteres)
-  return POR_FUENTE[p.fuente](p, tope)
+export async function escribir(p: Parametros, deps: DepsLectura = {}): Promise<string> {
+  const r = schemaCompleto.parse(p) as Resueltas
+  const tope = topeDe(r.limite_caracteres)
+  // Con ruta_destino la orden es descargar, no leer: se obedece antes que el troceo.
+  if (r.ruta_destino) return enteroDocumento(r, tope, deps)
+  if (r.entero) return enteroDocumento(r, tope, deps)
+  return POR_FUENTE[r.fuente](r, tope, deps)
 }
