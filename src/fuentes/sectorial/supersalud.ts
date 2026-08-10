@@ -24,34 +24,15 @@
  * hasta sentencias—, con varias entidades en el campo `entidad`. Por eso no se
  * filtra por entidad: se advierte del alcance real en vez de fingir un recorte.
  */
-import { CanarioError, limpiarTermino, sinTildes } from '../../nucleo/parse.ts'
-import { pedir } from '../../nucleo/http.ts'
-import type { ActoSectorial, Adaptador } from '../sectorial.ts'
+import { adaptadorNormograma } from './normograma.ts'
 
-const API = 'https://normograma.info/prueba-sns/buscador/'
-const DOCS = 'https://normograma.supersalud.gov.co/compilacion/docs/'
-const SIN_RESULTADOS = 'No se encontraron resultados.'
-
-type Hit = {
-  nombre?: string
-  link?: string
-  entidad?: string
-  epigrafe?: string
-  tipo?: string
-  year?: string
-  numero?: string
-}
-
-export default {
+export default adaptadorNormograma({
   id: 'supersalud',
   nombre: 'Superintendencia Nacional de Salud',
   sector: 'Salud: aseguramiento, prestación de servicios y protección al usuario',
   portal: 'https://normograma.supersalud.gov.co/compilacion/herramientas_busqueda.html',
   dominioPermitido: 'https://normograma.supersalud.gov.co',
   tiposDocumento: ['Ley', 'Decreto', 'Resolución', 'Circular', 'Concepto'],
-  soportaTexto: false,
-  soportaVigencia: false,
-  pruebasMinimas: 'todo regulador sectorial declara qué NO cubre',
   advertencia:
     'Esta fuente NO es solo lo que emite la Supersalud: es la compilación jurídica del sector salud que el ' +
     'normograma de la entidad indexa (leyes, decretos y resoluciones del Ministerio de Salud, conceptos y ' +
@@ -59,42 +40,7 @@ export default {
     'campo "tipo" dice de qué se trata; no asumas que todo es un acto de la Supersalud. Los documentos son ' +
     'PDF o HTML sin texto extraíble aquí, y el buscador solo da el AÑO de cada acto, no el día ni el mes. ' +
     'No publica vigencia.',
-
-  async buscar(opts): Promise<{ items: ActoSectorial[]; total?: number; nota?: string; url: string }> {
-    const texto = opts.texto ? sinTildes(limpiarTermino(opts.texto)).trim() : ''
-    if (!texto) throw new Error('Indica un texto para buscar en el normograma de la Supersalud.')
-
-    const url = `${API}Buscar.ashx?&texto=${encodeURIComponent(texto)}`
-    const r = await pedir(url, 40_000)
-    if (r.status !== 200) throw new Error(`El buscador del normograma de la Supersalud respondió ${r.status}.`)
-
-    const cuerpo = r.cuerpo.trim()
-    if (cuerpo === SIN_RESULTADOS) return { items: [], total: 0, url }
-
-    let datos: Hit[]
-    try {
-      datos = JSON.parse(cuerpo) as Hit[]
-    } catch {
-      throw new CanarioError('el buscador del normograma de la Supersalud no devolvió JSON ni el aviso de "sin resultados"')
-    }
-    if (!Array.isArray(datos)) {
-      throw new CanarioError('el buscador del normograma de la Supersalud devolvió JSON que no es una lista')
-    }
-
-    const pagina = Math.max(1, Math.trunc(opts.pagina ?? 1))
-    const limite = Math.min(Math.max(opts.limite ?? 20, 1), 100)
-    const desde = (pagina - 1) * limite
-
-    const items: ActoSectorial[] = datos.slice(desde, desde + limite).map((h) => ({
-      tipo: h.tipo?.trim() || 'Sin clasificar',
-      numero: h.numero?.trim() ?? '',
-      anio: h.year?.trim() ?? '',
-      // El buscador no da día ni mes: solo el año. Se dice en la advertencia.
-      fecha: h.year?.trim() ?? '',
-      epigrafe: (h.epigrafe ?? h.nombre ?? '').trim(),
-      url: h.link ? new URL(h.link, DOCS).toString() : url,
-    }))
-
-    return { items, total: datos.length, url }
-  },
-} satisfies Adaptador
+  apiBase: 'https://normograma.info/prueba-sns/buscador/',
+  docsBase: 'https://normograma.supersalud.gov.co/compilacion/docs/',
+  soportaAnio: false,
+})
