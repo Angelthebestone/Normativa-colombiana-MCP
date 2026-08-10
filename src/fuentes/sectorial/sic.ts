@@ -25,8 +25,8 @@
  * porque el portal no separa "vigente" de "en trámite" en ningún campo, solo
  * en el rótulo de tipo.
  */
-import { CanarioError, cargar } from '../../parse.ts'
-import { pedir } from '../../http.ts'
+import { CanarioError, cargar } from '../../nucleo/parse.ts'
+import { pedir } from '../../nucleo/http.ts'
 import type { Adaptador, ActoSectorial, OpcionesSectorial, ResultadoSectorial } from '../sectorial.ts'
 
 const BASE = 'https://www.sic.gov.co/repositorio-de-normatividad'

@@ -5,8 +5,8 @@
 import { strict as assert } from 'node:assert'
 import test from 'node:test'
 
-import { conAlternativas, TESAURO } from '../src/alternativas.ts'
-import { cargarIndice, frescura } from '../src/indice.ts'
+import { conAlternativas, TESAURO } from '../src/nucleo/alternativas.ts'
+import { cargarIndice, frescura } from '../src/nucleo/indice.ts'
 
 test('un sinónimo rescata cuando el término y su forma sin tildes rinden poco', async () => {
   const r = await conAlternativas(

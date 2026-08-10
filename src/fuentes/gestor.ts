@@ -14,9 +14,9 @@ import {
   type FilaTema,
   type Norma,
   type Resultado,
-} from '../parse.ts'
+} from '../nucleo/parse.ts'
 
-import { pedir } from '../http.ts'
+import { pedir } from '../nucleo/http.ts'
 
 // El ritmo y la serialización por dominio los gobierna `pedir`.
 async function traer(url: string): Promise<string> {
@@ -179,7 +179,7 @@ export async function buscar(
     if (!f.tema) {
       notas.push(
         `Para usar el subtema por nombre ("${f.subtema}") hace falta indicar también el tema; ` +
-          `si no, usa el id numérico que devuelve listar_subtemas.`,
+          `si no, usa el id numérico que devuelve listar_catalogos con catalogo="subtemas".`,
       )
     } else {
       sub = await subtemaPorNombre(String(f.tema), String(f.subtema))

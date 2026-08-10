@@ -3,9 +3,9 @@
  * filtrados por el año de la norma modificadora.
  */
 import { z } from 'zod'
-import { idTipo, parsearCita, candidatosAmbiguos } from '../citas.ts'
+import { idTipo, parsearCita, candidatosAmbiguos } from '../nucleo/citas.ts'
 import * as gestor from '../fuentes/gestor.ts'
-import { historial, type Cambio } from '../parse.ts'
+import { historial, type Cambio } from '../nucleo/parse.ts'
 
 export const TITULO = 'Cambios registrados sobre normas desde una fecha'
 

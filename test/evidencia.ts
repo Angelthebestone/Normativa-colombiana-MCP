@@ -7,7 +7,7 @@
 import { strict as assert } from 'node:assert'
 import test from 'node:test'
 
-import { clasificarValidacion, validarNumeroAnio, validarUrl } from '../src/evidencia.ts'
+import { clasificarValidacion, validarNumeroAnio, validarUrl } from '../src/nucleo/evidencia.ts'
 
 test('validarUrl acepta solo el dominio esperado', () => {
   assert.equal(validarUrl('https://www.funcionpublica.gov.co/eva/gestornormativo/norma.php?i=1', 'funcionpublica.gov.co'), true)

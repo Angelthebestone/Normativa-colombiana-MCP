@@ -7,7 +7,7 @@
 import { strict as assert } from 'node:assert'
 import test from 'node:test'
 
-import { perfil, perfiles, registrarPerfil, type Perfil } from '../src/perfiles.ts'
+import { perfil, perfiles, registrarPerfil, type Perfil } from '../src/nucleo/perfiles.ts'
 
 test('el registro trae los cinco perfiles', () => {
   assert.deepEqual(

@@ -33,8 +33,8 @@
  * correcto). Tomar el primer `<a>` de la tarjeta sin distinguir da una URL
  * rota; hay que preferir siempre `a.documento-normativa`.
  */
-import { CanarioError, cargar, sinTildes } from '../../parse.ts'
-import { pedir } from '../../http.ts'
+import { CanarioError, cargar, sinTildes } from '../../nucleo/parse.ts'
+import { pedir } from '../../nucleo/http.ts'
 import type * as cheerio from 'cheerio/slim'
 import type { Adaptador, ActoSectorial, OpcionesSectorial, ResultadoSectorial } from '../sectorial.ts'
 

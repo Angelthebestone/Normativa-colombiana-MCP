@@ -4,8 +4,8 @@
  * de la Corte Constitucional (jurisprudencia) y explica el carácter del nivel.
  */
 import { z } from 'zod'
-import { caracterDelNivel, NIVELES, tipoANivel, type Nivel } from '../jerarquia.ts'
-import * as corte from '../fuentes/corte.ts'
+import { caracterDelNivel, NIVELES, tipoANivel, type Nivel } from '../nucleo/jerarquia.ts'
+import * as corte from '../fuentes/jurisprudencia/corte.ts'
 import * as gestor from '../fuentes/gestor.ts'
 
 export const TITULO = 'Consultar normativa por nivel de autoridad'

@@ -220,24 +220,23 @@ Estructura:
 | Archivo | Responsabilidad |
 | --- | --- |
 | `src/index.ts` | Herramientas y prompts MCP |
-| `src/parse.ts` | Extracción y limpieza de HTML, troceado, canario anti-rotura |
-| `src/citas.ts` | Parser de citas normativas colombianas |
-| `src/http.ts` | Cliente HTTP con la cadena TLS completa |
+| `src/nucleo/` | Núcleo compartido: `parse.ts` (extracción y limpieza de HTML, troceado, canario anti-rotura), `citas.ts` (parser de citas), `http.ts` (cliente HTTP con la cadena TLS completa), `ca.ts` (intermedios TLS), `evidencia.ts`, `compiladas.ts`, `alternativas.ts`, `entidades.ts`, `jerarquia.ts`, `perfiles.ts`, `indice.ts`, `expediente.ts`, `actualizacion.ts` |
+| `src/herramientas/` | Herramientas MCP (handlers): `obtener_documento.ts`, `resolver_cita` está en `index.ts`, `diff.ts` (comparación de artículos), V2 (`analizar_conflicto`, `cambios_desde`, `comparar_articulos`, `consultar_jerarquia`, `consultar_perfil`, `expedientes`, `validar_cita`, `buscar_unificado`) |
 | `src/fuentes/gestor.ts` | Gestor Normativo (HTML raspado, con canarios) |
-| `src/fuentes/corte.ts` | Relatoría de la Corte Constitucional (JSON) |
 | `src/fuentes/suin.ts` | SUIN-Juriscol: ficha, vigencia e índice empaquetado |
-| `src/fuentes/cortesuprema.ts` | Corte Suprema (GraphQL) |
-| `src/fuentes/consejoestado.ts` | Consejo de Estado (WebForms, sin API) |
 | `src/fuentes/normograma.ts` | Normograma de la DIAN (JSON) |
+| `src/fuentes/jurisprudencia/` | Tres tribunales: `corte.ts` (relatoría Constitucional, JSON), `cortesuprema.ts` (GraphQL), `consejoestado.ts` (WebForms, sin API) |
+| `src/fuentes/sectorial/` | Reguladores sectoriales (CREG, ANH, UPME, ANLA y 11 más vía `buscar_normativa_sectorial`) |
 | `scripts/medir.ts` | Banco de métricas, para que optimizar no sea a ojo |
 | `test/smoke.ts` | Pruebas de biblioteca contra las fuentes reales |
 | `test/e2e.ts` | Arranca el servidor y le habla por stdio, como cualquier cliente MCP |
+| `test/red*.ts` | Red de regresión: casos por dominio leyendo `content[0].text` crudo e `isError` |
 
 Las instrucciones de uso que recibe el modelo están en `INSTRUCCIONES`, en `src/index.ts`: son el único mecanismo que orienta *qué* herramienta se elige, cosa que ninguna prueba puede verificar.
 
 Dos notas para quien vaya a tocar esto:
 
-- **Dos portales envían la cadena TLS incompleta.** `funcionpublica.gov.co` presenta un certificado de «Sectigo RSA Organization Validation» pero manda el intermedio de Domain Validation; `suin-juriscol.gov.co` omite directamente el suyo. `curl` lo tolera porque su bundle ya los trae; Node no. `src/ca.ts` incluye ambos intermedios para completar la cadena **sin desactivar la verificación**: las raíces que los firman sí vienen con Node. No lo cambies por `rejectUnauthorized: false`.
+- **Dos portales envían la cadena TLS incompleta.** `funcionpublica.gov.co` presenta un certificado de «Sectigo RSA Organization Validation» pero manda el intermedio de Domain Validation; `suin-juriscol.gov.co` omite directamente el suyo. `curl` lo tolera porque su bundle ya los trae; Node no. `src/nucleo/ca.ts` incluye ambos intermedios para completar la cadena **sin desactivar la verificación**: las raíces que los firman sí vienen con Node. No lo cambies por `rejectUnauthorized: false`.
 - **Los códigos HTTP mienten en dos fuentes.** El backend de la Corte Suprema responde 200 con una página de mantenimiento ante rutas inventadas, y la relatoría de la Constitucional devuelve el armazón de su SPA en vez de un 404. Por eso los canarios validan la forma de la respuesta y nunca el código de estado.
 - **El canario.** Si el HTML del portal cambia, los parsers lanzan `CanarioError` en vez de devolver listas vacías. Es deliberado: una lista vacía silenciosa se lee como «no existe esa norma», y en materia legal esa confusión es el peor fallo posible.
 

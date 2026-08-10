@@ -7,7 +7,7 @@
 import { strict as assert } from 'node:assert'
 import test from 'node:test'
 
-import { normalizarEntidad, NO_EN_GESTOR } from '../src/entidades.ts'
+import { normalizarEntidad, NO_EN_GESTOR } from '../src/nucleo/entidades.ts'
 
 test('el alias se resuelve sin importar mayúsculas ni tildes', () => {
   const mayusculas = normalizarEntidad('Mintrabajo')

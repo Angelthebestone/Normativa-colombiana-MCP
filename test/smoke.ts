@@ -11,18 +11,18 @@ import { createServer, get } from 'node:http'
 import test from 'node:test'
 import { gzipSync } from 'node:zlib'
 
-import { parsearCita, idTipo, rutaDeSentencia } from '../src/citas.ts'
+import { parsearCita, idTipo, rutaDeSentencia } from '../src/nucleo/citas.ts'
 import { claveSuin, fichaSuin } from '../src/fuentes/suin.ts'
-import { mereceAviso } from '../src/actualizacion.ts'
+import { mereceAviso } from '../src/nucleo/actualizacion.ts'
 import * as dian from '../src/fuentes/normograma.ts'
-import * as suprema from '../src/fuentes/cortesuprema.ts'
-import * as consejo from '../src/fuentes/consejoestado.ts'
+import * as suprema from '../src/fuentes/jurisprudencia/cortesuprema.ts'
+import * as consejo from '../src/fuentes/jurisprudencia/consejoestado.ts'
 import * as anh from '../src/fuentes/anh.ts'
 import * as upme from '../src/fuentes/upme.ts'
 import * as creg from '../src/fuentes/creg.ts'
 import * as anla from '../src/fuentes/anla.ts'
 import * as sectorial from '../src/fuentes/sectorial.ts'
-import { pedir as pedirHttp } from '../src/http.ts'
+import { pedir as pedirHttp } from '../src/nucleo/http.ts'
 import {
   CanarioError,
   advertenciasVigencia,
@@ -41,10 +41,10 @@ import {
   parseTematica,
   sinTildes,
   trocear,
-} from '../src/parse.ts'
-import { cuerpoDe, decodificar } from '../src/http.ts'
+} from '../src/nucleo/parse.ts'
+import { cuerpoDe, decodificar } from '../src/nucleo/http.ts'
 import * as gestor from '../src/fuentes/gestor.ts'
-import * as corte from '../src/fuentes/corte.ts'
+import * as corte from '../src/fuentes/jurisprudencia/corte.ts'
 
 // Las pruebas marcadas con RED consultan los portales oficiales. Con SIN_RED=1
 // se saltan, para iterar rápido o sin conexión sin golpear un servicio público.

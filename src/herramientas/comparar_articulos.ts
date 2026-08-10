@@ -4,9 +4,9 @@
  */
 import { z } from 'zod'
 
-import { agruparEditoriales, clasificarDiferencia, diffArticulos } from '../diff.ts'
-import { idTipo, parsearCita, candidatosAmbiguos } from '../citas.ts'
-import { articulo as extraerArticulo, limpiarArticulo } from '../parse.ts'
+import { agruparEditoriales, clasificarDiferencia, diffArticulos } from './diff.ts'
+import { idTipo, parsearCita, candidatosAmbiguos } from '../nucleo/citas.ts'
+import { articulo as extraerArticulo, limpiarArticulo } from '../nucleo/parse.ts'
 import * as gestor from '../fuentes/gestor.ts'
 
 export const TITULO = 'Comparar dos artículos de normas distintas'

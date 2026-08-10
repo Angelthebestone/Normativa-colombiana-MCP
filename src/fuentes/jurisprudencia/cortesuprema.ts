@@ -22,8 +22,8 @@
  * `.docx` y 1 `.pdf`—, así que una librería de docx habría fallado en el grueso,
  * y además no hace falta ninguna.
  */
-import { CanarioError, cargar, textoDe } from '../parse.ts'
-import { pedirJson } from '../http.ts'
+import { CanarioError, cargar, textoDe } from '../../nucleo/parse.ts'
+import { pedirJson } from '../../nucleo/http.ts'
 
 const API = 'https://consultaprovidenciasbk.cortesuprema.gov.co/api'
 

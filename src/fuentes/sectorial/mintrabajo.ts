@@ -27,8 +27,8 @@
  *   codificación («RESPE�TANDO»): se normaliza el texto plano pero no se
  *   reescribe el contenido.
  */
-import { CanarioError, cargar, sinTildes } from '../../parse.ts'
-import { pedir } from '../../http.ts'
+import { CanarioError, cargar, sinTildes } from '../../nucleo/parse.ts'
+import { pedir } from '../../nucleo/http.ts'
 import type { OpcionesSectorial, ResultadoSectorial } from '../sectorial.ts'
 
 const BASE = 'https://www.mintrabajo.gov.co'

@@ -34,8 +34,8 @@
  *   `div` no está, la página cambió de estructura; si está pero no hay tabla,
  *   son cero resultados de verdad.
  */
-import { CanarioError, cargar, limpiarTermino } from '../../parse.ts'
-import { pedir } from '../../http.ts'
+import { CanarioError, cargar, limpiarTermino } from '../../nucleo/parse.ts'
+import { pedir } from '../../nucleo/http.ts'
 import type { Adaptador, ActoSectorial, OpcionesSectorial, ResultadoSectorial } from '../sectorial.ts'
 
 const BASE = 'https://www.anm.gov.co'

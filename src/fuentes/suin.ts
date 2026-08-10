@@ -11,8 +11,8 @@
  * scripts/generar-indice-suin.ts. Sin índice, esta fuente simplemente no opina.
  */
 import { readFileSync } from 'node:fs'
-import { CanarioError, cargar, limpiarTermino, textoDe } from '../parse.ts'
-import { pedir } from '../http.ts'
+import { CanarioError, cargar, limpiarTermino, textoDe } from '../nucleo/parse.ts'
+import { pedir } from '../nucleo/http.ts'
 
 const BASE = 'https://www.suin-juriscol.gov.co'
 
@@ -182,6 +182,75 @@ export function coberturaIndice(): { generado: string; leyes: number } | null {
 }
 
 export type Vigencia = Ficha & { url: string; generado: string; texto: string }
+
+/** Los tres estados de la ficha directa, para que quien llama los distinga. */
+export type EstadoFichaDirecta =
+  | { ok: true; vigencia: Vigencia }
+  | { ok: false; razon: 'indice-ausente' | 'ficha-caida' | 'no-consta' }
+
+const cacheFichaDirecta = new Map<string, { vigencia: Vigencia; ts: number }>()
+const TTL_FICHA_DIRECTA = 30 * 60 * 1000
+
+/**
+ * Ficha SUIN de un DECRETO por la vía directa, sin índice: se resuelve el id
+ * con el buscador de Azure filtrado por título exacto y se pide la ficha. Es
+ * la ruta que cierra el hueco "todo decreto = no consta" sin reindexar.
+ *
+ * Devuelve un estado explícito en vez de `null` a secas: índice ausente, ficha
+ * caída y norma no cubierta son tres cosas distintas y la respuesta tiene que
+ * poder decirlas. El resultado se cachea 30 min por clave `tipo|numero|anio`.
+ *
+ * `buscar` y `pedir` son inyectables para poder probar los tres estados sin
+ * red; en producción usan el buscador y el transporte reales.
+ */
+export async function fichaDirectaDecreto(
+  tipo: string,
+  numero: string,
+  anio: string,
+  deps: {
+    buscar?: typeof buscar
+    pedir?: typeof pedir
+  } = {},
+): Promise<EstadoFichaDirecta> {
+  const buscarDecreto = deps.buscar ?? buscar
+  const pedirFicha = deps.pedir ?? pedir
+
+  const idx = cargarIndice()
+  if (!idx) return { ok: false, razon: 'indice-ausente' }
+
+  const clave = claveSuin(tipo, numero, anio)
+  // Un decreto que SÍ está en el índice ya lo cubre `vigencia()`: aquí solo
+  // entran los que el índice no trae.
+  if (idx.normas[clave]) return { ok: false, razon: 'no-consta' }
+
+  const cache = cacheFichaDirecta.get(clave)
+  if (cache && Date.now() - cache.ts < TTL_FICHA_DIRECTA) {
+    return { ok: true, vigencia: cache.vigencia }
+  }
+
+  const q = `${tipo} ${numero} de ${anio}`
+  const r = await buscarDecreto({ texto: q, limite: 5 })
+  const item = r.items.find((d) => d.titulo && /^Decreto/i.test(d.titulo))
+  if (!item || !/^https:\/\/www\.suin-juriscol\.gov\.co\/viewDocument\.asp\?id=\d+$/.test(item.url)) {
+    return { ok: false, razon: 'no-consta' }
+  }
+  const id = item.url.match(/id=(\d+)/)?.[1]
+  if (!id) return { ok: false, razon: 'no-consta' }
+
+  const url = `${BASE}/viewDocument.asp?id=${id}`
+  const r2 = await pedirFicha(url, 40_000)
+  if (r2.status !== 200) return { ok: false, razon: 'ficha-caida' }
+  const ficha = fichaSuin(r2.cuerpo)
+  if (!ficha) return { ok: false, razon: 'no-consta' }
+  const vigencia: Vigencia = {
+    ...ficha,
+    url,
+    generado: idx.generado,
+    texto: textoDe(cargar(r2.cuerpo), 'body'),
+  }
+  cacheFichaDirecta.set(clave, { vigencia, ts: Date.now() })
+  return { ok: true, vigencia }
+}
 
 /**
  * Ficha de SUIN para una norma, o `null` si el índice no la tiene. Si SUIN no

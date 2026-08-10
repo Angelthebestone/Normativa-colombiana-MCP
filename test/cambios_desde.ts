@@ -6,7 +6,7 @@ import { strict as assert } from 'node:assert'
 import test from 'node:test'
 
 import { filtrarPorAnio, formatear, formatearCambio } from '../src/herramientas/cambios_desde.ts'
-import type { Cambio } from '../src/parse.ts'
+import type { Cambio } from '../src/nucleo/parse.ts'
 
 const cambio = (anio: string): Cambio => ({
   accion: 'modificado',

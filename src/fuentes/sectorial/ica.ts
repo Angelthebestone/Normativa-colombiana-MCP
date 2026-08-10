@@ -30,8 +30,8 @@
  *   tope no se mueve con `&page=`: no pagina. Sirve para localizar un acto
  *   puntual, no para explorar a fondo un tema con muchos resultados.
  */
-import { CanarioError, cargar } from '../../parse.ts'
-import { pedir } from '../../http.ts'
+import { CanarioError, cargar } from '../../nucleo/parse.ts'
+import { pedir } from '../../nucleo/http.ts'
 import type { Adaptador, ActoSectorial, OpcionesSectorial, ResultadoSectorial } from '../sectorial.ts'
 
 const BASE = 'https://www.ica.gov.co'

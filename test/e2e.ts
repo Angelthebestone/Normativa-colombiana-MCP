@@ -9,60 +9,9 @@
  *   npm run build && node --test test/e2e.ts
  */
 import { strict as assert } from 'node:assert'
-import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process'
-import { fileURLToPath } from 'node:url'
 import test, { after, before } from 'node:test'
 
-const SERVIDOR = fileURLToPath(new URL('../server/index.js', import.meta.url))
-const CONTRATO = { timeout: 30_000 }
-const LENTO = { timeout: 240_000, skip: process.env['SIN_RED'] ? 'requiere red (SIN_RED=1)' : false }
-
-class Cliente {
-  private proc: ChildProcessWithoutNullStreams
-  private buffer = ''
-  private siguiente = 1
-  private pendientes = new Map<number, { ok: (v: any) => void; fallo: (e: Error) => void }>()
-
-  constructor() {
-    this.proc = spawn(process.execPath, [SERVIDOR], { stdio: ['pipe', 'pipe', 'pipe'] })
-    this.proc.stdout.on('data', (d: Buffer) => {
-      this.buffer += d.toString('utf8')
-      let corte: number
-      while ((corte = this.buffer.indexOf('\n')) !== -1) {
-        const linea = this.buffer.slice(0, corte).trim()
-        this.buffer = this.buffer.slice(corte + 1)
-        if (!linea) continue
-        const msg = JSON.parse(linea)
-        const p = this.pendientes.get(msg.id)
-        if (!p) continue
-        this.pendientes.delete(msg.id)
-        if (msg.error) p.fallo(new Error(JSON.stringify(msg.error)))
-        else p.ok(msg.result)
-      }
-    })
-  }
-
-  peticion(method: string, params?: unknown): Promise<any> {
-    const id = this.siguiente++
-    return new Promise((ok, fallo) => {
-      this.pendientes.set(id, { ok, fallo })
-      this.proc.stdin.write(`${JSON.stringify({ jsonrpc: '2.0', id, method, params })}\n`)
-      setTimeout(() => {
-        if (this.pendientes.delete(id)) fallo(new Error(`sin respuesta a ${method} tras 120 s`))
-      }, 120_000)
-    })
-  }
-
-  /** Devuelve el texto de la herramienta. `isError` distingue fallo real de "no hay resultados". */
-  async tool(name: string, args: Record<string, unknown> = {}): Promise<{ texto: string; esError: boolean }> {
-    const r = await this.peticion('tools/call', { name, arguments: args })
-    return { texto: r.content?.[0]?.text ?? '', esError: r.isError === true }
-  }
-
-  cerrar() {
-    this.proc.kill()
-  }
-}
+import { Cliente, CONTRATO, LENTO } from './red.ts'
 
 let c: Cliente
 let instrucciones = ''
@@ -100,9 +49,9 @@ after(() => c?.cerrar())
 
 // --- contrato que ve el cliente -----------------------------------------
 
-test('las 34 herramientas se declaran con esquemas utilizables', CONTRATO, async () => {
+test('las 24 herramientas se declaran con esquemas utilizables', CONTRATO, async () => {
   const { tools } = await c.peticion('tools/list')
-  assert.equal(tools.length, 34, tools.map((t: any) => t.name).join(', '))
+  assert.equal(tools.length, 24, tools.map((t: any) => t.name).join(', '))
 
   const sinTipo: string[] = []
   for (const t of tools) {
@@ -114,8 +63,16 @@ test('las 34 herramientas se declaran con esquemas utilizables', CONTRATO, async
   }
   assert.deepEqual(sinTipo, [], `campos sin tipo: ${sinTipo.join(', ')}`)
 
-  const sentencia = tools.find((t: any) => t.name === 'obtener_sentencia')
-  assert.deepEqual(sentencia.inputSchema.required, ['ruta'], 'lo obligatorio debe declararse obligatorio')
+  const documento = tools.find((t: any) => t.name === 'obtener_documento')
+  assert.deepEqual(documento.inputSchema.required, ['fuente'], 'la fuente debe ser obligatoria')
+  assert.deepEqual(documento.inputSchema.properties.fuente.enum, [
+    'gestor',
+    'corte',
+    'suprema',
+    'consejo',
+    'dian',
+    'creg',
+  ], 'obtener_documento debe enumerar las fuentes')
 
   // Lo que el servidor exige en tiempo de ejecución tiene que verse en el
   // esquema: un agente que solo lea el esquema decide con él.
@@ -123,10 +80,10 @@ test('las 34 herramientas se declaran con esquemas utilizables', CONTRATO, async
   assert.deepEqual(juris.inputSchema.required, ['termino'])
 
   // Listas largas: sin offset, ver el segundo tramo obliga a repedir la lista entera.
-  for (const nombre of ['listar_normas_fp', 'buscar_conceptos_fp']) {
-    const t = tools.find((x: any) => x.name === nombre)
-    assert.ok(t.inputSchema.properties.desde, `${nombre} necesita desde para paginar`)
-  }
+  const catalogos = tools.find((x: any) => x.name === 'listar_catalogos')
+  const props = catalogos.inputSchema.properties
+  assert.ok(props.desde, 'listar_catalogos necesita desde para paginar')
+  assert.deepEqual(props.catalogo.enum, ['tipos', 'anios', 'entidades', 'temas', 'subtemas', 'conceptos_fp', 'normas_fp'])
 })
 
 test('los prompts se declaran y se resuelven', CONTRATO, async () => {
@@ -140,8 +97,8 @@ test('los identificadores se aceptan como número y como texto', LENTO, async ()
   // Un modelo manda `id: 31431` con la misma naturalidad que `id: "31431"`.
   // Exigir solo texto convertía eso en un -32602 y la herramienta parecía rota.
   for (const [name, args] of [
-    ['obtener_norma', { id: 31431 }],
-    ['listar_subtemas', { tema_id: 'tema-36496' }],
+    ['obtener_documento', { fuente: 'gestor', id: 31431 }],
+    ['listar_catalogos', { catalogo: 'subtemas', tema_id: 'tema-36496' }],
     ['explicar_relacion_tema', { temsubid: 'ts-24928', normid: 31431 }],
     ['buscar_normas', { tipo_documento: 'Ley', numero: 909, anio: 2004 }],
   ] as const) {
@@ -222,13 +179,13 @@ test('la jurisprudencia excluye autos salvo que se pidan', LENTO, async () => {
 // --- documentos grandes y errores ---------------------------------------
 
 test('el Decreto 1083 nunca se devuelve entero', LENTO, async () => {
-  const { texto } = await c.tool('obtener_norma', { id: '62866' })
+  const { texto } = await c.tool('obtener_documento', { fuente: 'gestor', id: '62866' })
   assert.ok(texto.length < 40_000, `devolvió ${texto.length} caracteres`)
   assert.match(texto, /quedan \d+ sin mostrar/)
 })
 
 test('buscar_en_texto agrupa pasajes y prioriza los temas pertinentes', LENTO, async () => {
-  const { texto } = await c.tool('obtener_norma', { id: '62866', buscar_en_texto: 'encargo' })
+  const { texto } = await c.tool('obtener_documento', { fuente: 'gestor', id: '62866', buscar_en_texto: 'encargo' })
   assert.match(texto, /agrupadas en \d+ pasaje/)
   assert.match(texto, /Temas asociados \(\d+ de \d+, primero los que mencionan lo buscado\)/)
 })
@@ -236,21 +193,21 @@ test('buscar_en_texto agrupa pasajes y prioriza los temas pertinentes', LENTO, a
 test('limite_caracteres manda también en modo búsqueda', LENTO, async () => {
   // Era el defecto más caro: en modo buscar_en_texto se ignoraba el tope y un
   // límite de 1.500 devolvía 18.000 caracteres, justo en las normas grandes.
-  const corto = await c.tool('obtener_norma', { id: '14861', buscar_en_texto: 'empleo', limite_caracteres: 1500 })
-  const largo = await c.tool('obtener_norma', { id: '14861', buscar_en_texto: 'empleo', limite_caracteres: 20000 })
+  const corto = await c.tool('obtener_documento', { fuente: 'gestor', id: '14861', buscar_en_texto: 'empleo', limite_caracteres: 1500 })
+  const largo = await c.tool('obtener_documento', { fuente: 'gestor', id: '14861', buscar_en_texto: 'empleo', limite_caracteres: 20000 })
   assert.ok(corto.texto.length < 5000, `con tope 1500 devolvió ${corto.texto.length} caracteres`)
   assert.ok(largo.texto.length > corto.texto.length, 'un tope mayor debe devolver más texto')
   assert.match(corto.texto, /no caben en 1500 caracteres/)
 })
 
 test('max_pasajes acota el número de extractos', LENTO, async () => {
-  const uno = await c.tool('obtener_norma', { id: '62866', buscar_en_texto: 'encargo', max_pasajes: 1 })
-  const tres = await c.tool('obtener_norma', { id: '62866', buscar_en_texto: 'encargo', max_pasajes: 3 })
+  const uno = await c.tool('obtener_documento', { fuente: 'gestor', id: '62866', buscar_en_texto: 'encargo', max_pasajes: 1 })
+  const tres = await c.tool('obtener_documento', { fuente: 'gestor', id: '62866', buscar_en_texto: 'encargo', max_pasajes: 3 })
   assert.ok(uno.texto.length < tres.texto.length, 'pedir menos pasajes debe devolver menos texto')
 })
 
 test('un límite fuera de rango se ajusta en vez de reventar', LENTO, async () => {
-  const r = await c.tool('obtener_norma', { id: '31431', limite_caracteres: 400 })
+  const r = await c.tool('obtener_documento', { fuente: 'gestor', id: '31431', limite_caracteres: 400 })
   assert.equal(r.esError, false, 'un valor pequeño no debería producir un error de validación crudo')
   assert.match(r.texto, /Ley 1221 de 2008/)
 })
@@ -282,11 +239,11 @@ test('la jurisprudencia poco pertinente se señala', LENTO, async () => {
 })
 
 test('lo inexistente se informa como texto, no como fallo de herramienta', LENTO, async () => {
-  const norma = await c.tool('obtener_norma', { id: '99999999' })
+  const norma = await c.tool('obtener_documento', { fuente: 'gestor', id: '99999999' })
   assert.equal(norma.esError, false)
   assert.match(norma.texto, /No encontré una norma con id 99999999/)
 
-  const prov = await c.tool('obtener_sentencia', { ruta: '2024/NO-EXISTE-99.htm' })
+  const prov = await c.tool('obtener_documento', { fuente: 'corte', ruta: '2024/NO-EXISTE-99.htm' })
   assert.equal(prov.esError, false)
   assert.match(prov.texto, /No existe una providencia/)
 
@@ -335,8 +292,8 @@ test('una ley que el Gestor no tiene se resuelve contra SUIN', LENTO, async (t) 
 
 // --- las herramientas que nadie había ejercitado ------------------------
 
-test('listar_normas_fp responde sin duplicados y con resumen separado', LENTO, async () => {
-  const { texto } = await c.tool('listar_normas_fp', { limite: 100 })
+test('listar_catalogos con normas_fp responde sin duplicados y con resumen separado', LENTO, async () => {
+  const { texto } = await c.tool('listar_catalogos', { catalogo: 'normas_fp', limite: 100 })
   const ids = [...texto.matchAll(/\(id (\d+)\)/g)].map((m) => m[1]!)
   assert.ok(ids.length > 50, `solo ${ids.length} normas`)
   assert.equal(new Set(ids).size, ids.length, 'el listado del portal repite entradas')
@@ -350,10 +307,10 @@ test('listar_catalogos exige filtro en temas y resuelve entidades', LENTO, async
   assert.match(ent.texto, /id 243/)
 })
 
-test('listar_subtemas y buscar_conceptos_fp responden', LENTO, async () => {
-  const sub = await c.tool('listar_subtemas', { tema_id: 'tema-36496' })
+test('listar_catalogos con subtemas y conceptos_fp responden', LENTO, async () => {
+  const sub = await c.tool('listar_catalogos', { catalogo: 'subtemas', tema_id: 'tema-36496' })
   assert.ok(sub.texto.split('\n').length > 10)
-  const con = await c.tool('buscar_conceptos_fp', { anio: '2024', limite: 3 })
+  const con = await c.tool('listar_catalogos', { catalogo: 'conceptos_fp', anio: '2024', limite: 3 })
   assert.match(con.texto, /2024/)
 })
 
@@ -364,12 +321,12 @@ test('buscar_por_tema responde con temsubid y rótulos normalizados', LENTO, asy
 })
 
 test('un id de otra taxonomía se rechaza en vez de responder por el tema equivocado', CONTRATO, async () => {
-  // El 38968 existe en los dos catálogos: en listar_subtemas es "Teletrabajo…" y
+  // El 38968 existe en los dos catálogos: en listar_catalogos "subtemas" es "Teletrabajo…" y
   // en el de buscar_por_tema es "INHABILIDADES / Ex Diputados". Antes de los
   // prefijos, cruzarlos devolvía una respuesta creíble sobre otra cosa.
   const cruzado = await c.tool('explicar_relacion_tema', { temsubid: 'sub-38968', normid: '31431' })
-  assert.equal(cruzado.esError, true, 'un id de listar_subtemas no puede colar en explicar_relacion_tema')
-  assert.match(cruzado.texto, /listar_subtemas/, 'debe decir de qué catálogo salió el id')
+  assert.equal(cruzado.esError, true, 'un id de listar_catalogos "subtemas" no puede colar en explicar_relacion_tema')
+  assert.match(cruzado.texto, /listar_catalogos/, 'debe decir de qué catálogo salió el id')
 
   const pelado = await c.tool('explicar_relacion_tema', { temsubid: '38968', normid: '31431' })
   assert.equal(pelado.esError, true, 'sin prefijo no se puede saber de qué catálogo es')
@@ -410,18 +367,18 @@ test('el historial ve las notas que el modo artículo ya mostraba', LENTO, async
   // El artículo 6 de la Ley 1221 de 2008 trae una inhibición (C-351 de 2013),
   // una exequibilidad condicionada (C-337 de 2011) y una adición (Ley 2466 de
   // 2025), y el historial respondía "no registran cambios sobre esta norma".
-  const art = await c.tool('obtener_norma', { id: '31431', articulo: '6', historial: true })
+  const art = await c.tool('obtener_documento', { fuente: 'gestor', id: '31431', articulo: '6', historial: true })
   assert.doesNotMatch(art.texto, /no registran cambios/, 'el historial no ve lo que el propio texto muestra')
   assert.match(art.texto, /C-351/)
   assert.match(art.texto, /Ley 2466/)
 
   // Y la norma entera tampoco puede darse por intacta.
-  const toda = await c.tool('obtener_norma', { id: '31431', historial: true })
+  const toda = await c.tool('obtener_documento', { fuente: 'gestor', id: '31431', historial: true })
   assert.doesNotMatch(toda.texto, /no registran cambios/)
 
   // Las mismas notas tienen que advertirse al leer el artículo, no solo al
   // pedir el historial: quien lee el texto no sabe que hay un historial.
-  const texto = await c.tool('obtener_norma', { id: '31431', articulo: '6' })
+  const texto = await c.tool('obtener_documento', { fuente: 'gestor', id: '31431', articulo: '6' })
   assert.match(texto.texto, /control constitucional/)
 })
 
@@ -439,9 +396,9 @@ test('una cita sin año no elige por ti entre normas distintas', LENTO, async ()
   assert.doesNotMatch(exacta.texto, /ambigua/i)
 })
 
-test('buscar_conceptos_fp exige un filtro, como el resto de buscadores', LENTO, async () => {
+test('listar_catalogos con conceptos_fp exige un filtro, como el resto de buscadores', LENTO, async () => {
   // Sin filtro devolvía los 21.759 conceptos, que no dicen de qué tratan.
-  const vacia = await c.tool('buscar_conceptos_fp', {})
+  const vacia = await c.tool('listar_catalogos', { catalogo: 'conceptos_fp' })
   assert.equal(vacia.esError, true, 'la llamada sin filtros debe rechazarse')
   assert.match(vacia.texto, /numero o anio/)
 })
@@ -513,16 +470,16 @@ test('la búsqueda de la Corte Suprema entrega la ruta con la que se pide el tex
   const ruta = b.texto.match(/ruta="([^"]+)"/)?.[1]
   assert.ok(ruta, 'la búsqueda debe decir con qué ruta pedir el texto')
 
-  const t = await c.tool('obtener_providencia_suprema', { ruta, sala: 'Laboral', limite_caracteres: 1200 })
+  const t = await c.tool('obtener_documento', { fuente: 'suprema', ruta, sala: 'Laboral', limite_caracteres: 1200 })
   assert.equal(t.esError, false)
   assert.match(t.texto, /Texto total: \d[\d.,]* caracteres/, 'debe declarar cuánto mide y cuánto muestra')
 
   // El troceo tiene que respetarse: devolver la providencia entera revienta el
-  // contexto, y es justo lo que hace obtener_norma en las demás fuentes.
+  // contexto, y es justo lo que hace obtener_documento en las demás fuentes.
   const cuerpo = t.texto.split('--- Texto ---')[1] ?? ''
   assert.ok(cuerpo.length <= 1400, `el tope de caracteres no se respetó: ${cuerpo.length}`)
 
-  const f = await c.tool('obtener_providencia_suprema', { ruta, sala: 'Laboral', buscar_en_texto: 'casación' })
+  const f = await c.tool('obtener_documento', { fuente: 'suprema', ruta, sala: 'Laboral', buscar_en_texto: 'casación' })
   assert.equal(f.esError, false)
   assert.match(f.texto, /aparici[óo]n\(es\) de "casación"|no aparece en esta providencia/)
 })
@@ -536,8 +493,8 @@ test('el Consejo de Estado ya no dice que no puede dar el texto', LENTO, async (
   const token = b.texto.match(/token="([^"]+)"/)?.[1]
   assert.ok(token, 'la búsqueda debe entregar el token con el que pedir el texto')
 
-  const t = await c.tool('obtener_providencia_consejo_estado', { token, limite_caracteres: 1000 })
-  assert.equal(t.esError, false, `obtener_providencia_consejo_estado falló: ${t.texto.slice(0, 200)}`)
+  const t = await c.tool('obtener_documento', { fuente: 'consejo', token, limite_caracteres: 1000 })
+  assert.equal(t.esError, false, `obtener_documento(consejo) falló: ${t.texto.slice(0, 200)}`)
   if (/no se sirve como PDF/.test(t.texto)) return // legítimo: hay actuaciones comprimidas
   assert.match(t.texto, /Texto total: \d[\d.,]* caracteres/)
   const cuerpo = t.texto.split('--- Texto ---')[1] ?? ''
@@ -589,12 +546,9 @@ test('las herramientas V2 se declaran con esquema y sin red no mienten', CONTRAT
     'consultar_por_jerarquia',
     'analizar_conflicto',
     'cambios_desde',
-    'validar_cita',
     'comparar_articulos',
     'consultar_perfil',
-    'expediente_crear',
-    'expediente_agregar',
-    'expediente_leer',
+    'expediente',
   ]
   for (const n of nombres) {
     const t = tools.find((x: any) => x.name === n)
@@ -603,7 +557,7 @@ test('las herramientas V2 se declaran con esquema y sin red no mienten', CONTRAT
     assert.ok(t.inputSchema?.properties && Object.keys(t.inputSchema.properties).length >= 0, `${n} schema roto`)
   }
   // Expedientes sin EXPEDIENTES=1: capacidad ausente, no fallo.
-  const crear = await c.tool('expediente_crear', {})
+  const crear = await c.tool('expediente', { accion: 'crear' })
   assert.equal(crear.esError, false)
   assert.match(crear.texto, /desactivada|EXPEDIENTES=1/)
 })
@@ -615,8 +569,8 @@ test('consultar_perfil responde el perfil y su advertencia', LENTO, async () => 
   assert.match(r.texto, /Advertencia:/)
 })
 
-test('validar_cita clasifica sin afirmar vigencia', LENTO, async () => {
-  const r = await c.tool('validar_cita', { cita: 'Ley 909 de 2004' })
+test('resolver_cita con validar clasifica sin afirmar vigencia', LENTO, async () => {
+  const r = await c.tool('resolver_cita', { cita: 'Ley 909 de 2004', validar: true })
   assert.equal(r.esError, false)
   assert.match(r.texto, /Resultado: (cita validada|cita parcialmente validada|no fue posible validar)/)
 })

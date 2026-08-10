@@ -7,7 +7,7 @@
 import { strict as assert } from 'node:assert'
 import test from 'node:test'
 
-import { agregar, crear, habilitado, leer } from '../src/expediente.ts'
+import { agregar, crear, habilitado, leer } from '../src/nucleo/expediente.ts'
 
 test('habilitado() es false sin la variable EXPEDIENTES', () => {
   delete process.env['EXPEDIENTES']

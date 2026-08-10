@@ -2,7 +2,7 @@
   "manifest_version": "0.2",
   "name": "normativa-colombia",
   "display_name": "Normativa Colombia",
-  "version": "1.10.2",
+  "version": "1.11.0",
   "description": "Consulta la normativa y la jurisprudencia colombiana desde Claude: Gestor Normativo, Corte Constitucional, Corte Suprema, SUIN-Juriscol (estado de vigencia) y normograma de la DIAN.",
   "long_description": "Conecta Claude con seis fuentes oficiales colombianas.\n\n**Gestor Normativo** del Departamento Administrativo de la Función Pública: leyes, decretos, resoluciones, circulares y conceptos aplicables al sector público, con su consulta temática y los restrictores que explican por qué cada norma aplica a un tema.\n\n**Relatoría de la Corte Constitucional**: 49.000 sentencias y autos, actualizados a diario.\n\n**Corte Suprema de Justicia** y **Consejo de Estado**: providencias con texto completo.\n\n**SUIN-Juriscol**: el estado de vigencia, que ninguna otra fuente del país publica.\n\n**Normograma de la DIAN**: normativa tributaria, aduanera y cambiaria.\n\nAdemás, herramientas V2: consulta por nivel de autoridad, validación de citas y enlaces, análisis de posibles conflictos (evidencia, no conclusión), comparación de artículos, cambios desde una fecha, perfiles sectoriales preconfigurados y expedientes temporales de investigación.\n\nIncluye un índice temático empaquetado (12.063 subtemas) que responde al instante y sigue funcionando aunque el portal esté caído. Toda respuesta cita el enlace oficial y la fecha de consulta.\n\nNo sustituye asesoría jurídica: verifica siempre en la fuente antes de tomar una decisión.",
   "author": {
@@ -43,10 +43,6 @@
       "description": "Consulta temática oficial: devuelve tema, subtema y las normas, sentencias y conceptos asociados."
     },
     {
-      "name": "obtener_norma",
-      "description": "Trae metadatos y texto de una norma por su id."
-    },
-    {
       "name": "listar_catalogos",
       "description": "Valores válidos para los filtros de buscar_normas: tipos de documento (29), años, entidades (89) y temas (2.509)."
     },
@@ -55,52 +51,24 @@
       "description": "Busca sentencias y autos en la relatoría de la Corte Constitucional (49.409 providencias, actualizada a diario)."
     },
     {
-      "name": "obtener_sentencia",
-      "description": "Texto completo de una sentencia o auto de la Corte Constitucional."
-    },
-    {
       "name": "buscar_normativa_tributaria",
       "description": "Busca en el normograma de la DIAN: decretos, resoluciones, conceptos y circulares en materia tributaria, aduanera y cambiaria."
-    },
-    {
-      "name": "obtener_documento_dian",
-      "description": "Texto de un documento del normograma de la DIAN por su \"link\" (el que devuelve buscar_normativa_tributaria)."
     },
     {
       "name": "buscar_jurisprudencia_suprema",
       "description": "Busca providencias de la Corte Suprema por sala: Tutelas, Civil, Laboral o Penal, desde 1991."
     },
     {
-      "name": "obtener_providencia_suprema",
-      "description": "Texto completo de una providencia de la Corte Suprema por su RUTA (la que devuelve buscar_jurisprudencia_suprema) y su SALA."
-    },
-    {
       "name": "buscar_jurisprudencia_consejo_estado",
       "description": "Busca providencias tituladas del Consejo de Estado, el tribunal supremo de lo contencioso administrativo: nulidad y restablecimiento, contratación estatal, nulidad electoral, reparación directa y conceptos de la Sala de Consulta."
-    },
-    {
-      "name": "obtener_providencia_consejo_estado",
-      "description": "Texto completo de una providencia del Consejo de Estado, por el TOKEN que devuelve buscar_jurisprudencia_consejo_estado."
     },
     {
       "name": "buscar_en_suin",
       "description": "Busca en los 56.832 documentos de SUIN-Juriscol (MinJusticia) por título, epígrafe, materia o entidad emisora."
     },
     {
-      "name": "listar_subtemas",
-      "description": "Subtemas de un tema del CATÁLOGO DE BÚSQUEDA, cuyos ids (\"sub-38968\") van en el parámetro subtema de buscar_normas."
-    },
-    {
       "name": "explicar_relacion_tema",
       "description": "Devuelve el \"restrictor\": el extracto que explica por qué esa norma es pertinente para ESE subtema en concreto."
-    },
-    {
-      "name": "buscar_conceptos_fp",
-      "description": "Lista los 21.759 conceptos emitidos por Función Pública, filtrando por NÚMERO o AÑO únicamente."
-    },
-    {
-      "name": "listar_normas_fp",
-      "description": "Listado curado por el portal con la normativa que rige o le compete al Departamento Administrativo de la Función Pública."
     },
     {
       "name": "buscar_normativa_anh",
@@ -113,10 +81,6 @@
     {
       "name": "buscar_resoluciones_creg",
       "description": "Busca las resoluciones de la Comisión de Regulación de Energía y Gas, donde vive la regulación operativa del sector: tarifas, conexión, comercialización, plantas solares y gas natural."
-    },
-    {
-      "name": "obtener_resolucion_creg",
-      "description": "Texto completo de una resolución de la CREG por su ruta (la que devuelve buscar_resoluciones_creg)."
     },
     {
       "name": "listar_normativa_ambiental_anla",
@@ -143,10 +107,6 @@
       "description": "Resume los cambios (modificación, derogación, adición) que el Gestor anota sobre LAS NORMAS QUE SE LISTAN, filtrándolos por el año de la norma modificadora."
     },
     {
-      "name": "validar_cita",
-      "description": "Comprueba que la cita (tipo, número, año y artículo, si se indica) coincide con lo que devuelve el Gestor Normativo y que el dominio del enlace es el esperado (funcionpublica.gov.co)."
-    },
-    {
       "name": "comparar_articulos",
       "description": "Compara el texto de un artículo entre dos normas, marca lo añadido y lo eliminado, clasifica cada diferencia por patrones de texto (plazo, sanción, excepción, sujeto obligado) y detecta cambios editoriales por similitud léxica (Dice bigramas, ≥0,92); lo que no encaja se marca «revisar manualmente»."
     },
@@ -155,16 +115,16 @@
       "description": "Ejecuta una consulta con las fuentes y los filtros preconfigurados de un perfil: laboral, tributario, ambiental, contratación estatal o energía."
     },
     {
-      "name": "expediente_crear",
-      "description": "Crea un expediente EN MEMORIA para agrupar consultas, citas y observaciones de una investigación; es TEMPORAL (expira en 6 h, se pierde al reiniciar el servidor) y está DESACTIVADO por defecto (se activa con EXPEDIENTES=1)."
+      "name": "buscar_unificado",
+      "description": "Busca en paralelo en las fuentes ya existentes (Gestor Normativo, Corte Constitucional, SUIN-Juriscol y DIAN) y agrega los resultados con su fuente y su enlace."
     },
     {
-      "name": "expediente_agregar",
-      "description": "Agrega una pregunta, fuente, documento, cita, decisión u observación a un expediente YA CREADO con expediente_crear; no crea expedientes."
+      "name": "obtener_documento",
+      "description": "Devuelve el texto (troceado, nunca entero) de un documento de una de las seis fuentes con texto: \"gestor\" (normas del Gestor Normativo por id), \"corte\" (sentencias de la Corte Constitucional por ruta o cita), \"suprema\" (Corte Suprema por ruta + sala), \"consejo\" (Consejo de Estado por token), \"dian\" (normograma de la DIAN por link) y \"creg\" (resoluciones CREG por ruta)."
     },
     {
-      "name": "expediente_leer",
-      "description": "Lee el contenido completo de un expediente de investigación creado con expediente_crear, agrupado por sección (preguntas, fuentes, citas…)."
+      "name": "expediente",
+      "description": "Crea, agrega o lee un expediente EN MEMORIA para agrupar consultas, citas y observaciones de una investigación."
     }
   ],
   "prompts": [

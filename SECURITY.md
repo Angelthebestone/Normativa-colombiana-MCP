@@ -25,7 +25,7 @@ Este es un servidor MCP que corre en el computador del usuario, lee dos portales
 - Cualquier forma de ejecutar código a través de una respuesta de los portales.
 - Escritura o lectura de archivos fuera de la carpeta de la extensión y del directorio temporal.
 - Que la extensión mande datos a algún sitio que no sean los dos portales oficiales.
-- Debilitamiento de la verificación TLS. La cadena de `funcionpublica.gov.co` se completa con un intermedio público incluido en `src/ca.ts`; cualquier cambio que en la práctica desactive la verificación es un fallo de seguridad, no una comodidad.
+- Debilitamiento de la verificación TLS. La cadena de `funcionpublica.gov.co` se completa con un intermedio público incluido en `src/nucleo/ca.ts`; cualquier cambio que en la práctica desactive la verificación es un fallo de seguridad, no una comodidad.
 - Que un `.mcpb` publicado no corresponda al código de este repositorio.
 
 **No cuenta como vulnerabilidad:**

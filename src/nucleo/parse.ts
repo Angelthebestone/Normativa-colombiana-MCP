@@ -268,7 +268,7 @@ export function advertenciasVigencia(texto: string): string[] {
   const constitucional = (texto.match(/\bDeclarad[oa]s?\b(?=[^\n]{0,160}\b(?:C|T|SU)-\s?\d)/gi) ?? []).length
   if (derogado) avisos.push(`El texto mostrado contiene ${derogado} marca(s) de derogatoria. Verifica si el aparte que te interesa sigue vigente.`)
   if (modificado) avisos.push(`Contiene ${modificado} nota(s) de "Modificado por". El texto original pudo haber cambiado.`)
-  if (reformado) avisos.push(`Contiene ${reformado} nota(s) del portal en activa ("Adiciona…", "Deroga…"). Úsalas con obtener_norma e historial=true.`)
+  if (reformado) avisos.push(`Contiene ${reformado} nota(s) del portal en activa ("Adiciona…", "Deroga…"). Úsalas con obtener_documento con fuente="gestor" e historial=true.`)
   if (constitucional) {
     avisos.push(
       `Contiene ${constitucional} nota(s) de control constitucional (exequibilidad condicionada, inexequibilidad o ` +

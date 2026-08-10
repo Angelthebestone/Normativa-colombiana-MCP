@@ -9,9 +9,9 @@
  * Cubre lo que al Gestor Normativo le falta: en el Gestor hay 3 sentencias de
  * 2024; aquí hay 49.409 providencias y se publican el mismo día.
  */
-import { cargar, limpiarTermino, sinTildes, textoDe } from '../parse.ts'
-import { rutaDeSentencia } from '../citas.ts'
-import { pedir as http } from '../http.ts'
+import { cargar, limpiarTermino, sinTildes, textoDe } from '../../nucleo/parse.ts'
+import { rutaDeSentencia } from '../../nucleo/citas.ts'
+import { pedir as http } from '../../nucleo/http.ts'
 
 const BASE = 'https://www.corteconstitucional.gov.co/relatoria'
 const BUSCADOR = `${BASE}/buscador_new/`

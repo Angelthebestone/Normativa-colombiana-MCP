@@ -3,7 +3,7 @@
  * filtros que el perfil trae preconfigurados.
  */
 import { z } from 'zod'
-import { perfil, perfiles } from '../perfiles.ts'
+import { perfil, perfiles } from '../nucleo/perfiles.ts'
 
 export const TITULO = 'Consultar un perfil sectorial preconfigurado'
 

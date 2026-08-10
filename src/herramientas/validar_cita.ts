@@ -1,7 +1,7 @@
 import { z } from 'zod'
 
-import { idTipo, parsearCita, candidatosAmbiguos } from '../citas.ts'
-import { clasificarValidacion, validarArticulo, validarNumeroAnio, validarUrl } from '../evidencia.ts'
+import { idTipo, parsearCita, candidatosAmbiguos } from '../nucleo/citas.ts'
+import { clasificarValidacion, validarArticulo, validarNumeroAnio, validarUrl } from '../nucleo/evidencia.ts'
 import * as gestor from '../fuentes/gestor.ts'
 
 export const TITULO = 'Validar una cita y su enlace'

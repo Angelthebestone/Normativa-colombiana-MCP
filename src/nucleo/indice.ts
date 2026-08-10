@@ -11,12 +11,18 @@ let indice: Indice | null | undefined
 
 export function cargarIndice(): Indice | null {
   if (indice !== undefined) return indice
-  try {
-    // El bundle vive en server/index.js y el índice en datos/, junto al manifiesto.
-    indice = JSON.parse(readFileSync(new URL('../datos/indice-tematico.json', import.meta.url), 'utf8')) as Indice
-  } catch {
-    indice = null // sin índice se consulta el portal; no es un fallo fatal
+  // En el bundle (server/index.js) el índice vive en ../datos/; en la fuente
+  // (src/nucleo/) en ../../datos/. Esbuild no reescribe import.meta.url, así
+  // que se prueba la que corresponda al punto de ejecución.
+  for (const rel of ['../../datos/indice-tematico.json', '../datos/indice-tematico.json']) {
+    try {
+      indice = JSON.parse(readFileSync(new URL(rel, import.meta.url), 'utf8')) as Indice
+      return indice
+    } catch {
+      // se prueba la siguiente
+    }
   }
+  indice = null // sin índice se consulta el portal; no es un fallo fatal
   return indice
 }
 

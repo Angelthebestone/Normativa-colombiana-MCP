@@ -3,6 +3,46 @@
 Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/).
 Este proyecto sigue [versionado semántico](https://semver.org/lang/es/).
 
+## [1.11.0] — 2026-08-10
+
+**La superficie de herramientas se reduce de 34 a 24, se lee texto de PDFs sectoriales, se federan las búsquedas y se añaden la ANT y la Unidad para las Víctimas.** Cambio BREAKING en nombres de herramientas: los 6 `obtener_*` pasan a una sola `obtener_documento(fuente)`, los 3 `expediente_*` a `expediente(accion)`, `validar_cita` a `resolver_cita(validar)`, y `listar_subtemas`/`buscar_conceptos_fp`/`listar_normas_fp` a catálogos de `listar_catalogos`. Las descripciones y `INSTRUCCIONES` incluyen el mapeo viejo→nuevo.
+
+### Añadido
+
+- **`obtener_documento`**: una sola herramienta para las seis fuentes con texto (`gestor|corte|suprema|consejo|dian|creg`), con el esquema común definido una vez y los extras por fuente (`id`/`articulo`/`historial`, `ruta`/`seccion`, `sala`, `token`, `link`). Elimina ~200 líneas de handlers repetidos.
+- **`expediente(accion: crear|agregar|leer)`** en lugar de las tres tools de expediente (feature desactivado por defecto).
+- **`resolver_cita(validar: true)`** devuelve el veredicto ✓/✗ que antes daba `validar_cita`.
+- **`listar_catalogos`** ampliado: `catalogo="subtemas"` (con `tema_id`), `catalogo="conceptos_fp"` (número/año) y `catalogo="normas_fp"`.
+- **`buscar_unificado`** (V2): búsqueda federada con perfiles (laboral, tributario…), filtro de fuentes y huecos reportados por fuente; una fuente caída no tumba el resto.
+- **Vigencia de decretos por ficha directa** en `resolver_cita`/`analizar_conflicto`: cuando el índice de SUIN no cubre un decreto, se consulta la ficha `viewDocument.asp` y se distingue índice ausente / ficha caída / no consta, con cache de 30 min.
+- **PDF-texto sectorial** (`src/fuentes/sectorial/pdf.ts`): extrae texto de PDFs no escaneados (reutilizando `unpdf`, ya en `devDependencies`), validando el dominio contra el adaptador.
+- **Supersalud** como regulador sectorial: consulta el backend `Buscar.ashx` real de su normograma (Avance Jurídico, mismo patrón que Invima/DIAN), con shape `tipo/entidad/nombre/link/year/numero/epigrafe`.
+- **ANT** (`src/fuentes/sectorial/ant.ts`): normativa de la Agencia Nacional de Tierras (Drupal, `/normativa` con filtro `title` y paginación `?page=N`); tipo/número/fecha/objeto/PDF por acto.
+- **Unidad para las Víctimas** (`src/fuentes/sectorial/unidadvictimas.ts`): biblioteca de documentos (WordPress + Elementor, `/documentos_bibliotec/` con paginación `/page/N/`); categoría como tipo, título como epígrafe y enlace a la página del documento.
+- **Contrato léxico** en `comparar_articulos`: se exportan `normalizarLexico`/`bigramas` y se verifica que los cambios solo de tildes/puntuación se clasifican como `EDITORIAL` (umbral 0,92), sin que la sinonimia real se cuele.
+- **Red de pruebas de regresión** (`test/red.ts` + `test/red-gestor.ts`, `red-tribunales.ts`, `red-v2.ts`): 43 casos por dominio leyendo `content[0].text` crudo e `isError`, con adversariales (argumentos numéricos, límites fuera de rango, ids cruzados, vacíos como texto), ejecutables como subprocesos (`npm run test:red`).
+
+### Corregido
+
+- **Nombres viejos de herramientas en las salidas**: `buscar_normativa_tributaria` decía "link para obtener_documento_dian", `buscar_jurisprudencia_suprema`/`consejo_estado` decían "obtener_providencia_*", `buscar_jurisprudencia` decía "obtener_sentencia", y varios avisos decían "obtener_norma". Ahora todas las salidas usan `obtener_documento con fuente="…"` (barrido de salidas crudas `content[0].text`).
+- **Ruta del índice temático en el bundle**: al mover `src/indice.ts` a `src/nucleo/`, `../../datos/` apuntaba fuera del paquete en `server/index.js`; `cargarIndice()` ahora prueba `../../datos/` (fuente) y `../datos/` (bundle).
+- `listar_catalogos` con `conceptos_fp` sin filtro se rechaza (antes devolvía los 21.759 conceptos).
+- Mensajes de `explicar_relacion_tema`/`buscar_por_tema` actualizados a los nombres nuevos de las herramientas.
+
+### Reorganizado
+
+- `src/nucleo/` — módulos compartidos (http, parse, ca, citas, evidencia, compiladas, alternativas, entidades, jerarquia, perfiles, indice, expediente, actualizacion).
+- `src/fuentes/jurisprudencia/` — corte, cortesuprema, consejoestado.
+- `src/herramientas/diff.ts` — movido junto a sus handlers.
+- Verificado con graphify: 48/48 archivos con nodo, 0 imports colgantes, 0 rutas viejas, sin ciclos.
+
+### Verificado
+
+- `npm run check` verde: typecheck, lint (0 errores), 123/123 tests unitarios (1 skip por SUIN caído) y 42/42 e2e.
+- `npm run test:red` verde: 43/43 con red real.
+- `npm run medir`: bundle `server/index.js` 2295 KB, sin `dependencies` nuevas (`npm audit` 0 vulnerabilidades), `manifest.json` auto-sync 34 → 24 herramientas.
+- OpenSpec `validate` del change `proxima-ampliacion-valor`: `valid: true`.
+
 ## [1.10.2] — 2026-08-08
 
 **Perfil de Glama al 88 %: se añade `glama.json` y se reescriben las descripciones de las herramientas peor puntuadas.** Cambio no destructivo: ningún contrato de herramienta (nombres, parámetros, tipos, defaults ni respuestas) cambia.

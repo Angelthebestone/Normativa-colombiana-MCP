@@ -6,7 +6,7 @@ import { strict as assert } from 'node:assert'
 import test from 'node:test'
 
 import { formatear, type BuscadorNormas } from '../src/herramientas/consultar_jerarquia.ts'
-import { caracterDelNivel } from '../src/jerarquia.ts'
+import { caracterDelNivel } from '../src/nucleo/jerarquia.ts'
 
 test('formatear con 2 items incluye el carácter del nivel y sus URLs', () => {
   const items = [

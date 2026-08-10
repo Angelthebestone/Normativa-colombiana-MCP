@@ -17,26 +17,32 @@ import { registrar } from '../sectorial.ts'
 import minagricultura from './minagricultura.ts'
 import ica from './ica.ts'
 import anm from './anm.ts'
+import ant from './ant.ts'
 import supersociedades from './supersociedades.ts'
 import sic from './sic.ts'
+import supersalud from './supersalud.ts'
 import invima from './invima.ts'
 import superfinanciera from './superfinanciera.ts'
 import mintrabajo from './mintrabajo.ts'
 import supertransporte from './supertransporte.ts'
 import parques from './parques.ts'
+import unidadvictimas from './unidadvictimas.ts'
 
 registrar(
   // Primario: agropecuario y extractivo
   minagricultura,
   ica,
   anm,
+  ant,
   // Secundario y terciario: industria, comercio, consumo y servicios
   supersociedades,
   sic,
   invima,
   superfinanciera,
-  // Transversales: trabajo, transporte y ambiente
+  supersalud,
+  // Transversales: trabajo, transporte, víctimas y ambiente
   mintrabajo,
   supertransporte,
+  unidadvictimas,
   parques,
 )

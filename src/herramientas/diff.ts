@@ -1,7 +1,7 @@
 /**
  * Diferencia entre dos versiones de un artículo: qué cambió y de qué clase.
  */
-import { sinTildes } from './parse.ts'
+import { sinTildes } from '../nucleo/parse.ts'
 
 type Clasificacion = 'plazo' | 'sancion' | 'excepcion' | 'sujeto' | 'no clasificado'
 
@@ -70,10 +70,10 @@ export function diffArticulos(a: string, b: string): { anadidos: string[]; elimi
   return { anadidos, eliminados }
 }
 
-const normalizarLexico = (s: string): string =>
+export const normalizarLexico = (s: string): string =>
   sinTildes(s).toLowerCase().replace(/[^a-z0-9\s]/g, ' ').replace(/\s+/g, ' ').trim()
 
-const bigramas = (s: string): string[] => {
+export const bigramas = (s: string): string[] => {
   const n = normalizarLexico(s)
   if (n.length < 2) return n ? [n] : []
   const r: string[] = []

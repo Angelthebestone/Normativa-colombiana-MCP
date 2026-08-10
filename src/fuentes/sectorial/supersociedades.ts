@@ -27,8 +27,8 @@
  * vigencia declarado ("Vigente"), que se antepone al epígrafe tal cual lo
  * publica el portal, sin convertirlo en un booleano.
  */
-import { CanarioError, cargar } from '../../parse.ts'
-import { pedir } from '../../http.ts'
+import { CanarioError, cargar } from '../../nucleo/parse.ts'
+import { pedir } from '../../nucleo/http.ts'
 import type { Adaptador, ActoSectorial, OpcionesSectorial, ResultadoSectorial } from '../sectorial.ts'
 
 const BASE = 'https://www.supersociedades.gov.co/web/nuestra-entidad/normativa'

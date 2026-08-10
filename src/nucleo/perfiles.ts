@@ -13,11 +13,11 @@
  * vigencia, Eureka clasifica en vez de legislar…) y un vacío sin aviso se
  * leería como «no existe nada sobre esto».
  */
-import * as anla from './fuentes/anla.ts'
-import * as consejo from './fuentes/consejoestado.ts'
-import * as creg from './fuentes/creg.ts'
-import * as gestor from './fuentes/gestor.ts'
-import * as dian from './fuentes/normograma.ts'
+import * as anla from '../fuentes/anla.ts'
+import * as consejo from '../fuentes/jurisprudencia/consejoestado.ts'
+import * as creg from '../fuentes/creg.ts'
+import * as gestor from '../fuentes/gestor.ts'
+import * as dian from '../fuentes/normograma.ts'
 
 export type Perfil = {
   id: string

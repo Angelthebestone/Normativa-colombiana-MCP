@@ -21,8 +21,8 @@
  * esta fuente aporta. El salto de página se lee de los enlaces `?start=N` del
  * propio HTML en vez de cablearlo, porque depende de la plantilla.
  */
-import { CanarioError, cargar, sinTildes } from '../parse.ts'
-import { pedir } from '../http.ts'
+import { CanarioError, cargar, sinTildes } from '../nucleo/parse.ts'
+import { pedir } from '../nucleo/http.ts'
 
 const BASE = 'https://www.anla.gov.co/wanla/eureka/'
 

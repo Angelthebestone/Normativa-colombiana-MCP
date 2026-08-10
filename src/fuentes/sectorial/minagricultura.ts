@@ -21,8 +21,8 @@
  * estructurada: solo el año lo está. Se intenta recuperar el resto (día y
  * mes) quitando el "TIPO NÚMERO" del encabezado del propio portal.
  */
-import { CanarioError, cargar, sinTildes } from '../../parse.ts'
-import { pedir } from '../../http.ts'
+import { CanarioError, cargar, sinTildes } from '../../nucleo/parse.ts'
+import { pedir } from '../../nucleo/http.ts'
 import type { Adaptador, ActoSectorial, OpcionesSectorial, ResultadoSectorial } from '../sectorial.ts'
 
 const BASE = 'https://www.minagricultura.gov.co'

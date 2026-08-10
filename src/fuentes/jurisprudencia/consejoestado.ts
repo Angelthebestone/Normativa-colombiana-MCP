@@ -25,8 +25,8 @@
  * sentencia".
  */
 import * as cheerio from 'cheerio/slim'
-import { CanarioError, limpiarTermino } from '../parse.ts'
-import { pedir, pedirBytes } from '../http.ts'
+import { CanarioError, limpiarTermino } from '../../nucleo/parse.ts'
+import { pedir, pedirBytes } from '../../nucleo/http.ts'
 
 const BASE = 'https://samai.consejodeestado.gov.co'
 const RUTA = '/TitulacionRelatoria/ResultadoBuscadorProvidenciasTituladas.aspx'

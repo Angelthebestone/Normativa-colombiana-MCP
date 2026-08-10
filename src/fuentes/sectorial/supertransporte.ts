@@ -21,8 +21,8 @@
  * `.resolution` o los enlaces a `/documentos/`), se lanza `CanarioError` y no
  * una lista vacía: un vacío se leería como "esa norma no existe".
  */
-import { CanarioError, cargar, sinTildes } from '../../parse.ts'
-import { pedir } from '../../http.ts'
+import { CanarioError, cargar, sinTildes } from '../../nucleo/parse.ts'
+import { pedir } from '../../nucleo/http.ts'
 import type { ActoSectorial, OpcionesSectorial, ResultadoSectorial } from '../sectorial.ts'
 
 const BASE = 'https://www.supertransporte.gov.co'

@@ -22,9 +22,9 @@ Son cuatro y todas nacen de errores que ya cometimos:
 
 **1. Un parseo roto grita, no devuelve vacío.** Si un parser deja de encontrar lo que espera, lanza `CanarioError`. Una lista vacía en silencio se lee como «no existe esa norma», y esa confusión es el peor fallo posible aquí. Si añades un parser, añade su comprobación.
 
-**2. Nunca desactives la verificación TLS.** `funcionpublica.gov.co` envía una cadena incompleta —presenta un certificado emitido por «Sectigo RSA Organization Validation» pero manda el intermedio de «Domain Validation»—. Se resuelve incluyendo el intermedio correcto en `src/ca.ts`, no con `rejectUnauthorized: false`. La autenticidad de la fuente es parte del producto.
+**2. Nunca desactives la verificación TLS.** `funcionpublica.gov.co` envía una cadena incompleta —presenta un certificado emitido por «Sectigo RSA Organization Validation» pero manda el intermedio de «Domain Validation»—. Se resuelve incluyendo el intermedio correcto en `src/nucleo/ca.ts`, no con `rejectUnauthorized: false`. La autenticidad de la fuente es parte del producto.
 
-**3. No subas el ritmo de las peticiones.** Una por segundo sostenida por dominio, ráfaga de cinco, una sola en vuelo por sitio, y respeto a `Retry-After`. Está en `src/http.ts` con el razonamiento. Si necesitas más caudal, primero explica por qué en el issue.
+**3. No subas el ritmo de las peticiones.** Una por segundo sostenida por dominio, ráfaga de cinco, una sola en vuelo por sitio, y respeto a `Retry-After`. Está en `src/nucleo/http.ts` con el razonamiento. Si necesitas más caudal, primero explica por qué en el issue.
 
 **4. Ninguna respuesta afirma vigencia.** Las fuentes no publican ese dato. Se trasladan las marcas del texto y se dice con claridad que no se puede confirmar.
 

@@ -8,7 +8,7 @@
 import { mkdirSync, writeFileSync } from 'node:fs'
 import { dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { pedir } from '../src/http.ts'
+import { pedir } from '../src/nucleo/http.ts'
 
 const URL_TODOS = 'https://www.funcionpublica.gov.co/eva/gestornormativo/consulta-tematica.php?todos=1&texto=todos'
 const SALIDA = fileURLToPath(new URL('../datos/indice-tematico.json', import.meta.url))

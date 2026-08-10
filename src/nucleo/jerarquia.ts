@@ -14,7 +14,7 @@ const normaliza = (s: string): string =>
     .replace(/[\u0300-\u036f]/g, '')
     .trim()
 
-/** Cobertura de los TIPOS de src/citas.ts; lo que no está cae en 'resolucion'. */
+/** Cobertura de los TIPOS de src/nucleo/citas.ts; lo que no está cae en 'resolucion'. */
 const TIPO_A_NIVEL: Record<string, Nivel> = {
   'constitucion politica': 'constitucion',
   ley: 'ley',

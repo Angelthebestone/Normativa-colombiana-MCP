@@ -28,8 +28,8 @@
  * con exactamente tres `<td>` útiles por fila y el número como enlace de
  * descarga. Por eso no se filtra por clase.
  */
-import { CanarioError, cargar, limpiarTermino, sinTildes } from '../../parse.ts'
-import { pedir } from '../../http.ts'
+import { CanarioError, cargar, limpiarTermino, sinTildes } from '../../nucleo/parse.ts'
+import { pedir } from '../../nucleo/http.ts'
 import type { Adaptador, ActoSectorial } from '../sectorial.ts'
 
 const BASE = 'https://www.superfinanciera.gov.co'

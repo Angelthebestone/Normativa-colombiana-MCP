@@ -20,8 +20,8 @@
  * («Por la cual se efectúa nombramiento en periodo de prueba»); aquí no hay
  * categoría legible, así que el filtro va por el epígrafe.
  */
-import { CanarioError, sinTildes } from '../parse.ts'
-import { pedir } from '../http.ts'
+import { CanarioError, sinTildes } from '../nucleo/parse.ts'
+import { pedir } from '../nucleo/http.ts'
 
 const API = 'https://www.upme.gov.co/wp-json/wp/v2/circular_resolucion'
 

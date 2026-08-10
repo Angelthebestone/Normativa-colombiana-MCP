@@ -38,8 +38,8 @@
  * el mes exigirían abrir cada ficha (`docs/...htm`), una petición extra por
  * resultado — se deja así de explícito en vez de aproximarlo.
  */
-import { CanarioError, limpiarTermino, sinTildes } from '../../parse.ts'
-import { pedir } from '../../http.ts'
+import { CanarioError, limpiarTermino, sinTildes } from '../../nucleo/parse.ts'
+import { pedir } from '../../nucleo/http.ts'
 import type { Adaptador, ActoSectorial } from '../sectorial.ts'
 
 const API = 'https://normograma.info/prueba-invima/buscador/'

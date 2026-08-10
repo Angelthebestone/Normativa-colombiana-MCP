@@ -4,7 +4,7 @@
 import { strict as assert } from 'node:assert'
 import test from 'node:test'
 
-import { NIVELES, caracterDelNivel, tipoANivel } from '../src/jerarquia.ts'
+import { NIVELES, caracterDelNivel, tipoANivel } from '../src/nucleo/jerarquia.ts'
 
 test('el tipo de documento se mapea a su nivel en la jerarquía', () => {
   assert.equal(tipoANivel('Ley'), 'ley')

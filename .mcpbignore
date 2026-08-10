@@ -27,3 +27,5 @@ IDEAS_V2_ADICIONALES.md
 openspec/
 .commandcode/
 .claude/
+# Análisis local del repositorio: no es parte del producto.
+graphify-out/

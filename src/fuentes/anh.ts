@@ -17,8 +17,8 @@
  * - **Los documentos son PDF**, así que no hay texto que extraer: se entrega el
  *   epígrafe —que es largo y sustancioso— y los dos enlaces de cada fila.
  */
-import { CanarioError, cargar, sinTildes } from '../parse.ts'
-import { pedir } from '../http.ts'
+import { CanarioError, cargar, sinTildes } from '../nucleo/parse.ts'
+import { pedir } from '../nucleo/http.ts'
 
 const BASE = 'https://www.anh.gov.co'
 const RUTA = '/es/normatividad2/normatividad/'

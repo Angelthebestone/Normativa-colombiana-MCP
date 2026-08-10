@@ -2,12 +2,12 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { z } from 'zod'
 
-import { idTipo, parsearCita } from './citas.ts'
-import { cargarIndice, temaDelIndice, frescura } from './indice.ts'
-import { normalizarEntidad, NO_EN_GESTOR } from './entidades.ts'
-import { esCompiladora, avisoCompiladora } from './compiladas.ts'
-import { conAlternativas } from './alternativas.ts'
-import { validarUrl } from './evidencia.ts'
+import { idTipo, parsearCita } from './nucleo/citas.ts'
+import { cargarIndice, temaDelIndice, frescura } from './nucleo/indice.ts'
+import { normalizarEntidad, NO_EN_GESTOR } from './nucleo/entidades.ts'
+import { esCompiladora } from './nucleo/compiladas.ts'
+import { conAlternativas } from './nucleo/alternativas.ts'
+import { validarUrl } from './nucleo/evidencia.ts'
 import * as consultarJerarquia from './herramientas/consultar_jerarquia.ts'
 import * as analizarConflicto from './herramientas/analizar_conflicto.ts'
 import * as cambiosDesde from './herramientas/cambios_desde.ts'
@@ -15,30 +15,23 @@ import * as validarCita from './herramientas/validar_cita.ts'
 import * as compararArticulos from './herramientas/comparar_articulos.ts'
 import * as expedientes from './herramientas/expedientes.ts'
 import * as consultarPerfil from './herramientas/consultar_perfil.ts'
+import * as buscarUnificado from './herramientas/buscar_unificado.ts'
+import * as obtenerDocumento from './herramientas/obtener_documento.ts'
 import {
   advertenciasVigencia,
-  avisoSinTexto,
-  cargar,
-  textoDe,
-  normalizarRotulo,
   articulo as extraerArticulo,
-  fragmentos,
   indiceArticulos,
-  historial,
-  seccion as seccionDe,
-  seccionesPresentes,
-  trocear,
+  normalizarRotulo,
   sinTildes,
-} from './parse.ts'
-import { NoExisteError } from './parse.ts'
-import { VERSION, pedir as pedirHttp } from './http.ts'
-import { avisoVersion } from './actualizacion.ts'
+} from './nucleo/parse.ts'
+import { VERSION } from './nucleo/http.ts'
+import { avisoVersion } from './nucleo/actualizacion.ts'
 import * as gestor from './fuentes/gestor.ts'
-import * as corte from './fuentes/corte.ts'
+import * as corte from './fuentes/jurisprudencia/corte.ts'
 import * as suin from './fuentes/suin.ts'
 import * as dian from './fuentes/normograma.ts'
-import * as suprema from './fuentes/cortesuprema.ts'
-import * as consejo from './fuentes/consejoestado.ts'
+import * as suprema from './fuentes/jurisprudencia/cortesuprema.ts'
+import * as consejo from './fuentes/jurisprudencia/consejoestado.ts'
 import * as anh from './fuentes/anh.ts'
 import * as upme from './fuentes/upme.ts'
 import * as creg from './fuentes/creg.ts'
@@ -68,15 +61,15 @@ const vacio = (que: string, sugerencia: string) =>
 /**
  * Los tres catálogos temáticos del portal numeran cada uno por su cuenta, así
  * que el mismo entero existe en los tres queriendo decir cosas distintas: el
- * 38968 es «Teletrabajo durante jornada día sin carro» en listar_subtemas e
- * «INHABILIDADES E INCOMPATIBILIDADES / Ex Diputados» en el de buscar_por_tema.
+ * 38968 es «Teletrabajo durante jornada día sin carro» en listar_catalogos
+ * (catalogo="subtemas") e «INHABILIDADES E INCOMPATIBILIDADES / Ex Diputados» en el de buscar_por_tema.
  * Advertirlo en las descripciones no bastaba: un id cruzado no fallaba, contestaba
  * por el subtema equivocado con el mismo aire de certeza. Con el prefijo pegado
  * al id, cruzarlos es un error explícito y no una respuesta creíble sobre otra cosa.
  */
 const CATALOGOS = {
   ts: { de: 'buscar_por_tema', ejemplo: 'ts-38872' },
-  sub: { de: 'listar_subtemas', ejemplo: 'sub-38968' },
+  sub: { de: 'listar_catalogos con catalogo="subtemas"', ejemplo: 'sub-38968' },
   tema: { de: 'listar_catalogos con catalogo="temas"', ejemplo: 'tema-24457' },
 } as const
 type Catalogo = keyof typeof CATALOGOS
@@ -121,18 +114,20 @@ const INSTRUCCIONES = `Fuentes oficiales de normativa colombiana: Gestor Normati
 Qué herramienta usar:
 - La pregunta menciona una norma concreta ("Ley 909 de 2004", "Decreto 1083", "C-337/11", "el art. 6 de la Ley 1221") → resolver_cita. Es exacta; el buscador por palabras no.
 - La pregunta es por materia ("¿qué normas hay sobre teletrabajo?") → buscar_por_tema. El buscador por palabras del portal solo indexa resúmenes y encuentra poquísimo: "teletrabajo" casa con 3 documentos cuando el subtema oficial tiene 55.
-- Hay que saber qué dice una norma sobre algo → obtener_norma con buscar_en_texto. Esa es la verdadera búsqueda de texto completo; el portal no la ofrece.
+- Hay que saber qué dice una norma sobre algo → obtener_documento con fuente="gestor" y buscar_en_texto. Esa es la verdadera búsqueda de texto completo; el portal no la ofrece.
 - Sentencias y autos → buscar_jurisprudencia (Corte Constitucional, al día). El Gestor casi no tiene jurisprudencia reciente.
 - Normativa que el Gestor no tiene, o exploración por materia/sector del corpus histórico (desde 1844) → buscar_en_suin. NUNCA la uses para saber si algo está vigente: su campo de vigencia es del índice de búsqueda y contradice la ficha. La vigencia sale de resolver_cita.
-- Impuestos, aduanas o cambios (retención, IVA, renta, importación) → buscar_normativa_tributaria y obtener_documento_dian. Ninguna otra herramienta cubre esa materia.
-- Jurisprudencia de la Corte SUPREMA (casación civil, laboral, penal y sus tutelas) → buscar_jurisprudencia_suprema, y obtener_providencia_suprema para el texto completo con la ruta y la sala de esa misma búsqueda. Es un tribunal DISTINTO de la Corte Constitucional: no las mezcles. Exige indicar sala, y cada resultado trae las normas que cita, que puedes resolver con resolver_cita.
-- Qué le pasó a una norma o a un artículo (quién lo modificó, adicionó o derogó) → obtener_norma con historial=true. Devuelve las notas literales del portal, sin ordenarlas ni deducir cuál rige hoy.
-- El fallo de una sentencia, sin leerla entera → obtener_sentencia con seccion="decision": trae el RESUELVE. La T-099/24 pasa de 140.162 a 39.906 caracteres.
-- Jurisprudencia del CONSEJO DE ESTADO (contencioso administrativo: nulidad y restablecimiento, contratación estatal, nulidad electoral, reparación directa) → buscar_jurisprudencia_consejo_estado, y obtener_providencia_consejo_estado con el token de esa búsqueda para el texto completo. Tercer tribunal distinto de los otros dos; cada resultado trae el problema jurídico y su respuesta. El token caduca en una hora: para CITAR usa el radicado, nunca el enlace con token.
+- Impuestos, aduanas o cambios (retención, IVA, renta, importación) → buscar_normativa_tributaria y obtener_documento con fuente="dian". Ninguna otra herramienta cubre esa materia.
+- Jurisprudencia de la Corte SUPREMA (casación civil, laboral, penal y sus tutelas) → buscar_jurisprudencia_suprema, y obtener_documento con fuente="suprema" para el texto completo con la ruta y la sala de esa misma búsqueda. Es un tribunal DISTINTO de la Corte Constitucional: no las mezcles. Exige indicar sala, y cada resultado trae las normas que cita, que puedes resolver con resolver_cita.
+- Qué le pasó a una norma o a un artículo (quién lo modificó, adicionó o derogó) → obtener_documento con fuente="gestor" e historial=true. Devuelve las notas literales del portal, sin ordenarlas ni deducir cuál rige hoy.
+- El fallo de una sentencia, sin leerla entera → obtener_documento con fuente="corte" y seccion="decision": trae el RESUELVE. La T-099/24 pasa de 140.162 a 39.906 caracteres.
+- Jurisprudencia del CONSEJO DE ESTADO (contencioso administrativo: nulidad y restablecimiento, contratación estatal, nulidad electoral, reparación directa) → buscar_jurisprudencia_consejo_estado, y obtener_documento con fuente="consejo" y el token de esa búsqueda para el texto completo. Tercer tribunal distinto de los otros dos; cada resultado trae el problema jurídico y su respuesta. El token caduca en una hora: para CITAR usa el radicado, nunca el enlace con token.
 - Por qué una norma aplica a un tema → explicar_relacion_tema con el temsubid ("ts-…") y el normid de la MISMA fila de buscar_por_tema.
 - Antes de decirle a alguien que una norma "no existe", o para saber si el índice de vigencia sigue fresco → describir_fuentes. Declara qué cubre cada fuente y qué NO, sin consultar la red.
-- Energía, gas, tarifas o conexión → buscar_resoluciones_creg (y obtener_resolucion_creg para el texto). Hidrocarburos, regalías o contratos E&P → buscar_normativa_anh. Planeación minero energética → buscar_normativa_upme. Qué normas aplican a un tema ambiental → listar_normativa_ambiental_anla, y resuelve cada cita con resolver_cita.
-- Cuatro reguladores tienen herramienta propia (CREG, ANH, UPME y ANLA) y otros diez se consultan con buscar_normativa_sectorial y su parámetro entidad, la SIC y la Superfinanciera entre ellos: pide la lista a describir_fuentes. Para lo que no esté en ninguna de las dos listas —la CRC, la Superservicios, la Supersalud— este MCP no tiene nada, y un vacío no prueba que la norma no exista.
+- Energía, gas, tarifas o conexión → buscar_resoluciones_creg (y obtener_documento con fuente="creg" para el texto). Hidrocarburos, regalías o contratos E&P → buscar_normativa_anh. Planeación minero energética → buscar_normativa_upme. Qué normas aplican a un tema ambiental → listar_normativa_ambiental_anla, y resuelve cada cita con resolver_cita.
+- Cuatro reguladores tienen herramienta propia (CREG, ANH, UPME y ANLA) y otros doce se consultan con buscar_normativa_sectorial y su parámetro entidad (la SIC, la Superfinanciera, la Supersalud, la ANT y la Unidad para las Víctimas entre ellos): pide la lista a describir_fuentes. Para lo que no esté en ninguna de las dos listas —la CRC, la Superservicios— este MCP no tiene nada, y un vacío no prueba que la norma no exista.
+
+Nota de versión: los nombres de las herramientas de lectura se unificaron. Antes eran obtener_norma, obtener_sentencia, obtener_providencia_suprema, obtener_providencia_consejo_estado, obtener_documento_dian y obtener_resolucion_creg; ahora es una sola obtener_documento con el parámetro fuente ("gestor", "corte", "suprema", "consejo", "dian" o "creg"). Los subtemas y los conceptos de Función Pública viven en listar_catalogos (catalogo="subtemas" y catalogo="conceptos_fp"); validar_cita es resolver_cita con validar=true; y los expedientes son expediente con accion="crear|agregar|leer".
 
 Reglas al responder:
 - Cita siempre el enlace y la fecha de consulta que devuelven las herramientas. Una afirmación normativa sin fuente verificable no sirve.
@@ -140,20 +135,20 @@ Reglas al responder:
 - La vigencia solo existe para LEYES: el índice de SUIN cubre 11.585 leyes y casi ningún decreto, porque los sitemaps de decretos del portal devuelven 404. Que no aparezca para un decreto NO significa que esté derogado ni vigente: significa que no consta.
 - La ÚNICA excepción: si resolver_cita devuelve un "Estado de vigencia según SUIN-Juriscol", cítalo con su fecha y su enlace, tal cual, sin traducirlo a un sí o un no ("Vigencia en Estudio" no es "vigente"). Si esa línea no aparece, es que no consta: vuelve a la regla anterior.
 - Que una norma no esté en el Gestor NO significa que no exista: su corpus no cubre todo el país. Si resolver_cita responde que la norma está en SUIN-Juriscol y no en el Gestor, esa es una respuesta completa, no un fallo; para un artículo concreto vuelve a preguntar citándolo ("art. 3 de la Ley 1541 de 2012").
-- El "extracto temático" que acompaña a cada resultado NO resume la norma: es el apunte de un tema al que está asociada. Para el objeto real usa obtener_norma.
+- El "extracto temático" que acompaña a cada resultado NO resume la norma: es el apunte de un tema al que está asociada. Para el objeto real usa obtener_documento con fuente="gestor".
 - Si una herramienta devuelve vacío, es que no se encontró; no completes con conocimiento propio.
 - Si resolver_cita responde que la cita es AMBIGUA, no escojas tú: el mismo número existe en varios años ("Decreto 1072" son cuatro decretos distintos). Pregunta el año o presenta los candidatos.
 - Un documento sin texto NO es un documento que no diga nada. Si la respuesta avisa de que es un escaneo o de que el portal no publicó el texto, dilo así y remite al enlace; no concluyas nada sobre su contenido.
 - Nunca inventes números de norma, artículos ni sentencias. Si no aparecen en una respuesta, no existen para efectos de esta conversación.
-- Los ids temáticos vienen con prefijo y no son intercambiables: "ts-" de buscar_por_tema (va en explicar_relacion_tema), "sub-" de listar_subtemas (va en buscar_normas) y "tema-" de listar_catalogos. Pégalos tal cual, con el prefijo: son tres numeraciones distintas del portal que reutilizan los mismos números.
+- Los ids temáticos vienen con prefijo y no son intercambiables: "ts-" de buscar_por_tema (va en explicar_relacion_tema), "sub-" de listar_catalogos con catalogo="subtemas" (va en buscar_normas) y "tema-" de listar_catalogos. Pégalos tal cual, con el prefijo: son tres numeraciones distintas del portal que reutilizan los mismos números.
 
 Herramientas V2:
 - Filtrar por rango de la jerarquía (leyes, decretos, conceptos, jurisprudencia) → consultar_por_jerarquia; la respuesta explica el carácter (vinculante/orientador/informativo).
-- Comprobar que una cita y su enlace son de verdad → validar_cita. Clasifica en "validada", "parcialmente validada" o "no fue posible validar", y nunca afirma vigencia.
+- Comprobar que una cita y su enlace son de verdad → resolver_cita con validar=true. Clasifica en "validada", "parcialmente validada" o "no fue posible validar", y nunca afirma vigencia.
 - Comparar dos normas o dos artículos → analizar_conflicto (reúne EVIDENCIA; no concluye) y comparar_articulos (diferencia por patrones; lo no clasificado se revisa a mano).
 - Resumir qué le pasó a normas listadas desde una fecha → cambios_desde. NO descubre normas nuevas: solo lee lo que el Gestor anota.
 - Consultar por sector preconfigurado → consultar_perfil (laboral, tributario, ambiental, contratación, energía); cada perfil declara su advertencia.
-- Expedientes temporales (EXPEDIENTES=1): expediente_crear / expediente_agregar / expediente_leer. Son memoria de sesión con expiración, no almacenamiento.
+- Expedientes temporales (EXPEDIENTES=1): expediente con accion="crear|agregar|leer". Son memoria de sesión con expiración, no almacenamiento.
 - Una consulta ambigua → el prompt aclarar-consulta hace las preguntas precisas antes de buscar.
 
 Esto no es asesoría jurídica.`
@@ -205,9 +200,23 @@ server.registerTool(
       'Ruta rápida y exacta para citas como "Ley 909 de 2004", "Decreto 1083", "C-337/11", "T-099/24" o ' +
       '"artículo 6 de la Ley 1221 de 2008". Úsala SIEMPRE que la pregunta mencione una norma concreta: ' +
       'evita el buscador por palabras, que es impreciso.',
-    inputSchema: { cita: z.string().describe('Ej.: "Ley 909 de 2004", "C-337/11", "art. 6 de la Ley 1221 de 2008"') },
+    inputSchema: {
+      cita: z.string().describe('Ej.: "Ley 909 de 2004", "C-337/11", "art. 6 de la Ley 1221 de 2008"'),
+      validar: z
+        .boolean()
+        .optional()
+        .describe(
+          'En vez de la resolución, comprueba que la cita (y el enlace, si se da con url) coincide con lo que ' +
+            'devuelve el Gestor: número/año, dominio y artículo. Clasifica en "cita validada", "parcialmente ' +
+            'validada" o "no fue posible validar". NUNCA afirma vigencia.',
+        ),
+      url: z.string().optional().describe('Enlace a comprobar (solo con validar=true)'),
+    },
   },
-  async ({ cita }) => {
+  async ({ cita, validar, url }) => {
+    if (validar) {
+      return txt(await validarCita.escribir({ cita, url }))
+    }
     const c = parsearCita(cita)
     if (!c) return vacio(`una cita normativa en "${cita}"`, 'Escríbela como "Ley 909 de 2004" o "C-337/11", o usa buscar_normas.')
 
@@ -222,7 +231,7 @@ server.registerTool(
             p.magistrados.length ? `Magistrados: ${p.magistrados.join(', ')}` : '',
             p.tema ? `Tema: ${p.tema}` : '',
             p.sintesis ? `Síntesis: ${p.sintesis}` : '',
-            `Texto completo: usa obtener_sentencia con ruta="${p.ruta}"`,
+            `Texto completo: usa obtener_documento con fuente="corte" y ruta="${p.ruta}"`,
             `URL: ${p.url}`,
           ]
             .filter(Boolean)
@@ -379,7 +388,7 @@ server.registerTool(
       const art = extraerArticulo(norma.texto, c.articulo)
       extra = art
         ? `\n\n--- Artículo ${c.articulo} ---\n${art}\n${advertenciasVigencia(art).join('\n')}`
-        : `\n\nNo encontré un "artículo ${c.articulo}" en el texto. Usa obtener_norma con buscar_en_texto.`
+        : `\n\nNo encontré un "artículo ${c.articulo}" en el texto. Usa obtener_documento con fuente="gestor" y buscar_en_texto.`
     }
     return txt(
       `${n.titulo}\n${tipoCorregido}id: ${n.id}\n` +
@@ -387,9 +396,9 @@ server.registerTool(
         // de UN tema al que está asociada, y en normas compiladoras como el
         // Decreto 1083 describe una porción mínima del contenido.
         (n.resumen
-          ? `Extracto de un tema asociado (NO resume la norma; usa obtener_norma para su objeto y articulado): ${n.resumen}\n`
+          ? `Extracto de un tema asociado (NO resume la norma; usa obtener_documento con fuente="gestor" para su objeto y articulado): ${n.resumen}\n`
           : '') +
-        (esCompiladora(n.titulo, 0) ? '\nAVISO: esta es una norma compilada que incorpora reformas; para un tema concreto usa obtener_norma con buscar_en_texto.\n' : '') +
+        (esCompiladora(n.titulo, 0) ? '\nAVISO: esta es una norma compilada que incorpora reformas; para un tema concreto usa obtener_documento con fuente="gestor" y buscar_en_texto.\n' : '') +
         `URL: ${n.url}${avisoDominio}${vig}${extra}`,
     )
   },
@@ -403,7 +412,7 @@ server.registerTool(
       'Busca leyes, decretos, resoluciones, conceptos y sentencias del sector público colombiano. ' +
       'IMPORTANTE: el buscador del portal indexa solo los resúmenes temáticos, NO el articulado completo, ' +
       'y une los términos con OR. Usa pocas palabras y muy distintivas. Para buscar dentro del texto de una ' +
-      'norma concreta, usa obtener_norma con buscar_en_texto. Para una cita exacta, usa resolver_cita.',
+      'norma concreta, usa obtener_documento con fuente="gestor" y buscar_en_texto. Para una cita exacta, usa resolver_cita.',
     inputSchema: {
       palabras: z.string().optional().describe('Términos distintivos; evita frases largas'),
       tipo_documento: z.string().optional().describe('Nombre o id: "Ley", "Decreto", "Sentencia", "Concepto"'),
@@ -414,7 +423,7 @@ server.registerTool(
       subtema: z.coerce
         .string()
         .optional()
-        .describe('id de listar_subtemas con prefijo ("sub-38968"), o su nombre si además indicas tema. El "ts-" de buscar_por_tema no vale aquí.'),
+        .describe('id de listar_catalogos con catalogo="subtemas" y prefijo ("sub-38968"), o su nombre si además indicas tema. El "ts-" de buscar_por_tema no vale aquí.'),
       limite: z.coerce.number().int().min(1).max(100).default(20),
     },
   },
@@ -512,7 +521,7 @@ server.registerTool(
       'Resuelve contra un índice empaquetado (instantáneo, funciona aunque el portal esté caído). ' +
       'Cada resultado trae temsubid ("ts-38872") y normid para pedir después explicar_relacion_tema. ' +
       'El prefijo "ts-" es parte del id: pégalo tal cual. Marca de qué catálogo salió, porque el portal ' +
-      'mantiene tres taxonomías que reutilizan los mismos números —"sub-" es de listar_subtemas y "tema-" de ' +
+      'mantiene tres taxonomías que reutilizan los mismos números —"sub-" es de listar_catalogos y "tema-" de ' +
       'listar_catalogos—, y antes de los prefijos un id cruzado no fallaba: respondía por el tema equivocado.',
     inputSchema: {
       texto: z.string().describe('Tema a buscar, ej. "teletrabajo", "encargo", "prima de servicios"'),
@@ -561,168 +570,6 @@ server.registerTool(
 )
 
 server.registerTool(
-  'obtener_norma',
-  {
-    title: 'Obtener el texto de una norma',
-    description:
-      'Trae metadatos y texto de una norma por su id. NUNCA devuelve el documento entero por defecto: ' +
-      'el Decreto 1083 de 2015 tiene 925.000 caracteres. Usa buscar_en_texto para encontrar un tema dentro ' +
-      'del articulado (esta es la verdadera búsqueda de texto completo), o articulo para un artículo puntual.',
-    inputSchema: {
-      id: z.coerce.string().regex(/^\d+$/).describe('id numérico de la norma, como texto. Ej.: "31431"'),
-      buscar_en_texto: z.string().optional().describe('Devuelve solo los fragmentos que mencionan este término'),
-      articulo: z.string().optional().describe('Número de artículo, ej. "6" o "2.2.5.1.5"'),
-      historial: z
-        .boolean()
-        .default(false)
-        .describe(
-          'En vez del texto, devuelve qué normas modificaron, adicionaron o derogaron la norma —o el artículo, si ' +
-            'se indica— reconstruido de las notas del propio portal. El Decreto 1083 trae 99 cambios distintos.',
-        ),
-      desde: z.coerce.number().int().min(0).default(0),
-      max_pasajes: z.coerce.number().int().positive().optional().describe('Máximo de pasajes con buscar_en_texto (por defecto 10)'),
-      limite_caracteres: z.coerce
-        .number()
-        .int()
-        .positive()
-        .default(8000)
-        .describe('Tope de caracteres del TEXTO devuelto; se aplica también con buscar_en_texto. La respuesta añade encabezado y temas asociados. Se ajusta al rango 200–40.000.'),
-    },
-  },
-  async ({ id, buscar_en_texto, articulo, historial: pedirHistorial, desde, limite_caracteres, max_pasajes }) => {
-    const tope = Math.min(Math.max(limite_caracteres, 200), 40_000)
-    let n: Awaited<ReturnType<typeof gestor.obtenerNorma>>
-    try {
-      n = await gestor.obtenerNorma(id)
-    } catch (e) {
-      if (e instanceof NoExisteError) return vacio(`una norma con id ${id}`, 'Verifica el id con buscar_normas o resolver_cita.')
-      throw e
-    }
-    // Estos campos son la ficha del Gestor copiada tal cual, y a veces no dicen lo
-    // que parecen: el Decreto 1072 de 2015 declara "Fecha de Entrada en Vigencia:
-    // 10 de marzo de 2022". No sabemos qué mide ese campo en una norma compilada y
-    // no vamos a inventarlo, pero sin rótulo se lee como si lo afirmáramos nosotros.
-    const anioTitulo = n.titulo.match(/\bde\s+((?:19|20)\d{2})\b/)?.[1]
-    const anioVigencia = Object.entries(n.fechas)
-      .find(([k]) => /entrada\s+en\s+vigencia/i.test(k))?.[1]
-      ?.match(/\b((?:19|20)\d{2})\b/)?.[1]
-    const desajuste =
-      anioTitulo && anioVigencia && anioVigencia !== anioTitulo
-        ? `\nOJO CON ESE CAMPO: el portal fecha la entrada en vigencia en ${anioVigencia} para una norma de ` +
-          `${anioTitulo}. Es su dato, no una comprobación de esta extensión, y en las normas compiladas no consta ` +
-          `qué mide: no lo cites como fecha de expedición ni como prueba de que rige.`
-        : ''
-    const fechas = Object.entries(n.fechas)
-    const cab = [
-      n.titulo,
-      ...(fechas.length ? ['Ficha del portal (campos del Gestor, copiados sin interpretar):'] : []),
-      ...fechas.map(([k, v]) => `  ${k}: ${v || '(vacío en el portal)'}`),
-      `URL: ${n.url}`,
-      `PDF: ${n.urlPdf}`,
-    ].join('\n') + desajuste
-
-    if (n.texto.length < 200) {
-      return txt(`${cab}\n\n${avisoSinTexto(n.texto.length, n.urlPdf, await gestor.pdfEscaneado(n.id))}`)
-    }
-
-    if (pedirHistorial) {
-      const ambito = articulo ? extraerArticulo(n.texto, articulo) : n.texto
-      if (articulo && !ambito) {
-        return txt(`${cab}\n\nNo encontré el artículo ${articulo}. Artículos detectados: ${indiceArticulos(n.texto).join(', ') || '(ninguno)'}`)
-      }
-      const cambios = historial(ambito!)
-      const donde = articulo ? `el artículo ${articulo}` : 'esta norma'
-      if (!cambios.length) {
-        return txt(
-          `${cab}\n\nLas notas del Gestor no registran cambios sobre ${donde}. Eso NO equivale a que siga intacto: ` +
-            `el portal no siempre anota las reformas, y la vigencia se consulta con resolver_cita.`,
-        )
-      }
-      return txt(
-        `${cab}\n\n${cambios.length} cambio(s) anotados sobre ${donde}, en el orden en que aparecen en el documento:\n\n` +
-          cambios
-            .map(
-              (c) =>
-                `- ${c.accion.toUpperCase()}${c.norma ? ` por ${c.norma} de ${c.anio}` : ''}` +
-                `${c.articulo ? `, artículo ${c.articulo}` : ''}\n  Nota literal: «${c.literal}»`,
-            )
-            .join('\n') +
-          `\n\nSon las notas que el propio portal incrusta en el texto, citadas tal cual. No están ordenadas por ` +
-          `fecha ni se deduce cuál rige hoy: para eso hay que leer el artículo y comprobar la vigencia.`,
-      )
-    }
-
-    // Idea 7 — una norma compiladora se avisa y se orienta a su articulado.
-    // Solo cuando se pide el texto general (no un artículo ni una búsqueda ni
-    // el historial): ahí el aviso de "no lo devuelvo entero" ya viene implícito.
-    const compiladora = !articulo && !buscar_en_texto && !pedirHistorial && esCompiladora(n.titulo, n.texto.length)
-
-    let cuerpo: string
-    let avisoTexto = ''
-
-    if (articulo) {
-      const art = extraerArticulo(n.texto, articulo)
-      if (!art) {
-        return txt(
-          `${cab}\n\nNo encontré el artículo ${articulo}. Artículos detectados: ${indiceArticulos(n.texto).join(', ') || '(ninguno)'}`,
-        )
-      }
-      cuerpo = art
-    } else if (buscar_en_texto) {
-      const f = fragmentos(n.texto, buscar_en_texto, 400, max_pasajes ?? 10, tope)
-      if (!f.total) {
-        return txt(
-          `${cab}\n\nEl término "${buscar_en_texto}" no aparece en el texto de esta norma ` +
-            `(${n.texto.length} caracteres revisados).`,
-        )
-      }
-      cuerpo = f.trozos.join('\n\n---\n\n')
-      avisoTexto =
-        `${f.total} aparición(es) de "${buscar_en_texto}", agrupadas en ${f.pasajes} pasaje(s); se muestran ${f.mostrados}` +
-        (f.mostrados < f.pasajes ? ` (los demás no caben en ${tope} caracteres: sube limite_caracteres o afina el término).` : '.')
-    } else {
-      const t = trocear(n.texto, desde, tope)
-      cuerpo = t.texto
-      const arts = indiceArticulos(n.texto)
-      // F7: lo mostrado se mide con t.texto.length (el tope ya se ajustó al
-      // rango 200-40.000); F6: un "desde" pasado del final no es un vacío.
-      avisoTexto =
-        `Texto total: ${t.total} caracteres. Se muestran ${t.texto.length} desde la posición ${t.desde}` +
-        (t.omitido > 0 ? `; quedan ${t.omitido} sin mostrar (usa desde/limite_caracteres o buscar_en_texto).` : '.') +
-        (t.texto.length === 0 && t.total > 0
-          ? `\nEl "desde" (${desde}) está más allá del final del texto: pide uno menor o usa buscar_en_texto.`
-          : '') +
-        (arts.length ? `\nArtículos detectados: ${arts.join(', ')}` : '')
-    }
-
-    const avisos = advertenciasVigencia(cuerpo)
-    // Los temas venían en el orden del portal, así que al buscar "teletrabajo"
-    // en el Decreto 1083 salían diez de bienestar social. Se suben los que
-    // mencionan lo buscado y se dice cuántos hay en total.
-    const aguja = sinTildes(buscar_en_texto ?? articulo ?? '').toLowerCase().trim()
-    const pertinente = (t: (typeof n.temas)[number]) =>
-      Number(sinTildes(`${t.tema} ${t.subtema} ${t.restrictor}`).toLowerCase().includes(aguja))
-    const ordenados = aguja ? [...n.temas].sort((a, b) => pertinente(b) - pertinente(a)) : n.temas
-    // Con un presupuesto corto no tiene sentido gastar la mitad en temas.
-    const cuantosTemas = tope < 2000 ? 3 : 10
-
-    const temas = ordenados.length
-      ? `\n\nTemas asociados (${Math.min(10, ordenados.length)} de ${ordenados.length}` +
-        `${aguja ? ', primero los que mencionan lo buscado' : ', sin ordenar por relevancia'}):\n` +
-        ordenados
-          .slice(0, cuantosTemas)
-          .map((t) => `- ${normalizarRotulo(t.tema)} / ${normalizarRotulo(t.subtema)}: ${t.restrictor}`)
-          .join('\n')
-      : ''
-
-    return txt(
-      `${cab}\n${compiladora ? `\n${avisoCompiladora(n.titulo, n.texto)}\n` : ''}${avisoTexto ? `\n${avisoTexto}\n` : ''}${avisos.length ? `\n${avisos.join('\n')}\n` : ''}` +
-        `\n--- Texto ---\n${cuerpo}${temas}`,
-    )
-  },
-)
-
-server.registerTool(
   'listar_catalogos',
   {
     title: 'Listar catálogos de búsqueda',
@@ -730,31 +577,86 @@ server.registerTool(
       'Valores válidos para los filtros de buscar_normas: tipos de documento (29), años, entidades (89) y temas (2.509). ' +
       'En temas el filtro es obligatorio por volumen, y sus ids salen con prefijo ("tema-24457") porque el portal ' +
       'tiene tres taxonomías temáticas que reutilizan los mismos números. ' +
+      'También lista los subtemas de un tema (catalogo="subtemas" con tema_id), los conceptos de Función Pública ' +
+      '(catalogo="conceptos_fp" con numero/anio) y el listado curado de normas de competencia del DAFP ' +
+      '(catalogo="normas_fp"). ' +
       'OJO CON EL ALCANCE: estos catálogos son SOLO del Gestor Normativo de Función Pública y solo sirven en ' +
       'buscar_normas. No cubren la DIAN (que tiene su propio normograma, con buscar_normativa_tributaria), ni ' +
       'SUIN-Juriscol, ni las tres altas cortes. Que "DIAN" no aparezca en el catálogo de entidades no significa ' +
       'que no haya normativa de la DIAN: significa que el Gestor no la cataloga como entidad emisora.',
     inputSchema: {
-      catalogo: z.enum(['tipos', 'anios', 'entidades', 'temas']),
+      catalogo: z.enum(['tipos', 'anios', 'entidades', 'temas', 'subtemas', 'conceptos_fp', 'normas_fp']),
       filtro: z.string().optional().describe('Texto para filtrar; obligatorio en "temas"'),
+      tema_id: z.string().optional().describe('Id del tema (solo catalogo="subtemas"), con prefijo "tema-…"'),
+      numero: z.string().optional().describe('Número del concepto (solo catalogo="conceptos_fp")'),
+      anio: z.string().optional().describe('Año del concepto (solo catalogo="conceptos_fp")'),
+      desde: z.coerce.number().int().min(0).default(0),
       limite: z.coerce.number().int().min(1).max(200).default(50),
     },
   },
-  async ({ catalogo, filtro, limite }) => {
+  async ({ catalogo, filtro, tema_id, numero, anio, desde, limite }) => {
     if (catalogo === 'temas' && !filtro) {
       return txt('El catálogo de temas tiene 2.509 entradas: indica un filtro de texto para acotarlo.')
     }
-    const c = await gestor.catalogos()
+    // Catálogos propios del Gestor (tipos, años, entidades, temas).
+    if (catalogo === 'tipos' || catalogo === 'anios' || catalogo === 'entidades' || catalogo === 'temas') {
+      const c = await gestor.catalogos()
+      const q = filtro ? sinTildes(filtro).toLowerCase() : ''
+      const lista = c[catalogo].filter((o) => !q || sinTildes(o.nombre).toLowerCase().includes(q))
+      if (!lista.length) return vacio(`entradas de "${catalogo}" que coincidan con "${filtro}"`, 'Prueba un filtro más corto.')
+      return txt(
+        `${lista.length} entrada(s) en ${catalogo}:\n` +
+          lista
+            .slice(0, limite)
+            .map((o) => `- ${o.nombre} (id ${catalogo === 'temas' ? conPrefijo('tema', o.id) : o.id})`)
+            .join('\n') +
+          (lista.length > limite ? `\n… y ${lista.length - limite} más.` : ''),
+      )
+    }
+    // Subtemas de un tema del catálogo de búsqueda.
+    if (catalogo === 'subtemas') {
+      if (!tema_id) return txt('Para catalogo="subtemas" hace falta tema_id (con prefijo "tema-…").')
+      const tema = sinPrefijo('tema', tema_id)
+      const s = await gestor.subtemas(tema)
+      if (!s.length) return vacio(`subtemas para el tema ${tema_id}`, 'Verifica el id con catalogo="temas".')
+      return txt(s.map((o) => `- ${o.nombre} (id ${conPrefijo('sub', o.id)})`).join('\n'))
+    }
+    // Conceptos de Función Pública (solo número/año; sin materia).
+    if (catalogo === 'conceptos_fp') {
+      if (!numero && !anio) {
+        throw new Error(
+          'Para catalogo="conceptos_fp" indica al menos numero o anio: el listado solo trae número y año de cada ' +
+            'concepto, sin el asunto. Para conceptos SOBRE UN TEMA usa buscar_normas con tipo_documento "Concepto".',
+        )
+      }
+      const r = await gestor.conceptosFp(numero, anio, limite, desde)
+      if (!r.total) return vacio('conceptos con ese número o año', 'Recuerda que este listado solo filtra por número y año.')
+      if (!r.items.length) {
+        return vacio(`conceptos a partir de la posición ${desde}`, `El filtro reúne ${r.total} concepto(s); pide un "desde" menor.`)
+      }
+      const fin = desde + r.items.length
+      return txt(
+        `${r.total} concepto(s) coinciden; se muestran ${desde + 1}–${fin}.\n\n` +
+          r.items.map((c) => `- ${c.titulo} (id ${c.id})\n  ${c.url}`).join('\n') +
+          (fin < r.total ? `\n\nQuedan ${r.total - fin}: repite con desde=${fin}.` : ''),
+      )
+    }
+    // Listado curado de normas de competencia del DAFP.
+    const todas = await gestor.normasFp()
     const q = filtro ? sinTildes(filtro).toLowerCase() : ''
-    const lista = c[catalogo].filter((o) => !q || sinTildes(o.nombre).toLowerCase().includes(q))
-    if (!lista.length) return vacio(`entradas de "${catalogo}" que coincidan con "${filtro}"`, 'Prueba un filtro más corto.')
+    const items = todas.filter((i) => !q || sinTildes(`${i.titulo} ${i.resumen}`).toLowerCase().includes(q))
+    if (!items.length) return vacio(`normativa de competencia del DAFP que coincida con "${filtro}"`, 'Prueba sin filtro para ver el listado completo.')
+    const tramo = items.slice(desde, desde + limite)
+    if (!tramo.length) {
+      return vacio(`normativa a partir de la posición ${desde}`, `El listado reúne ${items.length} norma(s); pide un "desde" menor.`)
+    }
+    const fin = desde + tramo.length
     return txt(
-      `${lista.length} entrada(s) en ${catalogo}:\n` +
-        lista
-          .slice(0, limite)
-          .map((o) => `- ${o.nombre} (id ${catalogo === 'temas' ? conPrefijo('tema', o.id) : o.id})`)
+      `${items.length} de ${todas.length} norma(s) del listado; se muestran ${desde + 1}–${fin}.\n\n` +
+        tramo
+          .map((i) => `- ${i.titulo} (id ${i.id})\n  Extracto temático: ${i.resumen || '(ninguno)'}\n  ${i.url}`)
           .join('\n') +
-        (lista.length > limite ? `\n… y ${lista.length - limite} más.` : ''),
+        (fin < items.length ? `\n\nQuedan ${items.length - fin}: repite con desde=${fin}.` : ''),
     )
   },
 )
@@ -767,7 +669,7 @@ server.registerTool(
       'Busca sentencias y autos en la relatoría de la Corte Constitucional (49.409 providencias, ' +
       'actualizada a diario). Es la herramienta indicada para jurisprudencia constitucional reciente: el ' +
       'Gestor Normativo tiene muy poca. Devuelve sentencia, tipo, fecha, síntesis y la ruta para ' +
-      'obtener_sentencia. La relatoría no indexa frases largas: con varias palabras se reintenta con la ' +
+      'obtener_documento con fuente="corte". La relatoría no indexa frases largas: con varias palabras se reintenta con la ' +
       'más distintiva y la respuesta lo anuncia ("se buscó con el núcleo «X»"). Es de la CORTE ' +
       'CONSTITUCIONAL, no de la Suprema ni del Consejo de Estado: para esos tribunales usa ' +
       'buscar_jurisprudencia_suprema o buscar_jurisprudencia_consejo_estado.',
@@ -834,93 +736,7 @@ server.registerTool(
       : ''
     return txt(
       `${avisoAlternativa}${r.total} providencia(s) coinciden; se muestran ${r.items.length}.\n\n${lista}${aviso}\n\n` +
-        `Para el texto completo usa obtener_sentencia con la ruta.`,
-    )
-  },
-)
-
-server.registerTool(
-  'obtener_sentencia',
-  {
-    title: 'Obtener el texto de una providencia',
-    description:
-      'Texto completo de una sentencia o auto de la Corte Constitucional. Acepta tanto la ruta que devuelve ' +
-      'buscar_jurisprudencia ("2024/T-099-24.htm") como la cita corta ("T-099/24"). Igual que las normas, no se ' +
-      'devuelve entero por defecto —una tutela larga pasa de cien mil caracteres—: usa buscar_en_texto o ' +
-      'desde/limite_caracteres. El total y lo mostrado se informan medidos en cada respuesta.',
-    inputSchema: {
-      ruta: z
-        .string()
-        .describe('Ruta de la providencia ("2024/T-099-24.htm") o su cita corta ("T-099/24"): ambas valen'),
-      seccion: z
-        .enum(['antecedentes', 'consideraciones', 'decision'])
-        .optional()
-        .describe(
-          'Devuelve solo esa parte. "decision" trae el RESUELVE, que es lo que casi siempre se busca y suele ser ' +
-            'una fracción del texto; la respuesta dice cuántos caracteres son de cuántos.',
-        ),
-      buscar_en_texto: z.string().optional(),
-      desde: z.coerce.number().int().min(0).default(0),
-      max_pasajes: z.coerce.number().int().positive().optional().describe('Máximo de pasajes con buscar_en_texto (por defecto 10)'),
-      limite_caracteres: z.coerce
-        .number()
-        .int()
-        .positive()
-        .default(8000)
-        .describe('Tope de caracteres del TEXTO devuelto; se aplica también con buscar_en_texto. La respuesta añade encabezado y temas asociados. Se ajusta al rango 200–40.000.'),
-    },
-  },
-  async ({ ruta, seccion: cual, buscar_en_texto, desde, limite_caracteres, max_pasajes }) => {
-    const tope = Math.min(Math.max(limite_caracteres, 200), 40_000)
-    let doc: Awaited<ReturnType<typeof corte.obtenerTexto>>
-    try {
-      doc = await corte.obtenerTexto(ruta)
-    } catch (e) {
-      // Que la ruta no exista no es un fallo de la herramienta: se informa como texto.
-      if (e instanceof corte.NoExisteProvidencia) return vacio(`la providencia "${ruta}"`, e.message)
-      throw e
-    }
-    if (doc.texto.length < 200) {
-      return txt(`Providencia ${ruta}\n\n${avisoSinTexto(doc.texto.length, doc.url)}`)
-    }
-
-    // El texto de la sección se trocea igual que el resto: la decisión de una
-    // tutela de revisión puede pasar de 39.000 caracteres.
-    const cuerpo = cual ? seccionDe(doc.texto, cual) : null
-    if (cual) {
-      const hay = seccionesPresentes(doc.texto)
-      if (!cuerpo) {
-        return vacio(
-          `la sección "${cual}" en ${ruta}`,
-          hay.length
-            ? `Esta providencia trae: ${hay.join(', ')}. Las providencias no siguen todas la misma estructura.`
-            : 'No se reconoció ninguna sección con encabezado propio; pide el texto completo o usa buscar_en_texto.',
-        )
-      }
-      const t = trocear(cuerpo, desde, tope)
-      return txt(
-        `Providencia ${ruta} — sección "${cual}" (${t.total} caracteres de ${doc.texto.length} del documento).\n` +
-          `Secciones disponibles: ${hay.join(', ')}.` +
-          (t.omitido > 0 ? ` Se muestran ${t.texto.length} desde ${t.desde}; quedan ${t.omitido}.` : '') +
-          `\n\n--- ${cual} ---\n${t.texto}\n\nURL: ${doc.url}`,
-      )
-    }
-
-    if (buscar_en_texto) {
-      const f = fragmentos(doc.texto, buscar_en_texto, 400, max_pasajes ?? 10, tope)
-      if (!f.total) {
-        return txt(`El término "${buscar_en_texto}" no aparece en ${ruta} (${doc.texto.length} caracteres revisados).\nURL: ${doc.url}`)
-      }
-      return txt(
-        `${f.total} aparición(es) de "${buscar_en_texto}" en ${ruta}, agrupadas en ${f.pasajes} pasaje(s); ` +
-          `se muestran ${f.trozos.length}.\n\n${f.trozos.join('\n\n---\n\n')}\n\nURL: ${doc.url}`,
-      )
-    }
-    const t = trocear(doc.texto, desde, tope)
-    return txt(
-      `Providencia ${ruta}\nTexto total: ${t.total} caracteres; se muestran ${t.texto.length} desde ${t.desde}` +
-        (t.omitido > 0 ? `; quedan ${t.omitido}.` : '.') +
-        `\n\n--- Texto ---\n${t.texto}\n\nURL: ${doc.url}`,
+        `Para el texto completo usa obtener_documento con fuente="corte" y la ruta.`,
     )
   },
 )
@@ -932,7 +748,7 @@ server.registerTool(
     description:
       'Busca en el normograma de la DIAN: decretos, resoluciones, conceptos y circulares en materia tributaria, ' +
       'aduanera y cambiaria. Es lo que ninguna otra herramienta de este MCP cubre. Devuelve el extracto donde ' +
-      'aparece el término y el enlace al texto completo. Para leer el documento usa obtener_documento_dian. ' +
+      'aparece el término y el enlace al texto completo. Para leer el documento usa obtener_documento con fuente="dian". ' +
       'AVISO: la primera búsqueda de cada término tarda ~20 s porque el portal devuelve el resultado completo y no ' +
       'admite tope; las páginas siguientes del MISMO término son instantáneas, así que pagina con desde en vez de ' +
       'lanzar búsquedas nuevas.',
@@ -959,51 +775,10 @@ server.registerTool(
               `  ${d.epigrafe || '(sin epígrafe)'}\n` +
               (d.entidad ? `  Entidad: ${d.entidad}\n` : '') +
               (d.extracto ? `  «…${d.extracto.slice(0, 240)}…»\n` : '') +
-              `  link para obtener_documento_dian: ${d.link}`,
+              `  link para obtener_documento con fuente="dian": ${d.link}`,
           )
           .join('\n') +
         (fin < r.total ? `\n\nQuedan ${r.total - fin}: repite con desde=${fin}.` : ''),
-    )
-  },
-)
-
-server.registerTool(
-  'obtener_documento_dian',
-  {
-    title: 'Obtener el texto de un documento de la DIAN',
-    description:
-      'Texto de un documento del normograma de la DIAN por su "link" (el que devuelve buscar_normativa_tributaria). ' +
-      'Nunca devuelve el documento entero: el Decreto 1625 de 2016 son 6,5 MB. Usa buscar_en_texto o ' +
-      'desde/limite_caracteres, igual que en obtener_norma.',
-    inputSchema: {
-      link: z.string().describe('Nombre del archivo, ej. "decreto_1625_2016.htm"'),
-      buscar_en_texto: z.string().optional().describe('Devuelve solo los fragmentos que mencionan este término'),
-      desde: z.coerce.number().int().min(0).default(0),
-      max_pasajes: z.coerce.number().int().positive().optional().describe('Máximo de pasajes con buscar_en_texto (por defecto 10)'),
-      limite_caracteres: z.coerce.number().int().positive().default(8000).describe('Tope del TEXTO devuelto; se ajusta al rango 200–40.000'),
-    },
-  },
-  async ({ link, buscar_en_texto, desde, max_pasajes, limite_caracteres }) => {
-    const tope = Math.min(Math.max(limite_caracteres, 200), 40_000)
-    const url = dian.urlDocumento(link)
-    const r = await pedirHttp(url, 90_000)
-    if (r.status !== 200) return vacio(`el documento "${link}" en el normograma de la DIAN`, 'Verifica el link con buscar_normativa_tributaria.')
-    const texto = textoDe(cargar(r.cuerpo), 'body')
-    if (texto.length < 200) return txt(`${link}\n\n${avisoSinTexto(texto.length, url)}`)
-
-    if (buscar_en_texto) {
-      const f = fragmentos(texto, buscar_en_texto, 400, max_pasajes ?? 10, tope)
-      if (!f.total) return txt(`El término "${buscar_en_texto}" no aparece en ${link} (${texto.length} caracteres revisados).\nURL: ${url}`)
-      return txt(
-        `${link}\n${f.total} aparición(es) de "${buscar_en_texto}" en ${f.pasajes} pasaje(s); se muestran ${f.mostrados}.\n` +
-          `${advertenciasVigencia(f.trozos.join(' ')).join('\n')}\n\n${f.trozos.join('\n\n---\n\n')}\n\nURL: ${url}`,
-      )
-    }
-    const t = trocear(texto, desde, tope)
-    return txt(
-      `${link}\nTexto total: ${t.total} caracteres; se muestran ${t.texto.length} desde ${t.desde}` +
-        (t.omitido > 0 ? `; quedan ${t.omitido} (usa desde/limite_caracteres o buscar_en_texto).` : '.') +
-        `\n${advertenciasVigencia(t.texto).join('\n')}\n\n--- Texto ---\n${t.texto}\n\nURL: ${url}`,
     )
   },
 )
@@ -1015,7 +790,7 @@ server.registerTool(
     description:
       'Busca providencias de la Corte Suprema por sala: Tutelas, Civil, Laboral o Penal, desde 1991. Complementa a ' +
       'buscar_jurisprudencia, que es de la Corte CONSTITUCIONAL: son tribunales distintos. Cada resultado trae las ' +
-      'NORMAS QUE CITA, que puedes resolver después con resolver_cita, y una RUTA con la que obtener_providencia_suprema ' +
+      'NORMAS QUE CITA, que puedes resolver después con resolver_cita, y una RUTA con la que obtener_documento con fuente="suprema" ' +
       'devuelve el texto completo. ' +
       'CÓMO BUSCA: sobre el texto completo de la providencia y sin descartar palabras comunes, así que "de" solo ' +
       'devuelve 69.454 resultados. Por eso busca la FRASE EXACTA por defecto; usa términos distintivos.',
@@ -1098,62 +873,10 @@ server.registerTool(
                   (p.normasCitadas.length > 8 ? ` … y ${p.normasCitadas.length - 8} más` : '') +
                   '\n'
                 : '  (no declara normas citadas)\n') +
-              `  Texto completo: obtener_providencia_suprema con sala="${sala}" y ruta="${p.ruta}"`,
+              `  Texto completo: obtener_documento con fuente="suprema" y sala="${sala}" y ruta="${p.ruta}"`,
           )
           .join('\n') +
         (fin < r.total ? `\n\nQuedan ${r.total - fin}: repite con desde=${fin}.` : ''),
-    )
-  },
-)
-
-server.registerTool(
-  'obtener_providencia_suprema',
-  {
-    title: 'Obtener el texto de una providencia de la Corte Suprema',
-    description:
-      'Texto completo de una providencia de la Corte Suprema por su RUTA (la que devuelve ' +
-      'buscar_jurisprudencia_suprema) y su SALA. Hay que dar la misma sala con la que se encontró: el backend ' +
-      'busca el documento dentro de esa sala y en otra no lo halla. Nunca devuelve el documento entero de golpe ' +
-      '(una casación laboral ronda los 47.000 caracteres): usa buscar_en_texto o desde/limite_caracteres, igual ' +
-      'que en obtener_norma y obtener_sentencia.',
-    inputSchema: {
-      ruta: z
-        .string()
-        .describe('Ruta que devuelve buscar_jurisprudencia_suprema, tal cual, empezando por "/var/www/html/Index/…"'),
-      sala: z.enum(suprema.SALAS).describe('La MISMA sala con la que se encontró la providencia'),
-      buscar_en_texto: z.string().optional().describe('Devuelve solo los fragmentos que mencionan este término'),
-      desde: z.coerce.number().int().min(0).default(0),
-      max_pasajes: z.coerce.number().int().positive().optional().describe('Máximo de pasajes con buscar_en_texto (por defecto 10)'),
-      limite_caracteres: z.coerce.number().int().positive().default(8000).describe('Tope del TEXTO devuelto; se ajusta al rango 200–40.000'),
-    },
-  },
-  async ({ ruta, sala, buscar_en_texto, desde, max_pasajes, limite_caracteres }) => {
-    const tope = Math.min(Math.max(limite_caracteres, 200), 40_000)
-    const p = await suprema.obtenerTexto(ruta, sala)
-    if (!p) {
-      return vacio(
-        `una providencia en la ruta "${ruta}" dentro de la sala ${sala}`,
-        `Comprueba que la ruta salga de buscar_jurisprudencia_suprema y que la sala sea la misma con la que ` +
-          `apareció: el mismo documento no se encuentra desde otra sala.`,
-      )
-    }
-    const cab = `Corte Suprema de Justicia, sala ${sala}\nRuta: ${ruta}`
-
-    if (buscar_en_texto) {
-      const f = fragmentos(p.texto, buscar_en_texto, 400, max_pasajes ?? 10, tope)
-      if (!f.total) {
-        return txt(`El término "${buscar_en_texto}" no aparece en esta providencia (${p.texto.length} caracteres revisados).\n${cab}`)
-      }
-      return txt(
-        `${cab}\n${f.total} aparición(es) de "${buscar_en_texto}" en ${f.pasajes} pasaje(s); se muestran ${f.mostrados}.\n` +
-          `${advertenciasVigencia(f.trozos.join(' ')).join('\n')}\n\n${f.trozos.join('\n\n---\n\n')}`,
-      )
-    }
-    const t = trocear(p.texto, desde, tope)
-    return txt(
-      `${cab}\nTexto total: ${t.total} caracteres; se muestran ${t.texto.length} desde ${t.desde}` +
-        (t.omitido > 0 ? `; quedan ${t.omitido} (usa desde/limite_caracteres o buscar_en_texto).` : '.') +
-        `\n${advertenciasVigencia(t.texto).join('\n')}\n\n--- Texto ---\n${t.texto}`,
     )
   },
 )
@@ -1232,7 +955,7 @@ server.registerTool(
               // el propio buscador, abre la providencia sin pedir nada. Se dan los
               // dos porque el primero es el citable y el segundo el que se lee.
               p.token ? `  Leerla: ${consejo.enlaceProvidencia(p.token)}` : '',
-              p.token ? `  Texto completo: obtener_providencia_consejo_estado con token="${p.token}"` : '',
+              p.token ? `  Texto completo: obtener_documento con fuente="consejo" y token="${p.token}"` : '',
             ].filter(Boolean)
             const tesis = p.titulaciones.map(
               (t) =>
@@ -1254,60 +977,6 @@ server.registerTool(
         `\n\nLOS TOKENS CADUCAN EN UNA HORA: sirven para leer, no para citar. Para citar usa el radicado, que es ` +
         `lo que se pega en ${consejo.BUSCADOR}: ` +
         r.items.map((p) => p.radicado).join(' · '),
-    )
-  },
-)
-
-server.registerTool(
-  'obtener_providencia_consejo_estado',
-  {
-    title: 'Obtener el texto de una providencia del Consejo de Estado',
-    description:
-      'Texto completo de una providencia del Consejo de Estado, por el TOKEN que devuelve ' +
-      'buscar_jurisprudencia_consejo_estado. El token caduca en una hora: si expiró, repite la búsqueda y usa el ' +
-      'nuevo. Nunca devuelve el documento entero de golpe (una sentencia de la Sección Tercera ronda los 100.000 ' +
-      'caracteres): usa buscar_en_texto o desde/limite_caracteres, igual que en obtener_norma.',
-    inputSchema: {
-      token: z.string().describe('El token que acompaña a cada providencia en buscar_jurisprudencia_consejo_estado'),
-      buscar_en_texto: z.string().optional().describe('Devuelve solo los fragmentos que mencionan este término'),
-      desde: z.coerce.number().int().min(0).default(0),
-      max_pasajes: z.coerce.number().int().positive().optional().describe('Máximo de pasajes con buscar_en_texto (por defecto 10)'),
-      limite_caracteres: z.coerce.number().int().positive().default(8000).describe('Tope del TEXTO devuelto; se ajusta al rango 200–40.000'),
-    },
-  },
-  async ({ token, buscar_en_texto, desde, max_pasajes, limite_caracteres }) => {
-    const tope = Math.min(Math.max(limite_caracteres, 200), 40_000)
-    const p = await consejo.obtenerTexto(token)
-    if (!p) {
-      return vacio(
-        'una providencia para ese token',
-        'Los tokens caducan en una hora. Repite buscar_jurisprudencia_consejo_estado y usa el que venga ahora.',
-      )
-    }
-    const cab = `Consejo de Estado${p.fichero ? ` — ${p.fichero}` : ''}\nVisor: ${p.urlVisor}`
-    // Un documento que no es PDF no es un documento vacío: el visor lo abre igual.
-    if (!p.texto) {
-      return txt(
-        `${cab}\n\nEsta actuación no se sirve como PDF (viene comprimida o en otro formato), así que aquí no hay ` +
-          `texto que extraer. Ábrela en el visor de arriba. Que no haya texto NO dice nada sobre su contenido.`,
-      )
-    }
-
-    if (buscar_en_texto) {
-      const f = fragmentos(p.texto, buscar_en_texto, 400, max_pasajes ?? 10, tope)
-      if (!f.total) {
-        return txt(`El término "${buscar_en_texto}" no aparece en esta providencia (${p.texto.length} caracteres revisados).\n${cab}`)
-      }
-      return txt(
-        `${cab}\n${f.total} aparición(es) de "${buscar_en_texto}" en ${f.pasajes} pasaje(s); se muestran ${f.mostrados}.\n` +
-          `${advertenciasVigencia(f.trozos.join(' ')).join('\n')}\n\n${f.trozos.join('\n\n---\n\n')}`,
-      )
-    }
-    const t = trocear(p.texto, desde, tope)
-    return txt(
-      `${cab}\n${p.paginas} página(s). Texto total: ${t.total} caracteres; se muestran ${t.texto.length} desde ${t.desde}` +
-        (t.omitido > 0 ? `; quedan ${t.omitido} (usa desde/limite_caracteres o buscar_en_texto).` : '.') +
-        `\n${advertenciasVigencia(t.texto).join('\n')}\n\n--- Texto ---\n${t.texto}`,
     )
   },
 )
@@ -1382,36 +1051,14 @@ server.registerTool(
 )
 
 server.registerTool(
-  'listar_subtemas',
-  {
-    title: 'Listar subtemas de un tema',
-    description:
-      'Subtemas de un tema del CATÁLOGO DE BÚSQUEDA, cuyos ids ("sub-38968") van en el parámetro subtema de ' +
-      'buscar_normas. Ojo: el portal mantiene dos taxonomías distintas y no sincronizadas. Esta es la del ' +
-      'formulario de consulta avanzada y suele ser más pobre; la de buscar_por_tema es más rica (para ' +
-      '"teletrabajo" tiene ocho pares tema/subtema donde esta tiene uno). Los ids de una NO sirven en la otra, y ' +
-      'por eso cada uno lleva su prefijo.',
-    inputSchema: {
-      tema_id: z.coerce.string().describe('id de tema de listar_catalogos, con su prefijo: "tema-24457"'),
-    },
-  },
-  async ({ tema_id }) => {
-    const tema = sinPrefijo('tema', tema_id)
-    const s = await gestor.subtemas(tema)
-    if (!s.length) return vacio(`subtemas para el tema ${tema_id}`, 'Verifica el id con listar_catalogos.')
-    return txt(s.map((o) => `- ${o.nombre} (id ${conPrefijo('sub', o.id)})`).join('\n'))
-  },
-)
-
-server.registerTool(
   'explicar_relacion_tema',
   {
     title: 'Explicar por qué una norma aplica a un subtema',
     description:
       'Devuelve el "restrictor": el extracto que explica por qué esa norma es pertinente para ESE subtema en ' +
       'concreto. Ambos identificadores deben salir de la MISMA fila de buscar_por_tema, y el temsubid va con su ' +
-      'prefijo ("ts-38872"): un id de listar_subtemas o de listar_catalogos se rechaza aquí. Para ver todos los ' +
-      'restrictores de una norma de una vez, usa obtener_norma y mira su bloque "Temas asociados".',
+      'prefijo ("ts-38872"): un id de listar_catalogos (catalogo="subtemas") o de otros catálogos se rechaza aquí. Para ver todos los ' +
+      'restrictores de una norma de una vez, usa obtener_documento con fuente="gestor" y mira su bloque "Temas asociados".',
     inputSchema: {
       temsubid: z.coerce.string().describe('temsubid de buscar_por_tema, con su prefijo: "ts-38872"'),
       normid: z.coerce.string().regex(/^\d+$/).describe('normid de la misma fila de buscar_por_tema'),
@@ -1430,7 +1077,7 @@ server.registerTool(
       return vacio(
         `un restrictor para la norma ${normid} bajo "${rotulo}"`,
         enElIndice
-          ? 'El índice sí relaciona esa norma con ese subtema, pero el portal no publica el extracto. Usa obtener_norma para ver los restrictores que sí tiene.'
+          ? 'El índice sí relaciona esa norma con ese subtema, pero el portal no publica el extracto. Usa obtener_documento con fuente="gestor" para ver los restrictores que sí tiene.'
           : 'Esa norma no está clasificada bajo ese subtema. Verifica que temsubid y normid vengan de la misma ' +
             'fila de buscar_por_tema; si el rótulo de arriba no es el subtema que buscabas, el id es de otra fila.',
       )
@@ -1439,92 +1086,7 @@ server.registerTool(
       `Tema / subtema: ${rotulo} (temsubid ${conPrefijo('ts', temsubid)})\nNorma: ${normid}\n\n` +
         `Por qué aplica:\n${r}\n\n` +
         `Norma completa: https://www.funcionpublica.gov.co/eva/gestornormativo/norma.php?i=${normid}\n` +
-        `Este es el restrictor de ESTE subtema; la norma puede tener otros distintos bajo otros temas (obtener_norma los lista todos).`,
-    )
-  },
-)
-
-server.registerTool(
-  'buscar_conceptos_fp',
-  {
-    title: 'Localizar conceptos de Función Pública por número o año',
-    description:
-      'Lista los 21.759 conceptos emitidos por Función Pública, filtrando por NÚMERO o AÑO únicamente. ' +
-      'NO busca por materia: el listado solo contiene el número y el año de cada concepto ("Concepto 036201 de 2024"), ' +
-      'sin el asunto. Para buscar conceptos SOBRE UN TEMA usa buscar_normas con tipo_documento "Concepto", ' +
-      'que sí consulta los resúmenes temáticos.',
-    inputSchema: {
-      numero: z.string().optional().describe('Número del concepto, como texto. Ej.: "036201"'),
-      anio: z.coerce.string().regex(/^\d{4}$/).optional().describe('Año de cuatro dígitos, como texto. Ej.: "2004"'),
-      desde: z.coerce.number().int().min(0).default(0).describe('Cuántos saltarse antes de empezar: pide el siguiente tramo sin repetir los ya vistos'),
-      limite: z.coerce.number().int().min(1).max(100).default(20).describe('Cuántos conceptos mostrar (hasta 100; por defecto 20)'),
-    },
-  },
-  async ({ numero, anio, desde, limite }) => {
-    // Sin filtro esto devolvía los 21.759 conceptos: una respuesta enorme y sin
-    // ninguna utilidad, porque el listado no trae el asunto de cada concepto.
-    // buscar_normas y buscar_jurisprudencia ya rechazan la llamada vacía.
-    if (!numero && !anio) {
-      throw new Error(
-        'Indica al menos numero o anio. Este listado solo trae el número y el año de cada concepto, así que sin ' +
-          'filtro devuelve los 21.759 sin decir de qué tratan. Si buscas conceptos SOBRE UN TEMA, usa buscar_normas ' +
-          'con tipo_documento "Concepto".',
-      )
-    }
-    const r = await gestor.conceptosFp(numero, anio, limite, desde)
-    if (!r.total) {
-      return vacio(
-        'conceptos con ese número o año',
-        'Recuerda que este listado solo filtra por número y año. Si buscas conceptos sobre un tema, usa buscar_normas con tipo_documento "Concepto".',
-      )
-    }
-    // Un "desde" pasado del final no es lo mismo que no haber encontrado nada.
-    if (!r.items.length) {
-      return vacio(
-        `conceptos a partir de la posición ${desde}`,
-        `El filtro reúne ${r.total} concepto(s); pide un "desde" menor.`,
-      )
-    }
-    const fin = desde + r.items.length
-    return txt(
-      `${r.total} concepto(s) coinciden; se muestran ${desde + 1}–${fin}.\n\n` +
-        r.items.map((c) => `- ${c.titulo} (id ${c.id})\n  ${c.url}`).join('\n') +
-        (fin < r.total ? `\n\nQuedan ${r.total - fin}: repite con desde=${fin}.` : ''),
-    )
-  },
-)
-
-server.registerTool(
-  'listar_normas_fp',
-  {
-    title: 'Listar la normativa de competencia de Función Pública',
-    description:
-      'Listado curado por el portal con la normativa que rige o le compete al Departamento Administrativo de la ' +
-      'Función Pública. OJO: no son normas que el DAFP haya expedido — incluye la Constitución Política, la Ley 100 ' +
-      'de 1993 y leyes del Congreso. Es un listado corto y fijo; para buscar normativa usa buscar_normas.',
-    inputSchema: {
-      filtro: z.string().optional().describe('Texto para acotar por título, ej. "circular" o "1474"'),
-      desde: z.coerce.number().int().min(0).default(0).describe('Cuántas saltarse antes de empezar: pide el siguiente tramo sin repetir las ya vistas'),
-      limite: z.coerce.number().int().min(1).max(150).default(40),
-    },
-  },
-  async ({ filtro, desde, limite }) => {
-    const todas = await gestor.normasFp()
-    const q = filtro ? sinTildes(filtro).toLowerCase() : ''
-    const items = todas.filter((i) => !q || sinTildes(`${i.titulo} ${i.resumen}`).toLowerCase().includes(q))
-    if (!items.length) return vacio(`normativa de competencia del DAFP que coincida con "${filtro}"`, 'Prueba sin filtro para ver el listado completo.')
-    const tramo = items.slice(desde, desde + limite)
-    // Un "desde" pasado del final no es lo mismo que no haber encontrado nada.
-    if (!tramo.length) {
-      return vacio(`normativa a partir de la posición ${desde}`, `El listado reúne ${items.length} norma(s); pide un "desde" menor.`)
-    }
-    const fin = desde + tramo.length
-    return txt(
-      `${items.length} de ${todas.length} norma(s) del listado; se muestran ${desde + 1}–${fin}.\n\n` +
-        tramo
-          .map((i) => `- ${i.titulo} (id ${i.id})\n  Extracto temático: ${i.resumen || '(ninguno)'}\n  ${i.url}`)
-          .join('\n') +
-        (fin < items.length ? `\n\nQuedan ${items.length - fin}: repite con desde=${fin}.` : ''),
+        `Este es el restrictor de ESTE subtema; la norma puede tener otros distintos bajo otros temas (obtener_documento con fuente="gestor" los lista todos).`,
     )
   },
 )
@@ -1646,7 +1208,7 @@ server.registerTool(
       'Busca las resoluciones de la Comisión de Regulación de Energía y Gas, donde vive la regulación operativa ' +
       'del sector: tarifas, conexión, comercialización, plantas solares y gas natural. ' +
       'ÚSALA para la regulación energética y de gas. Es la ÚNICA fuente sectorial cuyo texto se puede leer aquí ' +
-      '(usa obtener_resolucion_creg con la ruta) y la única que publica una señal de vigencia: la CREG mantiene ' +
+      '(usa obtener_documento con fuente="creg" con la ruta) y la única que publica una señal de vigencia: la CREG mantiene ' +
       'compilaciones separadas de resoluciones no derogadas y derogadas. Esa señal se traslada literal; no la ' +
       'conviertas en un sí o un no. NO sirve para leyes o decretos nacionales de otros sectores: para esos usa ' +
       'resolver_cita o buscar_normas.',
@@ -1684,52 +1246,12 @@ server.registerTool(
               `- Resolución CREG ${x.numero} de ${x.anio}\n` +
               `  ${x.epigrafe || '(sin epígrafe)'}\n` +
               `  Estado: ${x.estadoSegunCompilacion}\n` +
-              `  Texto completo: obtener_resolucion_creg con ruta="${x.ruta}"`,
+              `  Texto completo: obtener_documento con fuente="creg" y ruta="${x.ruta}"`,
           )
           .join('\n') +
         `\n\nEse "Estado" es la clasificación de la propia compilación de la CREG, no un campo de vigencia por norma: ` +
         `dilo como lo que es y verifica en el texto si el aparte que te interesa sigue rigiendo.` +
         (anio ? '' : `\nSe consultó solo el año en curso: indica anio para buscar en años anteriores.`),
-    )
-  },
-)
-
-server.registerTool(
-  'obtener_resolucion_creg',
-  {
-    title: 'Obtener el texto de una resolución de la CREG',
-    description:
-      'Texto completo de una resolución de la CREG por su ruta (la que devuelve buscar_resoluciones_creg). ' +
-      'Es el único articulado sectorial legible en esta extensión. No se devuelve entero por defecto: usa ' +
-      'buscar_en_texto o desde/limite_caracteres, igual que en obtener_norma.',
-    inputSchema: {
-      ruta: z.string().describe('Ej.: "docs/resolucion_creg_101-104_2026.htm"'),
-      buscar_en_texto: z.string().optional().describe('Devuelve solo los fragmentos que mencionan este término'),
-      desde: z.coerce.number().int().min(0).default(0),
-      max_pasajes: z.coerce.number().int().positive().optional().describe('Máximo de pasajes con buscar_en_texto (por defecto 10)'),
-      limite_caracteres: z.coerce.number().int().positive().default(8000).describe('Tope del TEXTO devuelto; rango 200–40.000'),
-    },
-  },
-  async ({ ruta, buscar_en_texto, desde, max_pasajes, limite_caracteres }) => {
-    const tope = Math.min(Math.max(limite_caracteres, 200), 40_000)
-    const d = await creg.obtenerTexto(ruta)
-    if (d.texto.length < 200) return txt(`${ruta}\n\n${avisoSinTexto(d.texto.length, d.url)}`)
-
-    if (buscar_en_texto) {
-      const f = fragmentos(d.texto, buscar_en_texto, 400, max_pasajes ?? 10, tope)
-      if (!f.total) {
-        return txt(`El término "${buscar_en_texto}" no aparece en ${ruta} (${d.texto.length} caracteres revisados).\nURL: ${d.url}`)
-      }
-      return txt(
-        `${ruta}\n${f.total} aparición(es) de "${buscar_en_texto}" en ${f.pasajes} pasaje(s); se muestran ${f.mostrados}.\n` +
-          `${advertenciasVigencia(f.trozos.join(' ')).join('\n')}\n\n${f.trozos.join('\n\n---\n\n')}\n\nURL: ${d.url}`,
-      )
-    }
-    const t = trocear(d.texto, desde, tope)
-    return txt(
-      `${ruta}\nTexto total: ${t.total} caracteres; se muestran ${t.texto.length} desde ${t.desde}` +
-        (t.omitido > 0 ? `; quedan ${t.omitido}.` : '.') +
-        `\n${advertenciasVigencia(t.texto).join('\n')}\n\n--- Texto ---\n${t.texto}\n\nURL: ${d.url}`,
     )
   },
 )
@@ -1901,13 +1423,13 @@ server.registerTool(
     const fuentes: [string, string][] = [
       ['gestor', `- Gestor Normativo (Función Pública) — normas del sector público: leyes, decretos, resoluciones, circulares y ` +
         `conceptos. Es el corpus principal. NO publica estado de vigencia, y su buscador por palabras solo indexa los ` +
-        `resúmenes temáticos, no el articulado: para buscar dentro de una norma, obtener_norma con buscar_en_texto.`],
+        `resúmenes temáticos, no el articulado: para buscar dentro de una norma, obtener_documento con fuente="gestor" y buscar_en_texto.`],
       ['corte-constitucional', `- Corte Constitucional — relatoría al día, sentencias y autos con texto completo.`],
       ['corte-suprema', `- Corte Suprema de Justicia — cuatro salas (Tutelas, Civil, Laboral, Penal) desde 1991. Entrega la referencia, ` +
-        `las normas citadas y el TEXTO COMPLETO con obtener_providencia_suprema, que necesita la ruta y la misma sala ` +
+        `las normas citadas y el TEXTO COMPLETO con obtener_documento con fuente="suprema", que necesita la ruta y la misma sala ` +
         `de la búsqueda.`],
       ['consejo-de-estado', `- Consejo de Estado (SAMAI) — providencias tituladas de lo contencioso administrativo, con el problema jurídico, ` +
-        `su respuesta y el TEXTO COMPLETO con obtener_providencia_consejo_estado. El texto sale del PDF que publica ` +
+        `su respuesta y el TEXTO COMPLETO con obtener_documento con fuente="consejo". El texto sale del PDF que publica ` +
         `el buscador; su token caduca en una hora, así que para citar se usa el radicado, no el enlace.`],
       ['dian', `- DIAN — normograma tributario, aduanero y cambiario. Ninguna otra herramienta cubre esa materia.`],
       ['suin', `- SUIN-Juriscol (MinJusticia) — corpus histórico desde 1844 y, sobre todo, la ÚNICA fuente que publica el ` +
@@ -2008,27 +1530,11 @@ const registrarHerramienta = (nombre: string, m: HerramientaV2) =>
 registrarHerramienta('consultar_por_jerarquia', consultarJerarquia as never)
 registrarHerramienta('analizar_conflicto', analizarConflicto as never)
 registrarHerramienta('cambios_desde', cambiosDesde as never)
-registrarHerramienta('validar_cita', validarCita as never)
 registrarHerramienta('comparar_articulos', compararArticulos as never)
 registrarHerramienta('consultar_perfil', consultarPerfil as never)
-registrarHerramienta('expediente_crear', {
-  TITULO: expedientes.expedienteCrearTITULO,
-  DESCRIPCION: expedientes.expedienteCrearDESCRIPCION,
-  schema: expedientes.expedienteCrearSchema,
-  escribir: expedientes.expedienteCrearEscribir,
-} as never)
-registrarHerramienta('expediente_agregar', {
-  TITULO: expedientes.expedienteAgregarTITULO,
-  DESCRIPCION: expedientes.expedienteAgregarDESCRIPCION,
-  schema: expedientes.expedienteAgregarSchema,
-  escribir: expedientes.expedienteAgregarEscribir,
-} as never)
-registrarHerramienta('expediente_leer', {
-  TITULO: expedientes.expedienteLeerTITULO,
-  DESCRIPCION: expedientes.expedienteLeerDESCRIPCION,
-  schema: expedientes.expedienteLeerSchema,
-  escribir: expedientes.expedienteLeerEscribir,
-} as never)
+registrarHerramienta('buscar_unificado', buscarUnificado as never)
+registrarHerramienta('obtener_documento', obtenerDocumento as never)
+registrarHerramienta('expediente', expedientes as never)
 
 // --- prompts (aparecen como comandos en Claude Desktop) ------------------
 
@@ -2068,7 +1574,7 @@ server.registerPrompt(
         content: {
           type: 'text',
           text:
-            `¿"${norma}" sigue vigente? Resuélvela con resolver_cita y revisa el texto con obtener_norma buscando ` +
+            `¿"${norma}" sigue vigente? Resuélvela con resolver_cita y revisa el texto con obtener_documento con fuente="gestor" buscando ` +
             `"derogad" y "modificado por". Dime qué encontraste y advierte con claridad si no puedes confirmarlo: ` +
             `el Gestor no tiene un campo de vigencia.`,
         },

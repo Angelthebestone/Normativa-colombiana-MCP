@@ -4,7 +4,7 @@
 import { strict as assert } from 'node:assert'
 import test from 'node:test'
 
-import { avisoCompiladora, esCompiladora } from '../src/compiladas.ts'
+import { avisoCompiladora, esCompiladora } from '../src/nucleo/compiladas.ts'
 
 test('se reconoce una compilación por el título o por el tamaño', () => {
   assert.equal(esCompiladora('Decreto Único Reglamentario 1083 de 2015', 1000), true)

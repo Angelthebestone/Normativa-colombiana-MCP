@@ -4,11 +4,11 @@
  */
 import { z } from 'zod'
 
-import { idTipo, parsearCita, candidatosAmbiguos } from '../citas.ts'
+import { idTipo, parsearCita, candidatosAmbiguos } from '../nucleo/citas.ts'
 import * as gestor from '../fuentes/gestor.ts'
 import * as suin from '../fuentes/suin.ts'
-import { caracterDelNivel, tipoANivel } from '../jerarquia.ts'
-import { fragmentos, historial } from '../parse.ts'
+import { caracterDelNivel, tipoANivel } from '../nucleo/jerarquia.ts'
+import { fragmentos, historial } from '../nucleo/parse.ts'
 
 export const TITULO = 'Analizar un posible conflicto entre dos normas'
 
@@ -83,7 +83,14 @@ export async function evidenciaDe(cita: string, sobre?: string): Promise<Evidenc
   const anio = c.anio ?? n.titulo.match(/\bde\s+(\d{4})\b/i)?.[1]
   if (anio) {
     const v = await suin.vigencia(c.tipo, c.numero, anio).catch(() => null)
-    if (v?.estado) base.vigencia = v.estado
+    if (v?.estado) {
+      base.vigencia = v.estado
+    } else if (/^decreto/i.test(c.tipo)) {
+      // El índice de SUIN son casi solo leyes: para un decreto se intenta la
+      // ficha directa. Solo se expone el estado cuando la ficha responde.
+      const fd = await suin.fichaDirectaDecreto(c.tipo, c.numero, anio).catch(() => ({ ok: false as const, razon: 'ficha-caida' as const }))
+      if (fd.ok && fd.vigencia.estado) base.vigencia = fd.vigencia.estado
+    }
   }
 
   try {
