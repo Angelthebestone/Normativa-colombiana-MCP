@@ -1,15 +1,17 @@
 ## Purpose
 
 Permite leer el texto de los actos sectoriales cuando el PDF publicado es textual, reutilizando la extracción ya disponible, y mantiene el aviso de escaneo cuando no hay texto que extraer.
-
 ## Requirements
-
 ### Requirement: Extracción de PDF textual sectorial
-El sistema SHALL intentar extraer texto de un PDF sectorial cuando `soportaTexto=false` pero el PDF sí contiene texto (tiene `FontFile`), usando `unpdf` + `pedirBytes` + `pdfEsEscaneo`.
+El sistema SHALL intentar extraer texto de un PDF sectorial cuando `soportaTexto=false` pero el PDF sí contiene texto (tiene `FontFile`), usando `unpdf` + `pedirBytes` + `pdfEsEscaneo`. El sistema SHALL intentar también la extracción de documentos `.doc/.docx` textuales con los mismos límites y avisos.
 
 #### Scenario: PDF textual de una SIC
 - **WHEN** `buscar_normativa_sectorial` devuelve un acto de la SIC con enlace PDF textual y el usuario pide `obtener_documento` con `fuente="sectorial"` o el hunk de lectura asociado
 - **THEN** el sistema descarga el PDF con `pedirBytes` (respeta ritmo/CA de `http.ts`), detecta que no es escaneo, extrae texto y lo devuelve troceado con `trocear`/`fragmentos` y `advertenciasVigencia`, con URL citable
+
+#### Scenario: Documento .docx sectorial
+- **WHEN** un acto sectorial enlaza un `.docx` textual
+- **THEN** el sistema descarga el archivo, extrae el texto Word y lo devuelve troceado con los mismos límites y avisos
 
 #### Scenario: PDF escaneado
 - **WHEN** el PDF es escaneo (`pdfEsEscaneo` true)
@@ -32,3 +34,4 @@ El sistema SHALL validar `dominioPermitido` del PDF contra el adaptador y SHALL 
 #### Scenario: PDF en dominio no permitido
 - **WHEN** el enlace PDF no pertenece al `dominioPermitido` del adaptador
 - **THEN** el sistema no lo descarga y devuelve aviso con el dominio esperado
+

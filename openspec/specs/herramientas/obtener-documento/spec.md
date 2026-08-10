@@ -1,5 +1,8 @@
-## MODIFIED Requirements
+# herramientas/obtener-documento Specification
 
+## Purpose
+TBD - created by archiving change soporte-doc-docx-y-contenido-sectorial. Update Purpose after archive.
+## Requirements
 ### Requirement: obtener_documento
 El sistema SHALL exponer `obtener_documento(fuente, …)` como el único punto de lectura para las fuentes con texto: `gestor`, `corte`, `suprema`, `consejo`, `dian`, `creg`, y `sectorial` (fuentes sectoriales con documento `.doc/.docx`/PDF textual). La herramienta SHALL devolver el texto troceado por defecto (respetando `limite_caracteres` 200–40.000, default 8000, e informando total/mostrado/omitido), y SHALL permitir pedir el documento completo con un parámetro explícito (`entero=true` o `limite_caracteres=0`). La herramienta SHALL permitir descargar el documento a una ruta local con un parámetro de ruta destino.
 

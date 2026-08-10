@@ -1,15 +1,17 @@
 ## Purpose
 
 Ofrece una única herramienta de búsqueda federada que agrega las fuentes ya existentes (Gestor, Corte Constitucional, SUIN, DIAN) para que el enrutado no dependa solo de las INSTRUCCIONES de 60 líneas.
-
 ## Requirements
-
 ### Requirement: Herramienta buscar_unificado
-El sistema SHALL exponer `buscar_unificado` con `texto` (requerido), `perfil` opcional (`laboral|tributario|ambiental|contratacion|energia`), `fuentes` opcional (subset de `gestor|corte|suin|dian`), y `limite` (default 15, max 30).
+El sistema SHALL exponer `buscar_unificado` con `texto` (requerido), `perfil` opcional (`laboral|tributario|ambiental|contratacion|energia`), `fuentes` opcional (subset de `gestor|corte|suin|dian`), y `limite` (default 15, max 30). El federado SHALL heredar la semántica de términos de los buscadores subyacentes (todos los términos / frase exacta / OR declarado) y SHALL aplicar el descarte de palabras comunes.
 
 #### Scenario: Consulta sin perfil
 - **WHEN** el usuario llama `buscar_unificado` con `texto="teletrabajo"` sin perfil ni fuentes
-- **THEN** el sistema consulta en paralelo Gestor (vía `buscar_por_tema` + fallback `buscar_normas`), Corte Constitucional y SUIN, devuelve una lista unificada con `fuente` y `url` por item y respeta `limite_caracteres` del transporte
+- **THEN** el sistema consulta en paralelo Gestor (vía `buscar_por_tema` + fallback `buscar_normas`), Corte Constitucional y SUIN, devuelve una lista unificada con `fuente` y `url` por item y respeta `limite_caracteres` del transporte, aplicando la semántica de términos del buscador subyacente
+
+#### Scenario: Término con palabras comunes
+- **WHEN** el usuario consulta un término poco distintivo con muchas palabras vacías
+- **THEN** el sistema descarta las palabras vacías (o declara que el buscador subyacente no lo hace) y devuelve resultados acotados, sin presentar decenas de miles como útiles
 
 #### Scenario: Consulta con perfil tributario
 - **WHEN** `perfil="tributario"` y `texto="retención en la fuente"`
@@ -39,3 +41,4 @@ El sistema SHALL reutilizar los módulos de búsqueda ya existentes y no replica
 #### Scenario: Gestor caído
 - **WHEN** el Gestor responde 503
 - **THEN** el federado devuelve las demás fuentes y marca la sección Gestor como no disponible con el error tras reintento
+
