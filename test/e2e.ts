@@ -72,6 +72,7 @@ test('las 24 herramientas se declaran con esquemas utilizables', CONTRATO, async
     'consejo',
     'dian',
     'creg',
+    'sectorial',
   ], 'obtener_documento debe enumerar las fuentes')
 
   // Lo que el servidor exige en tiempo de ejecución tiene que verse en el
