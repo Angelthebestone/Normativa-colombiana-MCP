@@ -12,6 +12,7 @@
 import { cargar, limpiarTermino, sinTildes, textoDe } from '../../nucleo/parse.ts'
 import { rutaDeSentencia } from '../../nucleo/citas.ts'
 import { pedir as http } from '../../nucleo/http.ts'
+import { esStopword } from '../../nucleo/stopwords.ts'
 
 const BASE = 'https://www.corteconstitucional.gov.co/relatoria'
 const BUSCADOR = `${BASE}/buscador_new/`
@@ -113,12 +114,6 @@ export type TipoProvidencia = 'C' | 'T' | 'SU' | 'A'
 const prefijo = (p: Providencia): string =>
   (p.sentencia.match(/^\s*(SU|C|T|A)\b/i)?.[1] ?? '').toUpperCase()
 
-/** Palabras que no aportan a la relatoría (el buscador no las indexa). */
-const STOPWORDS = new Set([
-  'a', 'al', 'ante', 'con', 'de', 'del', 'e', 'el', 'en', 'la', 'las', 'lo', 'los',
-  'o', 'para', 'por', 'que', 'se', 'su', 'sus', 'un', 'una', 'unos', 'unas', 'y',
-])
-
 /**
  * El backend de la relatoría rompe la búsqueda "flexible" cuando el término
  * trae varias palabras (antepone un aviso y devuelve 0). Reintentar con una
@@ -132,7 +127,7 @@ const STOPWORDS = new Set([
  */
 function nucleosDelTermino(termino: string): string[] {
   const palabras = termino.split(' ').filter(Boolean)
-  const utiles = palabras.filter((p) => !STOPWORDS.has(p.toLowerCase()))
+  const utiles = palabras.filter((p) => !esStopword(p))
   const candidatas = [...new Set(utiles.length ? utiles : palabras)]
   if (candidatas.length <= 1) return []
   // De menor a mayor frecuencia: la palabra más específica se prueba primero.

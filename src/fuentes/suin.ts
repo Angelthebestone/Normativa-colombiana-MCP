@@ -13,14 +13,9 @@
 import { readFileSync } from 'node:fs'
 import { CanarioError, cargar, limpiarTermino, sinTildes, textoDe } from '../nucleo/parse.ts'
 import { pedir } from '../nucleo/http.ts'
+import { esStopword } from '../nucleo/stopwords.ts'
 
 const BASE = 'https://www.suin-juriscol.gov.co'
-
-/** Palabras vacías del español; igual que en el Gestor y la Corte Constitucional. */
-const STOPWORDS = new Set([
-  'a', 'al', 'ante', 'con', 'de', 'del', 'e', 'el', 'en', 'la', 'las', 'lo', 'los',
-  'o', 'para', 'por', 'que', 'se', 'su', 'sus', 'un', 'una', 'unos', 'unas', 'y',
-])
 
 export const claveSuin = (tipo: string, numero: string, anio: string): string =>
   `${tipo.toLowerCase()} ${Number(numero)} ${anio}`
@@ -296,7 +291,7 @@ export function buscarEnIndice(texto: string, limite = 15): { total: number; ite
   const aguja = normaliza(texto)
   if (!idx || !aguja) return { total: 0, items: [] }
   // Sin las vacías: "ley 1221 de 2008" no debe exigir la palabra "de" en la clave.
-  const palabras = aguja.split(' ').filter((p) => !STOPWORDS.has(p))
+  const palabras = aguja.split(' ').filter((p) => !esStopword(p))
   const pedido = aguja.match(/\b(19|20)\d{2}\b/)?.[0] ?? ''
   const sinAño = palabras.filter((p) => !/^(19|20)\d{2}$/.test(p)).join(' ')
   const items: ResultadoSuin[] = []

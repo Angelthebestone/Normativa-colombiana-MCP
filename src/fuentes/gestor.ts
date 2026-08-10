@@ -17,6 +17,7 @@ import {
 } from '../nucleo/parse.ts'
 
 import { pedir } from '../nucleo/http.ts'
+import { esStopword } from '../nucleo/stopwords.ts'
 
 // El ritmo y la serialización por dominio los gobierna `pedir`.
 async function traer(url: string): Promise<string> {
@@ -49,11 +50,6 @@ const entero = (v: unknown): string | undefined => {
   return Number.isInteger(n) && n > 0 ? String(n) : undefined
 }
 
-const STOPWORDS = new Set([
-  'a', 'al', 'ante', 'con', 'de', 'del', 'e', 'el', 'en', 'la', 'las', 'lo', 'los',
-  'o', 'para', 'por', 'que', 'se', 'su', 'sus', 'un', 'una', 'unos', 'unas', 'y',
-])
-
 /**
  * El buscador une los términos con OR y no descarta vacías: `auxilio de
  * conectividad` devuelve 176 documentos solo por culpa del `de`, mientras que
@@ -61,8 +57,8 @@ const STOPWORDS = new Set([
  */
 export function quitarStopwords(frase: string): { usadas: string; descartadas: string[] } {
   const palabras = limpiarTermino(frase).split(' ').filter(Boolean)
-  const utiles = palabras.filter((p) => !STOPWORDS.has(sinTildes(p).toLowerCase()))
-  const descartadas = palabras.filter((p) => STOPWORDS.has(sinTildes(p).toLowerCase()))
+  const utiles = palabras.filter((p) => !esStopword(p))
+  const descartadas = palabras.filter((p) => esStopword(p))
   return { usadas: (utiles.length ? utiles : palabras).join(' '), descartadas }
 }
 
