@@ -27,7 +27,7 @@
  * vigencia declarado ("Vigente"), que se antepone al epígrafe tal cual lo
  * publica el portal, sin convertirlo en un booleano.
  */
-import { CanarioError, cargar } from '../../nucleo/parse.ts'
+import { CanarioError, cargar, colapsarEspacios } from '../../nucleo/parse.ts'
 import { pedir } from '../../nucleo/http.ts'
 import type { Adaptador, ActoSectorial, OpcionesSectorial, ResultadoSectorial } from '../sectorial.ts'
 
@@ -35,8 +35,6 @@ const BASE = 'https://www.supersociedades.gov.co/web/nuestra-entidad/normativa'
 /** Resoluciones, según el `id` que usa el propio buscador del portal. */
 const CATEGORIA_RESOLUCIONES = '1256464'
 const TAMANO_PAGINA = 20
-
-const limpio = (s: string): string => s.replace(/\s+/g, ' ').trim()
 
 /**
  * "Resolución 100-026149 de 24 de julio de 2026" → tipo + número. La fecha de
@@ -65,13 +63,13 @@ function extraerActo(html: string): { items: ActoSectorial[]; totalDeclarado: nu
     const $card = $titulo.closest('table.wd-100')
     if (!$card.length) return
 
-    const tituloTxt = limpio($titulo.attr('title') ?? $titulo.text())
+    const tituloTxt = colapsarEspacios($titulo.attr('title') ?? $titulo.text())
     const m = tituloTxt.match(TITULO)
-    const tipo = m ? limpio(m[1]!) : tituloTxt
+    const tipo = m ? colapsarEspacios(m[1]!) : tituloTxt
     const numero = m ? m[2]! : ''
 
-    const epigrafeTxt = limpio($card.find('p').first().text())
-    const vigencia = limpio($card.find('.estado-vigencia').first().text())
+    const epigrafeTxt = colapsarEspacios($card.find('p').first().text())
+    const vigencia = colapsarEspacios($card.find('.estado-vigencia').first().text())
     const epigrafe = vigencia ? `[${vigencia}] ${epigrafeTxt || tituloTxt}` : epigrafeTxt || tituloTxt
 
     // "Publicación: 24 Jul 2026 | Expedición 24 Jul 2026": se prefiere la de
@@ -82,7 +80,7 @@ function extraerActo(html: string): { items: ActoSectorial[]; totalDeclarado: nu
     // fuente, no de este parseo): se descarta cualquier fecha cuyo año no sea
     // plausible y se cae a Publicación, y de ahí al año que sí trae el título.
     const anioPlausible = (s: string): boolean => /\b(19|20)\d{2}\b/.test(s)
-    const lineaFechas = limpio($card.find('.text-info-data[title]').first().text())
+    const lineaFechas = colapsarEspacios($card.find('.text-info-data[title]').first().text())
     const fechaExpedicion = lineaFechas.match(/Expedici[oó]n\s+([^|]+)/i)?.[1]?.trim() ?? ''
     const fechaPublicacion = lineaFechas.match(/Publicaci[oó]n:\s*([^|]+)/i)?.[1]?.trim() ?? ''
     const fecha =

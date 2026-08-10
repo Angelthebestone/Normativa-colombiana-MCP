@@ -17,7 +17,7 @@
  * - **Los documentos son PDF**, así que no hay texto que extraer: se entrega el
  *   epígrafe —que es largo y sustancioso— y los dos enlaces de cada fila.
  */
-import { CanarioError, cargar, sinTildes } from '../nucleo/parse.ts'
+import { CanarioError, cargar, colapsarEspacios, sinTildes } from '../nucleo/parse.ts'
 import { pedir } from '../nucleo/http.ts'
 
 const BASE = 'https://www.anh.gov.co'
@@ -44,8 +44,6 @@ export type DocumentoAnh = {
   urlPdf: string
   urlFicha: string
 }
-
-const limpio = (s: string): string => s.replace(/\s+/g, ' ').trim()
 
 /** La categoría con la que la ANH marca lo que no es regulación, sino planta de personal. */
 export const ES_ADMINISTRATIVO = (categoria: string): boolean => /^administrativo$/i.test(sinTildes(categoria).trim())
@@ -82,12 +80,12 @@ export async function buscar(opts: {
   const items: DocumentoAnh[] = []
   filas.each((_, tr) => {
     const $tr = $(tr)
-    const celdas = $tr.find('td').map((__, td) => limpio($(td).text())).get()
+    const celdas = $tr.find('td').map((__, td) => colapsarEspacios($(td).text())).get()
     const pdf = $tr.find('a[href$=".pdf"]').first().attr('href') ?? ''
     const ficha = $tr.find('a[title="Detalle"], a[href*="/normatividad2/normatividad/"]').last().attr('href') ?? ''
     // La categoría va dentro de la celda del epígrafe, tras «Disponible en:».
-    const categoria = limpio($tr.text().match(/Disponible en:\s*([^]{0,80}?)\s*Acciones/)?.[1] ?? '')
-    const epigrafe = limpio($tr.find('.block-paragraph').text()) || celdas[4] || ''
+    const categoria = colapsarEspacios($tr.text().match(/Disponible en:\s*([^]{0,80}?)\s*Acciones/)?.[1] ?? '')
+    const epigrafe = colapsarEspacios($tr.find('.block-paragraph').text()) || celdas[4] || ''
     if (!celdas[1] && !epigrafe) return
     items.push({
       tipo: celdas[1] ?? '',

@@ -25,7 +25,7 @@
  * porque el portal no separa "vigente" de "en trámite" en ningún campo, solo
  * en el rótulo de tipo.
  */
-import { CanarioError, cargar } from '../../nucleo/parse.ts'
+import { CanarioError, cargar, colapsarEspacios } from '../../nucleo/parse.ts'
 import { pedir } from '../../nucleo/http.ts'
 import type { Adaptador, ActoSectorial, OpcionesSectorial, ResultadoSectorial } from '../sectorial.ts'
 
@@ -42,7 +42,6 @@ const TIPOS_EXCLUIDOS = new Set([
   'tablas de retención documental',
 ])
 
-const limpio = (s: string): string => s.replace(/\s+/g, ' ').trim()
 const sinTildesLocal = (s: string): string => s.normalize('NFD').replace(/\p{Diacritic}/gu, '')
 
 function extraer(html: string): ActoSectorial[] {
@@ -59,21 +58,21 @@ function extraer(html: string): ActoSectorial[] {
   const items: ActoSectorial[] = []
   filas.each((_, tr) => {
     const $tr = $(tr)
-    const tipo = limpio($tr.find('td.views-field-field-tipo-de-norma span').first().text())
+    const tipo = colapsarEspacios($tr.find('td.views-field-field-tipo-de-norma span').first().text())
     if (TIPOS_EXCLUIDOS.has(sinTildesLocal(tipo).toLowerCase())) return
 
-    const numero = limpio($tr.find('td.views-field-field-numero span').first().text())
+    const numero = colapsarEspacios($tr.find('td.views-field-field-numero span').first().text())
     const $fecha = $tr.find('span.date-display-single').first()
     // El atributo `content` trae la fecha en ISO; el texto visible ("Sep 29,
     // 2023") es solo para quien lee, no para ordenar ni extraer el año.
     const fechaIso = $fecha.attr('content') ?? ''
-    const fecha = fechaIso ? fechaIso.slice(0, 10) : limpio($fecha.text())
+    const fecha = fechaIso ? fechaIso.slice(0, 10) : colapsarEspacios($fecha.text())
     const anio = fecha.match(/^(\d{4})/)?.[1] ?? ''
 
     // `td.tamano-celda` aparece dos veces por fila (la descripción real, que
     // trae un <p>, y una columna sin cabecera que repite el tema en texto
     // plano): se pide el <p> a propósito para no quedarse con la duplicada.
-    const epigrafe = limpio($tr.find('td.tamano-celda p').first().text())
+    const epigrafe = colapsarEspacios($tr.find('td.tamano-celda p').first().text())
     const url = $tr.find('td.views-field-field-archivo a[href]').first().attr('href') ?? ''
 
     if (!numero && !epigrafe) return

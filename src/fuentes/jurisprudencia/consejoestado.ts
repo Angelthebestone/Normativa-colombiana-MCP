@@ -25,7 +25,7 @@
  * sentencia".
  */
 import * as cheerio from 'cheerio/slim'
-import { CanarioError, limpiarTermino, sinTildes } from '../../nucleo/parse.ts'
+import { CanarioError, colapsarEspacios, limpiarTermino, sinTildes } from '../../nucleo/parse.ts'
 import { terminosSignificativos } from '../gestor.ts'
 import { pedir, pedirBytes } from '../../nucleo/http.ts'
 
@@ -56,8 +56,6 @@ export type Providencia = {
    */
   token: string
 }
-
-const limpio = (s: string): string => s.replace(/\s+/g, ' ').trim()
 
 /** Texto de una providencia sobre el que se filtra: problema jurídico, respuesta y nota. */
 const textoDe = (p: Providencia): string =>
@@ -112,7 +110,7 @@ const RAIZ = 'ContentPlaceHolder1_ResultadoBusqueda1_TitulacionesRepeater_'
 
 function parsear(html: string, limite: number, urlBusqueda: string): { paginas: number; items: Providencia[] } {
   const $ = cheerio.load(html)
-  const campoDe = (nombre: string, n: number): string => limpio($(`[id="${RAIZ}${nombre}_${n}"]`).first().text())
+  const campoDe = (nombre: string, n: number): string => colapsarEspacios($(`[id="${RAIZ}${nombre}_${n}"]`).first().text())
 
   const indices = [...new Set([...html.matchAll(new RegExp(`${RAIZ}HypRadicado_(\\d+)"`, 'g'))].map((m) => Number(m[1])))]
     .sort((a, b) => a - b)
@@ -132,13 +130,13 @@ function parsear(html: string, limite: number, urlBusqueda: string): { paginas: 
       if (/SeResuelveProblemaJuridicoLabel/.test(idEl)) return
       const base = idEl.replace(/ProblemaJuridicoLabel_(\d+)$/, '')
       const suf = idEl.match(/_(\d+)$/)?.[1] ?? '0'
-      const problema = limpio($(el).text()).replace(/^Problema jur[íi]dico:\s*/i, '')
+      const problema = colapsarEspacios($(el).text()).replace(/^Problema jur[íi]dico:\s*/i, '')
       if (!problema) return
-      const respuesta = limpio($(`[id="${base}SeResuelveProblemaJuridicoLabel_${suf}"]`).text()).replace(
+      const respuesta = colapsarEspacios($(`[id="${base}SeResuelveProblemaJuridicoLabel_${suf}"]`).text()).replace(
         /^Respuesta al problema jur[íi]dico:\s*/i,
         '',
       )
-      const nota = limpio($(`[id="${base}NotaRelatoriaLabel_${suf}"]`).text()).replace(/^NOTA DE RELATOR[ÍI]A:\s*/i, '')
+      const nota = colapsarEspacios($(`[id="${base}NotaRelatoriaLabel_${suf}"]`).text()).replace(/^NOTA DE RELATOR[ÍI]A:\s*/i, '')
       if (!titulaciones.some((t) => t.problema === problema && t.nota === nota)) {
         titulaciones.push({ problema, respuesta, nota })
       }
@@ -166,7 +164,7 @@ function parsear(html: string, limite: number, urlBusqueda: string): { paginas: 
     })
   }
 
-  const pag = limpio($('[id$="PaginaActualLabel"]').first().text()).match(/de\s+([\d.,]+)/i)?.[1] ?? ''
+  const pag = colapsarEspacios($('[id$="PaginaActualLabel"]').first().text()).match(/de\s+([\d.,]+)/i)?.[1] ?? ''
   return { paginas: pag ? Number(pag.replace(/[.,]/g, '')) : -1, items }
 }
 

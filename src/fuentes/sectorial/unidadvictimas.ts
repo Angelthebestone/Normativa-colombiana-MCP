@@ -30,14 +30,12 @@
  * la taxonomía o los enlaces al item), se lanza `CanarioError` y no una lista
  * vacía.
  */
-import { CanarioError, cargar, sinTildes } from '../../nucleo/parse.ts'
+import { CanarioError, cargar, colapsarEspacios, sinTildes } from '../../nucleo/parse.ts'
 import { pedir } from '../../nucleo/http.ts'
 import type { ActoSectorial, OpcionesSectorial, ResultadoSectorial } from '../sectorial.ts'
 
 const BASE = 'https://www.unidadvictimas.gov.co'
 const RUTA = '/documentos_bibliotec/'
-
-const limpio = (s: string): string => s.replace(/\s+/g, ' ').trim()
 
 /** El slug de la taxonomía en la clase del item ("categoria_biblioteca-informes"). */
 const slugDe = (nodo: ReturnType<ReturnType<typeof cargar>>): string => {
@@ -50,12 +48,12 @@ function leerItem(nodo: ReturnType<ReturnType<typeof cargar>>): ActoSectorial | 
   const a = $n.find('a[href*="/documentos_bibliotec/"]').first()
   const href = a.attr('href') ?? ''
   if (!href) return null
-  const titulo = limpio($n.find('h2.elementor-heading-title').first().text()) || limpio($n.find('h1').first().text())
+  const titulo = colapsarEspacios($n.find('h2.elementor-heading-title').first().text()) || colapsarEspacios($n.find('h1').first().text())
   if (!titulo) return null
   // El texto del `p` puede venir vacío o compuesto ("Informes, Resoluciones");
   // la clase de la taxonomía es la señal fiable y es también el `tipo`.
-  const categoria = limpio($n.find('p.elementor-heading-title').first().text())
-  const fecha = limpio($n.find('time').first().text())
+  const categoria = colapsarEspacios($n.find('p.elementor-heading-title').first().text())
+  const fecha = colapsarEspacios($n.find('time').first().text())
   const numero = titulo.match(/(?:resoluci[oó]n|decreto|ley|circular)\s*(?:n[°o]?\.?|no\.?)?\s*([\d]{2,8})/i)?.[1] ?? ''
   const anio = fecha.match(/\b(19|20)\d{2}\b/)?.[0] ?? ''
   return {

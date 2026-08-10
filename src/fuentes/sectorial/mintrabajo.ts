@@ -27,7 +27,7 @@
  *   codificación («RESPE�TANDO»): se normaliza el texto plano pero no se
  *   reescribe el contenido.
  */
-import { CanarioError, cargar, sinTildes } from '../../nucleo/parse.ts'
+import { CanarioError, cargar, colapsarEspacios, sinTildes } from '../../nucleo/parse.ts'
 import { pedir } from '../../nucleo/http.ts'
 import type { OpcionesSectorial, ResultadoSectorial } from '../sectorial.ts'
 
@@ -59,13 +59,11 @@ const ANIO = /\b((?:19|20)\d{2})\b/
 /** «Circular 0026 de 2020», «0661 del 26 de junio de 2026»: aquí el año es de verdad el año. */
 const ANIO_TRAS_DE = /\bde\s+((?:19|20)\d{2})\b/i
 
-const limpio = (s: string): string => s.replace(/\s+/g, ' ').trim()
-
 /** Las páginas por año («circulares/2020») usan celdas planas; marco-legal usa `td[data-label]`. */
 const celda = ($tr: ReturnType<ReturnType<typeof cargar>>, i: number): string => {
   const conLabel = $tr.find('td[data-label]').eq(i)
-  if (conLabel.length) return limpio(conLabel.text())
-  return limpio($tr.find('td').eq(i).text())
+  if (conLabel.length) return colapsarEspacios(conLabel.text())
+  return colapsarEspacios($tr.find('td').eq(i).text())
 }
 
 export async function buscar(opts: OpcionesSectorial): Promise<ResultadoSectorial> {
@@ -84,7 +82,7 @@ export async function buscar(opts: OpcionesSectorial): Promise<ResultadoSectoria
   const filas = $('table tbody tr')
   const conNorma = filas.filter((_, tr) => {
     const $tr = $(tr)
-    return $tr.find('td').length >= 5 && /norma|circular|decreto|resoluci[oó]n|ley/i.test(limpio($tr.text()))
+    return $tr.find('td').length >= 5 && /norma|circular|decreto|resoluci[oó]n|ley/i.test(colapsarEspacios($tr.text()))
   })
   if (!conNorma.length) throw new CanarioError('no se encontró ninguna fila de norma en el marco legal')
 
@@ -109,7 +107,7 @@ export async function buscar(opts: OpcionesSectorial): Promise<ResultadoSectoria
       norma.match(ANIO_TRAS_DE)?.[1] ??
       (suelto && suelto !== numero ? suelto : (fecha.match(ANIO)?.[0] ?? ''))
     items.push({
-      tipo: limpio(tipo),
+      tipo: colapsarEspacios(tipo),
       numero,
       anio,
       fecha,

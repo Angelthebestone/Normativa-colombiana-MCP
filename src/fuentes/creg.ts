@@ -20,7 +20,7 @@
  * un refundido, el salto siguiente es `obtenerTexto` sobre su `.htm`, que ya
  * está resuelto.
  */
-import { CanarioError, cargar, sinTildes, textoDe } from '../nucleo/parse.ts'
+import { CanarioError, cargar, colapsarEspacios, sinTildes, textoDe } from '../nucleo/parse.ts'
 import { pedir } from '../nucleo/http.ts'
 
 const BASE = 'https://gestornormativo.creg.gov.co/gestor/entorno/'
@@ -42,8 +42,6 @@ export type ResolucionCreg = {
   ruta: string
   url: string
 }
-
-const limpio = (s: string): string => s.replace(/\s+/g, ' ').trim()
 
 const ROTULO: Record<Compilacion, string> = {
   vigentes: 'No derogada expresamente ni anulada, según la compilación cronológica de la CREG',
@@ -99,7 +97,7 @@ export async function buscar(
     const m = ruta.match(/resolucion_creg_([\d_-]+)_(\d{4})\.htm/i)
     // El epígrafe acompaña al enlace; el contenedor varía, así que se toma el
     // bloque de texto del ancestro más cercano que diga algo.
-    const cerca = limpio($a.parent().text()) || limpio($a.text())
+    const cerca = colapsarEspacios($a.parent().text()) || colapsarEspacios($a.text())
     todas.push({
       numero: (m?.[1] ?? '').replace(/_/g, '-'),
       anio: m?.[2] ?? '',

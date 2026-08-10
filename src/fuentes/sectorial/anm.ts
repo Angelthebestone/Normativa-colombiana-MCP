@@ -34,7 +34,7 @@
  *   `div` no está, la página cambió de estructura; si está pero no hay tabla,
  *   son cero resultados de verdad.
  */
-import { CanarioError, cargar, limpiarTermino } from '../../nucleo/parse.ts'
+import { CanarioError, cargar, colapsarEspacios, limpiarTermino } from '../../nucleo/parse.ts'
 import { pedir } from '../../nucleo/http.ts'
 import type { Adaptador, ActoSectorial, OpcionesSectorial, ResultadoSectorial } from '../sectorial.ts'
 
@@ -66,8 +66,6 @@ const FUENTES: Fuente[] = [
   },
 ]
 
-const limpio = (s: string): string => s.replace(/\s+/g, ' ').trim()
-
 async function paginaDe(f: Fuente, opts: OpcionesSectorial): Promise<{ items: ActoSectorial[]; url: string }> {
   const p = new URLSearchParams()
   const texto = opts.texto ? limpiarTermino(opts.texto) : ''
@@ -88,15 +86,15 @@ async function paginaDe(f: Fuente, opts: OpcionesSectorial): Promise<{ items: Ac
   const items: ActoSectorial[] = []
   $('table.views-view-table tbody tr').each((_, tr) => {
     const $tr = $(tr)
-    const titulo = limpio($tr.find('.views-field-title').text())
+    const titulo = colapsarEspacios($tr.find('.views-field-title').text())
     if (!titulo) return // fila de cabecera u otra cosa que no es un acto
 
     // El nombre exacto de la clase difiere entre vistas: "field-descripcion" en
     // resoluciones/leyes/decretos, "field-descripcion-documento" en circulares.
-    const descripcion = limpio($tr.find('[class*="views-field-field-descripcion"]').first().text())
-    const vigencia = limpio($tr.find('.views-field-field-vigencia-texto').text())
+    const descripcion = colapsarEspacios($tr.find('[class*="views-field-field-descripcion"]').first().text())
+    const vigencia = colapsarEspacios($tr.find('.views-field-field-vigencia-texto').text())
     // Ausente en circulares: esa vista no trae columna de fecha de publicación.
-    const fecha = limpio($tr.find('.views-field-nothing').text())
+    const fecha = colapsarEspacios($tr.find('.views-field-nothing').text())
     const href = $tr.find('td').last().find('a[href]').first().attr('href') ?? ''
 
     const numero = titulo.match(/(\d[\d.\-/]*)/)?.[1] ?? ''

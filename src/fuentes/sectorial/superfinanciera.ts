@@ -28,7 +28,7 @@
  * con exactamente tres `<td>` útiles por fila y el número como enlace de
  * descarga. Por eso no se filtra por clase.
  */
-import { CanarioError, cargar, limpiarTermino, sinTildes } from '../../nucleo/parse.ts'
+import { CanarioError, cargar, colapsarEspacios, limpiarTermino, sinTildes } from '../../nucleo/parse.ts'
 import { pedir } from '../../nucleo/http.ts'
 import type { Adaptador, ActoSectorial } from '../sectorial.ts'
 
@@ -36,8 +36,6 @@ const BASE = 'https://www.superfinanciera.gov.co'
 const INDICE = `${BASE}/publicaciones/20149/`
 
 type TipoActo = 'Circular Externa' | 'Carta Circular' | 'Resolución'
-
-const limpio = (s: string): string => s.replace(/\s+/g, ' ').trim()
 
 /**
  * El sitio no sigue el estándar de un único salto: encadena hasta tres
@@ -75,7 +73,7 @@ async function indice(): Promise<Map<string, Record<TipoActo, string>>> {
     if ($tr.find('th').length) return // fila de encabezado
     const enlaces = $tr.find('td a[href]')
     if (enlaces.length < 3) return
-    const anio = limpio(enlaces.eq(0).text())
+    const anio = colapsarEspacios(enlaces.eq(0).text())
     if (!/^\d{4}$/.test(anio)) return
     mapa.set(anio, {
       'Circular Externa': new URL(enlaces.eq(0).attr('href') ?? '', INDICE).toString(),
@@ -108,9 +106,9 @@ async function filasDeAnio(url: string, tipo: TipoActo, anio: string): Promise<A
     if ($tr.find('th').length) return
     const celdas = $tr.find('td')
     if (celdas.length < 3) return
-    const numero = limpio(celdas.eq(0).text())
-    const fecha = limpio(celdas.eq(1).text())
-    const epigrafe = limpio(celdas.eq(2).text())
+    const numero = colapsarEspacios(celdas.eq(0).text())
+    const fecha = colapsarEspacios(celdas.eq(1).text())
+    const epigrafe = colapsarEspacios(celdas.eq(2).text())
     if (!numero && !epigrafe) return
     const href = celdas.eq(0).find('a').first().attr('href') ?? ''
     items.push({

@@ -33,7 +33,7 @@
  * correcto). Tomar el primer `<a>` de la tarjeta sin distinguir da una URL
  * rota; hay que preferir siempre `a.documento-normativa`.
  */
-import { CanarioError, cargar, sinTildes } from '../../nucleo/parse.ts'
+import { CanarioError, cargar, colapsarEspacios, sinTildes } from '../../nucleo/parse.ts'
 import { pedir } from '../../nucleo/http.ts'
 import type * as cheerio from 'cheerio/slim'
 import type { Adaptador, ActoSectorial, OpcionesSectorial, ResultadoSectorial } from '../sectorial.ts'
@@ -47,8 +47,6 @@ const PANELES: { id: string; tipo: string }[] = [
   { id: 'decretos', tipo: 'Decreto' },
   { id: 'circulares', tipo: 'Circular' },
 ]
-
-const limpio = (s: string): string => s.replace(/\s+/g, ' ').trim()
 
 const RE_FECHA_PUBLICADO = /Publicado:\s*(\d{4}-\d{2}-\d{2})/
 const RE_FECHA_CORTA = /\b\d{1,2}\/\d{1,2}\/\d{4}\b/
@@ -77,10 +75,10 @@ function extraer($unidad: cheerio.Cheerio<any>, tipo: string): ActoSectorial | n
     : $unidad.find('a[href]:not([href^="#"])').first()
   if (!$a.length) return null
 
-  const titulo = limpio($a.text()) || limpio($a.attr('title') ?? '')
+  const titulo = colapsarEspacios($a.text()) || colapsarEspacios($a.attr('title') ?? '')
   if (!titulo) return null
   const href = $a.attr('href') ?? ''
-  const textoCompleto = limpio($unidad.text())
+  const textoCompleto = colapsarEspacios($unidad.text())
 
   const numero = titulo.match(/(\d[\d.\-/]*)/)?.[1] ?? ''
   const anios = titulo.match(/\b(?:19|20)\d{2}\b/g) ?? textoCompleto.match(/\b(?:19|20)\d{2}\b/g)
@@ -88,7 +86,7 @@ function extraer($unidad: cheerio.Cheerio<any>, tipo: string): ActoSectorial | n
 
   // El resto del texto de la fila/tarjeta, quitando el título, es lo más
   // parecido a un epígrafe que ofrece esta página (no hay un campo aparte).
-  const resto = limpio(textoCompleto.replace(titulo, ''))
+  const resto = colapsarEspacios(textoCompleto.replace(titulo, ''))
 
   return {
     tipo,

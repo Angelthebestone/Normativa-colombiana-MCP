@@ -37,6 +37,9 @@ for (let i = 0; i < CON.length; i++) TILDES[CON[i]!] = SIN[i]!
 export const sinTildes = (s: string): string =>
   s.replace(/[áàäâÁÀÄÂéèëêÉÈËÊíìïîÍÌÏÎóòöôÓÒÖÔúùüûÚÙÜÛñÑçÇ]/g, (c) => TILDES[c] ?? c)
 
+/** Colapsa cualquier serie de espacios (y saltos) a un solo espacio y recorta. */
+export const colapsarEspacios = (s: string): string => s.replace(/\s+/g, ' ').trim()
+
 export const tieneTildes = (s: string): boolean => sinTildes(s) !== s
 
 /**

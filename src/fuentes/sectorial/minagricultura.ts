@@ -21,7 +21,7 @@
  * estructurada: solo el año lo está. Se intenta recuperar el resto (día y
  * mes) quitando el "TIPO NÚMERO" del encabezado del propio portal.
  */
-import { CanarioError, cargar, sinTildes } from '../../nucleo/parse.ts'
+import { CanarioError, cargar, colapsarEspacios, sinTildes } from '../../nucleo/parse.ts'
 import { pedir } from '../../nucleo/http.ts'
 import type { Adaptador, ActoSectorial, OpcionesSectorial, ResultadoSectorial } from '../sectorial.ts'
 
@@ -31,8 +31,6 @@ const CATEGORIAS: { tipo: string; ruta: string }[] = [
   { tipo: 'Decreto', ruta: '/normatividad/decretos' },
   { tipo: 'Resolución', ruta: '/normatividad/resoluciones' },
 ]
-
-const limpio = (s: string): string => s.replace(/\s+/g, ' ').trim()
 
 /**
  * "LEY 2337 DE OCTUBRE DE 2023" -> "DE OCTUBRE DE 2023" -> "OCTUBRE DE 2023".
@@ -47,8 +45,8 @@ const limpio = (s: string): string => s.replace(/\s+/g, ' ').trim()
  */
 const TIPO_NUM = /^(LEY|DECRETO|RESOLUCI[ÓO]N|ACUERDO)\.?\s*(?:No\.?|N[ÚU]M(?:ERO)?\.?)?\s*[\d.]+\s*/i
 function fechaDe(titulo: string, anio: string): string {
-  const sinCabecera = limpio(titulo.replace(TIPO_NUM, ''))
-  if (sinCabecera === limpio(titulo)) return anio
+  const sinCabecera = colapsarEspacios(titulo.replace(TIPO_NUM, ''))
+  if (sinCabecera === colapsarEspacios(titulo)) return anio
   return sinCabecera.replace(/^(DE|DEL)\s+/i, '').trim() || anio
 }
 
@@ -69,10 +67,10 @@ async function listar(tipo: string, ruta: string): Promise<ActoSectorial[]> {
   return arts
     .map((_, el) => {
       const $a = $(el)
-      const titulo = limpio($a.attr('data-title') ?? '')
-      const anio = limpio($a.attr('data-year') ?? '')
-      const numero = limpio($a.attr('data-number') ?? '')
-      const epigrafe = limpio($a.attr('data-info') ?? '') || titulo
+      const titulo = colapsarEspacios($a.attr('data-title') ?? '')
+      const anio = colapsarEspacios($a.attr('data-year') ?? '')
+      const numero = colapsarEspacios($a.attr('data-number') ?? '')
+      const epigrafe = colapsarEspacios($a.attr('data-info') ?? '') || titulo
       const href = $a.find('a[itemprop="url"]').first().attr('href') ?? ''
       const acto: ActoSectorial = {
         tipo,

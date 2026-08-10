@@ -30,14 +30,12 @@
  *   tope no se mueve con `&page=`: no pagina. Sirve para localizar un acto
  *   puntual, no para explorar a fondo un tema con muchos resultados.
  */
-import { CanarioError, cargar } from '../../nucleo/parse.ts'
+import { CanarioError, cargar, colapsarEspacios } from '../../nucleo/parse.ts'
 import { pedir } from '../../nucleo/http.ts'
 import type { Adaptador, ActoSectorial, OpcionesSectorial, ResultadoSectorial } from '../sectorial.ts'
 
 const BASE = 'https://www.ica.gov.co'
 const RUTA_DEFECTO = '/normatividad/normas-ica/resoluciones-oficinas-nacionales'
-
-const limpio = (s: string): string => s.replace(/\s+/g, ' ').trim()
 
 /**
  * Cada fila es un `.row.py-3` con `.tiponorma` (el tipo), un `<h2><a>` cuyo
@@ -52,8 +50,8 @@ function filas($: ReturnType<typeof cargar>): ActoSectorial[] {
     const $a = $row.find('h2 a').first()
     if (!$a.length) return
 
-    const tipo = limpio($row.find('.tiponorma').first().text()) || 'Norma'
-    const tituloCompleto = limpio($a.text())
+    const tipo = colapsarEspacios($row.find('.tiponorma').first().text()) || 'Norma'
+    const tituloCompleto = colapsarEspacios($a.text())
     const m = tituloCompleto.match(/(\d[\d.]*)\s+de\s+(\d{4})/i)
     const numero = m?.[1] ?? ''
     const anio = m?.[2] ?? ''
@@ -69,7 +67,7 @@ function filas($: ReturnType<typeof cargar>): ActoSectorial[] {
     // se comía la observación de vigencia y el Diario Oficial enteros, y la
     // fecha salía siendo un párrafo. Se captura la fecha por su forma.
     const fecha =
-      limpio($row.text()).match(
+      colapsarEspacios($row.text()).match(
         /Expedici[óo]n:\s*(\d{1,2}\s+de\s+\w+\s+de\s+\d{4}|\d{4}-\d{2}-\d{2}|\d{1,2}\/\d{1,2}\/\d{4})/i,
       )?.[1] ?? ''
     const href = $a.attr('href') ?? ''
@@ -100,7 +98,7 @@ async function paginaDefecto(pagina: number): Promise<{ items: ActoSectorial[]; 
 
   // El portal ignora en silencio una página fuera de rango: hay que leer el
   // marcador de página activa del paginador, no confiar en el `pagina` pedido.
-  const activa = limpio($('.page-item.active a').first().text())
+  const activa = colapsarEspacios($('.page-item.active a').first().text())
   const nota =
     activa && activa !== String(pagina)
       ? `Se pidió la página ${pagina}, pero el ICA devolvió la página ${activa} (fuera de rango; el portal no avisa, solo cae a la 1).`

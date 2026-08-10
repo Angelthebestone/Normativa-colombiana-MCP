@@ -21,15 +21,13 @@
  * `.resolution` o los enlaces a `/documentos/`), se lanza `CanarioError` y no
  * una lista vacía: un vacío se leería como "esa norma no existe".
  */
-import { CanarioError, cargar, sinTildes } from '../../nucleo/parse.ts'
+import { CanarioError, cargar, colapsarEspacios, sinTildes } from '../../nucleo/parse.ts'
 import { pedir } from '../../nucleo/http.ts'
 import type { ActoSectorial, OpcionesSectorial, ResultadoSectorial } from '../sectorial.ts'
 
 const BASE = 'https://www.supertransporte.gov.co'
 /** Resoluciones por año; el listado trae todas las del año en el HTML. */
 const RUTA_RESOLUCIONES = '/index.php/resoluciones-generales/'
-
-const limpio = (s: string): string => s.replace(/\s+/g, ' ').trim()
 
 /** Año más creíble de un texto (el de una fecha «31 de Diciembre 2024» o del título). */
 const anioDe = (s: string): string => s.match(/\b(19|20)\d{2}\b/)?.[0] ?? ''
@@ -41,10 +39,10 @@ function leerResolution($: ReturnType<typeof cargar>, nodo: ReturnType<ReturnTyp
   const a = $n.find('a.boton-enlace-activo[href*="/documentos/"]').first()
   const href = a.attr('href') ?? ''
   if (!href) return null
-  const titulo = limpio(a.text())
+  const titulo = colapsarEspacios(a.text())
   const parrafos = $n
     .find('p')
-    .map((_, p) => limpio($(p).text()))
+    .map((_, p) => colapsarEspacios($(p).text()))
     .get()
     .filter(Boolean)
   const fecha = parrafos.find((t) => /\b(enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|octubre|noviembre|diciembre)\b/i.test(t)) ?? ''

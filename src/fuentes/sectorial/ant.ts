@@ -22,14 +22,12 @@
  * enlaces `.pdf`), se lanza `CanarioError` y no una lista vacía: un vacío se
  * leería como "esa norma no existe".
  */
-import { CanarioError, cargar, sinTildes } from '../../nucleo/parse.ts'
+import { CanarioError, cargar, colapsarEspacios, sinTildes } from '../../nucleo/parse.ts'
 import { pedir } from '../../nucleo/http.ts'
 import type { ActoSectorial, OpcionesSectorial, ResultadoSectorial } from '../sectorial.ts'
 
 const BASE = 'https://www.ant.gov.co'
 const RUTA = '/normativa'
-
-const limpio = (s: string): string => s.replace(/\s+/g, ' ').trim()
 
 /** De "Resolución No. 202610300548606 con Fecha 2026-08-01" saca tipo/número/fecha. */
 function parsearTitulo(titulo: string): { tipo: string; numero: string; fecha: string } {
@@ -41,14 +39,14 @@ function parsearTitulo(titulo: string): { tipo: string; numero: string; fecha: s
 
 function leerArticulo($: ReturnType<typeof cargar>, nodo: ReturnType<ReturnType<typeof cargar>>): ActoSectorial | null {
   const $n = nodo
-  const titulo = limpio($n.find('h2 span').first().text())
+  const titulo = colapsarEspacios($n.find('h2 span').first().text())
   if (!titulo) return null
   const { tipo, numero, fecha } = parsearTitulo(titulo)
   // El objeto ("Por la cual…") es el div que sigue al h2; se descartan el
   // título repetido y los bloques de archivo ("Descargar (389.66 KB)").
   const divObjeto = $n
     .find('div')
-    .map((_, d) => limpio($(d).text()))
+    .map((_, d) => colapsarEspacios($(d).text()))
     .get()
     .find(
       (t) =>
@@ -60,8 +58,8 @@ function leerArticulo($: ReturnType<typeof cargar>, nodo: ReturnType<ReturnType<
   // Cuando el portal no publica el objeto (p. ej. con filtro por texto, el
   // asunto vive en el título "20191030017933 - Micro y minifundio…"), se
   // recupera la parte tras el número como epígrafe.
-  const epigrafe = limpio(divObjeto ?? (titulo.match(/^[^ ]+ ?- ?(.+)$/)?.[1] ?? ''))
-  const fechaExpedicion = limpio($n.find('p.publicacion-info').text()).replace(/^Fecha de expedición\s*/i, '')
+  const epigrafe = colapsarEspacios(divObjeto ?? (titulo.match(/^[^ ]+ ?- ?(.+)$/)?.[1] ?? ''))
+  const fechaExpedicion = colapsarEspacios($n.find('p.publicacion-info').text()).replace(/^Fecha de expedición\s*/i, '')
   const a = $n.find('a[href$=".pdf"], a[href*=".pdf?"]').first()
   const href = a.attr('href') ?? ''
   if (!href) return null

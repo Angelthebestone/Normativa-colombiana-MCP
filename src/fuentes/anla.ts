@@ -21,7 +21,7 @@
  * esta fuente aporta. El salto de página se lee de los enlaces `?start=N` del
  * propio HTML en vez de cablearlo, porque depende de la plantilla.
  */
-import { CanarioError, cargar, sinTildes } from '../nucleo/parse.ts'
+import { CanarioError, cargar, colapsarEspacios, sinTildes } from '../nucleo/parse.ts'
 import { pedir } from '../nucleo/http.ts'
 
 const BASE = 'https://www.anla.gov.co/wanla/eureka/'
@@ -60,8 +60,6 @@ const UNA_CITA = new RegExp(CITAS.source, 'i')
 /** «Decreto – Ley» y «Decreto Ley» son la misma clase de norma escritas distinto. */
 const clase = (s: string): string => sinTildes(s).toLowerCase().replace(/[^a-z]/g, '')
 
-const limpio = (s: string): string => s.replace(/\s+/g, ' ').trim()
-
 /** Eureka pagina por su cuenta y no admite otro tamaño, así que no hay `limite`. */
 export async function listar(
   seccion: SeccionAnla,
@@ -93,7 +91,7 @@ export async function listar(
   const items: EntradaAnla[] = []
   articulos.each((_, el) => {
     const $e = $(el)
-    const titulo = limpio($e.find('.article-header, h1, h2, h3').first().text()) || limpio($e.find('a').first().text())
+    const titulo = colapsarEspacios($e.find('.article-header, h1, h2, h3').first().text()) || colapsarEspacios($e.find('a').first().text())
     if (!titulo) return
     const href = $e.find('a[href]').first().attr('href') ?? ''
     // "Ley 2893 de 2011 – Objetivos…" → "Ley 2893 de 2011".
@@ -105,7 +103,7 @@ export async function listar(
       titulo.match(/\b(?:Ley|Decreto(?:\s+Ley)?|Resoluci[óo]n|Acuerdo|Circular)\s+\d[\d.]*\s+de\s+\d{4}/i)?.[0] ??
       ''
     ).replace(/\s+/g, ' ')
-    const resumen = (limpio($e.find('.article-introtext').text()) || limpio($e.text()).slice(titulo.length))
+    const resumen = (colapsarEspacios($e.find('.article-introtext').text()) || colapsarEspacios($e.text()).slice(titulo.length))
       .slice(0, 400)
       .trim()
 
