@@ -117,19 +117,23 @@ Después se apunta el cliente a `node /ruta/absoluta/a/Normativa-colombiana-MCP/
 
 ### Qué recibe el cliente
 
-Al conectarse, el servidor entrega **34 herramientas**, **5 prompts** y sus **propias instrucciones de uso**: a qué tipo de pregunta corresponde cada herramienta, que debe citarse siempre la fuente y que nunca debe afirmarse por cuenta propia que una norma está vigente. Los clientes que respetan el campo `instructions` del protocolo lo aprovechan sin configurar nada.
+Al conectarse, el servidor entrega **24 herramientas**, **5 prompts** y sus **propias instrucciones de uso**: a qué tipo de pregunta corresponde cada herramienta, que debe citarse siempre la fuente y que nunca debe afirmarse por cuenta propia que una norma está vigente. Los clientes que respetan el campo `instructions` del protocolo lo aprovechan sin configurar nada.
 
 | Fuente | Herramientas |
 | --- | --- |
-| Cualquiera (punto de entrada) | `resolver_cita` — cita exacta → norma o sentencia, con su vigencia si consta; `validar_cita` — comprueba cita y enlace |
-| Gestor Normativo | `buscar_normas`, `buscar_por_tema`, `obtener_norma`, `listar_catalogos`, `listar_subtemas`, `explicar_relacion_tema`, `buscar_conceptos_fp`, `listar_normas_fp` |
-| Corte Constitucional | `buscar_jurisprudencia`, `obtener_sentencia` |
-| Corte Suprema | `buscar_jurisprudencia_suprema`, `obtener_providencia_suprema` |
-| Consejo de Estado | `buscar_jurisprudencia_consejo_estado`, `obtener_providencia_consejo_estado` |
-| SUIN-Juriscol | `buscar_en_suin` |
-| DIAN | `buscar_normativa_tributaria`, `obtener_documento_dian` |
+| Cualquiera (punto de entrada) | `resolver_cita` — cita exacta → norma o sentencia, con su vigencia si consta; acepta lote con `citas` y validación con `validar: true` |
+| Gestor Normativo | `buscar_normas`, `buscar_por_tema`, `obtener_documento` (fuente `gestor`), `listar_catalogos`, `explicar_relacion_tema` |
+| Corte Constitucional | `buscar_jurisprudencia`, `obtener_documento` (fuente `corte`) |
+| Corte Suprema | `buscar_jurisprudencia_suprema`, `obtener_documento` (fuente `suprema`) |
+| Consejo de Estado | `buscar_jurisprudencia_consejo_estado`, `obtener_documento` (fuente `consejo`) |
+| SUIN-Juriscol | `buscar_en_suin` (y vigencia vía `resolver_cita`) |
+| DIAN | `buscar_normativa_tributaria`, `obtener_documento` (fuente `dian`) |
+| CREG | `buscar_resoluciones_creg`, `obtener_documento` (fuente `creg`) |
+| ANH / UPME / ANLA | `buscar_normativa_anh`, `buscar_normativa_upme`, `listar_normativa_ambiental_anla` |
+| 14 reguladores sectoriales | `buscar_normativa_sectorial` (entidad: `sic`, `superfinanciera`, `supersalud`, `ant`, `unidadvictimas`…) + `obtener_documento` (fuente `sectorial`) |
 | V2 — jerarquía y conflictos | `consultar_por_jerarquia`, `analizar_conflicto`, `comparar_articulos`, `cambios_desde` |
-| V2 — perfiles y expedientes | `consultar_perfil`, `expediente_crear`, `expediente_agregar`, `expediente_leer` |
+| V2 — perfiles y expedientes | `consultar_perfil`, `expediente` (acción `crear\|agregar\|leer\|exportar`) |
+| Alcance | `describir_fuentes` — qué cubre cada fuente y qué no, sin consultar la red |
 
 ## Qué puedes preguntar
 
@@ -149,17 +153,17 @@ Al conectarse, el servidor entrega **34 herramientas**, **5 prompts** y sus **pr
 
 El servidor incluye además cinco prompts listos, que los clientes que los soportan muestran como comandos: *¿Qué normas aplican sobre un tema?*, *¿Esta norma sigue vigente?*, *Explícame esta norma en lenguaje sencillo*, *Compara dos normas* y *Aclarar una consulta ambigua*.
 
-### Herramientas V2 (v1.10.0)
+### Herramientas V2
 
 Sobre la capa común de metadatos, evidencia y normalización:
 
 - **`consultar_por_jerarquia`** filtra por nivel (constitución, ley, decreto, resolución, concepto, jurisprudencia) y explica el carácter de cada uno. El Gestor no cataloga la Constitución como tipo: para ese nivel se orienta.
-- **`validar_cita`** comprueba que una cita y su enlace son de verdad: número/año contra el título, dominio del enlace, id de la norma y existencia del artículo. Clasifica en "validada", "parcialmente validada" o "no fue posible validar"; nunca afirma vigencia.
+- **`resolver_cita` con `validar: true`** comprueba que una cita y su enlace son de verdad: número/año contra el título, dominio del enlace, id de la norma y existencia del artículo. Clasifica en "validada", "parcialmente validada" o "no fue posible validar"; nunca afirma vigencia.
 - **`analizar_conflicto`** reúne EVIDENCIA de un posible conflicto entre dos normas (identificación, vigencia según SUIN si consta, jerarquía, reformas anotadas, pasajes sobre un tema). **No detecta contradicciones semánticas** y el resultado es un conflicto POTENCIAL, no una conclusión jurídica.
 - **`cambios_desde`** resume los cambios (modificación, derogación, adición) que el Gestor anota sobre **las normas que se le listan**, filtrados por el año de la norma modificadora. **No rastrea novedades** por su cuenta.
 - **`comparar_articulos`** compara el texto de un artículo entre dos normas, marca lo añadido/eliminado, clasifica cada diferencia por patrones (plazo, sanción, excepción, sujeto obligado) y agrupa los cambios editoriales por similitud léxica (Dice sobre bigramas ≥0,92): «una línea» → «una sola línea» sale como cambio menor, no como añadido+eliminado. Lo no clasificado se marca "revisar manualmente". Sin modelo semántico.
 - **`consultar_perfil`** ejecuta una consulta con las fuentes y filtros preconfigurados de un perfil: `laboral`, `tributario`, `ambiental`, `contratacion_estatal`, `energia`. Cada perfil declara su advertencia en la respuesta.
-- **Expedientes temporales**: `expediente_crear`, `expediente_agregar` y `expediente_leer` agrupan consultas, citas y observaciones de una investigación **en memoria** (expiran en 6 h, se pierden al reiniciar). **Desactivados por defecto**: se activan con la variable de entorno `EXPEDIENTES=1`.
+- **`expediente`** con `accion="crear|agregar|leer|exportar"` agrupa consultas, citas y observaciones de una investigación. **Desactivado por defecto**: se activa con la variable de entorno `EXPEDIENTES=1`; la persistencia en disco, con `EXPEDIENTES_DIR`.
 
 Una regla de oro de las V2: si una cita viene sin año y el número es ambiguo ("Decreto 1072" son cuatro), la herramienta **no elige por ti**: lista los candidatos y pide el año.
 
@@ -190,9 +194,9 @@ Y la regla de fondo no cambia: **verifica en el enlace antes de actuar.**
 
 **Cobertura de la búsqueda tributaria.** La primera consulta de cada término a la DIAN tarda unos 20 segundos: su portal devuelve el resultado completo y no admite límite. Las páginas siguientes del mismo término son instantáneas, así que conviene paginar en lugar de repetir búsquedas.
 
-**El enlace del Consejo de Estado caduca; el radicado no.** `buscar_jurisprudencia_consejo_estado` entrega, junto a cada providencia, un token firmado que emite el propio buscador y con el que `obtener_providencia_consejo_estado` saca el texto del PDF. Ese token **vive una hora**: sirve para leer, no para citar. Para citar se usa el radicado. Si caducó, se repite la búsqueda y sale uno nuevo.
+**El enlace del Consejo de Estado caduca; el radicado no.** `buscar_jurisprudencia_consejo_estado` entrega, junto a cada providencia, un token firmado que emite el propio buscador y con el que `obtener_documento` con fuente `consejo` saca el texto del PDF. Ese token **vive una hora**: sirve para leer, no para citar. Para citar se usa el radicado. Si caducó, se repite la búsqueda y sale uno nuevo.
 
-**El texto de la Corte Suprema se pide con su ruta y su sala.** `buscar_jurisprudencia_suprema` devuelve la referencia, el ponente, la fecha y las normas citadas; `obtener_providencia_suprema` devuelve el texto completo, pero exige la MISMA sala con la que apareció la providencia: el backend la busca dentro de esa sala y desde otra no la encuentra.
+**El texto de la Corte Suprema se pide con su ruta y su sala.** `buscar_jurisprudencia_suprema` devuelve la referencia, el ponente, la fecha y las normas citadas; `obtener_documento` con fuente `suprema` devuelve el texto completo, pero exige la MISMA sala con la que apareció la providencia: el backend la busca dentro de esa sala y desde otra no la encuentra.
 
 **La relatoría no indexa frases largas.** `buscar_jurisprudencia` con varias palabras («mora querella policiva») hace que el buscador de la Corte responda con un aviso de «búsquedas flexibles» y 0 resultados. El servidor lo detecta, reintenta con la palabra más distintiva del término («querella») y lo anuncia en la respuesta: «La relatoría no indexa la frase completa; se buscó con el núcleo «X»». Verifica la pertinencia del resultado contra lo que buscabas.
 
@@ -200,8 +204,8 @@ Y la regla de fondo no cambia: **verifica en el enlace antes de actuar.**
 
 ```bash
 npm install
-npm run check              # typecheck + lint + 36 pruebas de biblioteca + 25 de extremo a extremo
-npm run medir              # métricas: tamaño del bundle, arranque, coste de los índices
+npm run check              # typecheck + lint + pruebas de biblioteca + de extremo a extremo
+npm run medir              # métricas: bundle, arranque, índices y una fila por herramienta (p50/p95/peticiones/bytes)
 npm run generar-indice     # regenera datos/indice-tematico.json (~20 MB de descarga)
 npm run generar-indice-suin # regenera datos/indice-suin.json (~45 min; reanudable)
 npm run pack               # produce normativa-colombia.mcpb
@@ -221,7 +225,7 @@ Estructura:
 | --- | --- |
 | `src/index.ts` | Herramientas y prompts MCP |
 | `src/nucleo/` | Núcleo compartido: `parse.ts` (extracción y limpieza de HTML, troceado, canario anti-rotura), `citas.ts` (parser de citas), `http.ts` (cliente HTTP con la cadena TLS completa), `ca.ts` (intermedios TLS), `evidencia.ts`, `compiladas.ts`, `alternativas.ts`, `entidades.ts`, `jerarquia.ts`, `perfiles.ts`, `indice.ts`, `expediente.ts`, `actualizacion.ts` |
-| `src/herramientas/` | Herramientas MCP (handlers): `obtener_documento.ts`, `resolver_cita` está en `index.ts`, `diff.ts` (comparación de artículos), V2 (`analizar_conflicto`, `cambios_desde`, `comparar_articulos`, `consultar_jerarquia`, `consultar_perfil`, `expedientes`, `validar_cita`, `buscar_unificado`) |
+| `src/herramientas/` | Handlers de herramientas MCP: `obtener_documento.ts`, `diff.ts` (comparación de artículos), V2 (`analizar_conflicto`, `cambios_desde`, `comparar_articulos`, `consultar_jerarquia`, `consultar_perfil`, `expedientes`, `validar_cita`, `buscar_unificado`); `resolver_cita` está en `index.ts` |
 | `src/fuentes/gestor.ts` | Gestor Normativo (HTML raspado, con canarios) |
 | `src/fuentes/suin.ts` | SUIN-Juriscol: ficha, vigencia e índice empaquetado |
 | `src/fuentes/normograma.ts` | Normograma de la DIAN (JSON) |

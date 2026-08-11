@@ -3,6 +3,24 @@
 Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/).
 Este proyecto sigue [versionado semántico](https://semver.org/lang/es/).
 
+## [1.11.2] — 2026-08-11
+
+**Optimización de latencia y de mantenimiento: la ficha de SUIN deja de colgar `resolver_cita` cuando el portal está caído, y el banco de medición mide una fila por herramienta.** Cambio no destructivo: ningún contrato de herramienta cambia.
+
+### Mejorado
+
+- **`resolver_cita` (y el resto de herramientas que consultan la ficha de SUIN)**: el timeout de la ficha complementaria baja de 40 s a 8 s. Un SUIN sano la sirve en menos de 2 s; cuando el portal está caído, el ETIMEDOUT del sistema tardaba ~21 s en fallar y colgaba la herramienta entera. Medido (N=5, misma máquina): p50 de `resolver_cita` 22,2 s → 9,4 s (−58 %). No cambia el contrato ni la forma de la respuesta: cuando SUIN no responde, el texto sigue declarándolo. El ritmo de 1/s por dominio, los reintentos y la cadena TLS no se tocan.
+- **Duplicación eliminada**: las 3 copias locales del set de palabras vacías pasan a `src/nucleo/stopwords.ts`; los 15 helpers locales `limpio` (colapsar espacios) pasan a `colapsarEspacios` en `src/nucleo/parse.ts`; INVIMA y Supersalud comparten el factory `adaptadorNormograma` en `src/fuentes/sectorial/normograma.ts`. Sin cambios de comportamiento.
+
+### Añadido
+
+- **Banco de medición por herramienta** (`scripts/medir.ts`): una fila por herramienta con p50, p95, nº de peticiones HTTP y bytes de cuerpo, N=5, consulta representativa por tool (la misma del e2e). Se sube a `npm run medir`. `src/nucleo/http.ts` expone `redResumen()` y un log de diagnóstico `MEDIR_RED=1` (apagado por defecto); el stderr del servidor añade `peticiones`/`bytes` a la línea de cada herramienta.
+
+### Verificado
+
+- `npm run check` verde: typecheck, lint (0 errores), 135/136 tests y 42/43 e2e (1 skip por SUIN-Juriscol caído, deuda externa conocida).
+- `npm run medir`: bundle `server/index.js` 2319 KB, `npm audit` 0 vulnerabilidades.
+
 ## [1.11.1] — 2026-08-10
 
 **Soporte DOC/DOCX, todas las pestañas de la Unidad de Víctimas, descargas a ruta local, buscadores por palabras más precisos, documentos completos, expedientes persistentes y lote de citas.** Cambio no destructivo: ningún contrato de herramienta (nombres, parámetros, tipos, defaults ni respuestas) cambia.
