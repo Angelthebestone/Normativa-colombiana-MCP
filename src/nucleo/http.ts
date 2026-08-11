@@ -13,6 +13,17 @@ import { GLOBALSIGN_OV, SECTIGO_EV, SECTIGO_OV } from './ca.ts'
  */
 const CA = [...rootCertificates, SECTIGO_OV, SECTIGO_EV, GLOBALSIGN_OV]
 
+/** Peticiones HTTP salientes y bytes de cuerpo recibidos (solo para el banco de medición). */
+let totalPeticiones = 0
+let totalBytes = 0
+export function redResumen(): { peticiones: number; bytes: number } {
+  return { peticiones: totalPeticiones, bytes: totalBytes }
+}
+function anotarRed(bytes: number): void {
+  totalPeticiones += 1
+  totalBytes += bytes
+}
+
 /** esbuild la sustituye desde package.json; sin empaquetar no existe. */
 declare const __VERSION__: string | undefined
 export const VERSION = typeof __VERSION__ === 'string' ? __VERSION__ : 'dev'
@@ -309,7 +320,13 @@ export async function pedir(
   if (est.degradado) throw errorDegradado(host, est.reintentaEnMs!)
 
   for (let intento = 0; ; intento++) {
+    const t0 = Date.now()
     const r = await enCola(host, () => crudo(url, timeout, accept, extra, cuerpo))
+    if (process.env['MEDIR_RED']) {
+      process.stderr.write(
+        `${JSON.stringify({ red: Date.now() - t0, host, status: r.status, bytes: r.datos.length, ts: new Date().toISOString() })}\n`,
+      )
+    }
 
     // Si el portal pide calma, se le hace caso en vez de insistir al mismo ritmo.
     if ((r.status === 429 || r.status === 503) && intento === 0) {
@@ -331,6 +348,7 @@ export async function pedir(
     }
 
     restablecer(host)
+    anotarRed(r.datos.length)
     return {
       status: r.status,
       cuerpo: decodificar(r.datos, r.contentType),
@@ -358,6 +376,7 @@ export async function pedirBytes(
     const r = await enCola(host, () => crudo(url, timeout, accept, {}))
     if (r.status >= 500) anotarFallo(host)
     else restablecer(host)
+    anotarRed(r.datos.length)
     return { status: r.status, datos: r.datos, contentType: r.contentType }
   } catch (e) {
     // Fallo de red (no una respuesta): cuenta para el breaker.

@@ -24,7 +24,7 @@ import {
   normalizarRotulo,
   sinTildes,
 } from './nucleo/parse.ts'
-import { VERSION } from './nucleo/http.ts'
+import { redResumen, VERSION } from './nucleo/http.ts'
 import { avisoVersion } from './nucleo/actualizacion.ts'
 import * as gestor from './fuentes/gestor.ts'
 import * as corte from './fuentes/jurisprudencia/corte.ts'
@@ -177,10 +177,12 @@ server.registerTool = ((nombre: string, config: unknown, handler: (...a: unknown
     config as never,
     (async (...args: unknown[]) => {
       const t0 = performance.now()
-      const anotar = (ok: boolean, error?: string) =>
+      const anotar = (ok: boolean, error?: string) => {
+        const red = redResumen()
         process.stderr.write(
-          `${JSON.stringify({ ts: new Date().toISOString(), herramienta: nombre, ms: Math.round(performance.now() - t0), ok, ...(error ? { error } : {}) })}\n`,
+          `${JSON.stringify({ ts: new Date().toISOString(), herramienta: nombre, ms: Math.round(performance.now() - t0), ok, peticiones: red.peticiones, bytes: red.bytes, ...(error ? { error } : {}) })}\n`,
         )
+      }
       try {
         const r = await handler(...args)
         anotar(true)

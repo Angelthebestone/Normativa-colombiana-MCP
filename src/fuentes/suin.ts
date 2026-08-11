@@ -264,7 +264,11 @@ export async function vigencia(tipo: string, numero: string, anio: string): Prom
   if (!idx || !id) return null
 
   const url = `${BASE}/viewDocument.asp?id=${id}`
-  const r = await pedir(url, 40_000)
+  // La ficha es un complemento de la respuesta, no la respuesta: un SUIN sano
+  // la sirve en menos de dos segundos, y cuando el portal está caído el
+  // ETIMEDOUT del SO tardaba ~21 s en fallar, colgando resolver_cita entera.
+  // Con 8 s se corta antes sin perder el caso normal.
+  const r = await pedir(url, 8_000)
   if (r.status !== 200) return null
   const ficha = fichaSuin(r.cuerpo)
   if (!ficha) return null

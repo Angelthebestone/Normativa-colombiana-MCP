@@ -3,6 +3,11 @@
  * arranque en frío, primera respuesta útil, memoria y las funciones puras que
  * corren sobre documentos grandes. Lo que domina la red no se mide aquí porque
  * no lo controlamos (y el limitador de 1/s es deliberado).
+ *
+ * La sección `herramientas` mide de extremo a extremo cada herramienta que
+ * consulta portales: una consulta representativa por tool, N=5, p50/p95, nº de
+ * peticiones HTTP y bytes de cuerpo. Los contadores de red vienen de
+ * `redResumen()` (src/nucleo/http.ts).
  */
 import { spawn } from 'node:child_process'
 import { readFileSync, statSync } from 'node:fs'
@@ -136,3 +141,118 @@ console.log(`tools/list                  mediana ${ms(mediana(conLista))}`)
 
 console.log('\nfunciones puras sobre 925.000 caracteres:')
 for (const r of await puras()) console.log(`  ${r.nombre.padEnd(30)} ${ms(r.ms)}`)
+
+// --- 4. herramientas, de extremo a extremo --------------------------------
+
+/** Consulta representativa por herramienta: la misma que usa test/e2e.ts. */
+const CONSULTAS: Record<string, Record<string, unknown>> = {
+  resolver_cita: { cita: 'Ley 909 de 2004' },
+  buscar_normas: { tipo_documento: 'Ley', numero: 909, anio: 2004 },
+  buscar_por_tema: { texto: 'teletrabajo', limite: 5 },
+  listar_catalogos: { catalogo: 'normas_fp', limite: 100 },
+  buscar_jurisprudencia: { termino: 'prima de servicios', limite: 5 },
+  buscar_normativa_tributaria: { texto: 'retención' },
+  buscar_jurisprudencia_suprema: { texto: 'despido sin justa causa', sala: 'Laboral', limite: 3 },
+  buscar_jurisprudencia_consejo_estado: { texto: 'nulidad electoral', limite: 3 },
+  buscar_en_suin: { texto: 'Buenaventura', limite: 3 },
+  explicar_relacion_tema: { temsubid: 'ts-24928', normid: '31431' },
+  buscar_normativa_anh: { texto: 'regalías' },
+  buscar_normativa_upme: { texto: 'transmisión' },
+  buscar_resoluciones_creg: { anio: '2024' },
+  listar_normativa_ambiental_anla: { seccion: 'leyes', texto: 'licencia' },
+  buscar_normativa_sectorial: { entidad: 'supertransporte', limite: 3 },
+  obtener_documento: { fuente: 'gestor', id: '31431', articulo: '6' },
+  describir_fuentes: {},
+  expediente: { accion: 'crear' },
+  consultar_perfil: { perfil: 'tributario', texto: 'retención', limite: 3 },
+  cambios_desde: { desde: '2024-01-01' },
+  analizar_conflicto: { cita: 'Ley 909 de 2004' },
+  comparar_articulos: { cita_a: 'Ley 909 de 2004', cita_b: 'Ley 909 de 2004' },
+}
+
+/**
+ * Arranca el server compilado y hace una llamada `tools/call`, devolviendo la
+ * latencia y el resumen de red que el propio server escribió en su stderr
+ * (el contador de `http.ts` vive en el proceso del server, no en este script).
+ */
+function llamadaTool(
+  nombre: string,
+  args: Record<string, unknown>,
+): Promise<{ ms: number; peticiones: number; bytes: number }> {
+  return new Promise((resolve) => {
+    const p = spawn('node', [`${RAIZ}/server/index.js`], { stdio: ['pipe', 'pipe', 'pipe'] })
+    let buf = ''
+    let errBuf = ''
+    const t0 = performance.now()
+    p.stdout.on('data', (d) => {
+      buf += d.toString('utf8')
+      let i: number
+      while ((i = buf.indexOf('\n')) >= 0) {
+        const linea = buf.slice(0, i)
+        buf = buf.slice(i + 1)
+        if (!linea.trim()) continue
+        const m = JSON.parse(linea) as { id?: number }
+        if (m.id === 1) {
+          p.stdin.write(JSON.stringify({ jsonrpc: '2.0', method: 'notifications/initialized' }) + '\n')
+          p.stdin.write(`${JSON.stringify({ jsonrpc: '2.0', id: 2, method: 'tools/call', params: { name: nombre, arguments: args } })}\n`)
+        }
+        if (m.id === 2) {
+          const ms = performance.now() - t0
+          // El stderr del server lleva la línea de la herramienta con peticiones/bytes.
+          const lineaErr = errBuf
+            .split('\n')
+            .filter(Boolean)
+            .map((l) => {
+              try {
+                return JSON.parse(l) as { herramienta?: string; peticiones?: number; bytes?: number }
+              } catch {
+                return {}
+              }
+            })
+            .find((x) => x.herramienta === nombre)
+          p.kill()
+          resolve({
+            ms,
+            peticiones: lineaErr?.peticiones ?? 0,
+            bytes: lineaErr?.bytes ?? 0,
+          })
+        }
+      }
+    })
+    p.stderr.on('data', (d: Buffer) => {
+      errBuf += d.toString('utf8')
+    })
+    p.stdin.write(
+      `${JSON.stringify({
+        jsonrpc: '2.0',
+        id: 1,
+        method: 'initialize',
+        params: { protocolVersion: '2024-11-05', capabilities: {}, clientInfo: { name: 'medir', version: '1' } },
+      })}\n`,
+    )
+  })
+}
+
+const filaTool = async (nombre: string, args: Record<string, unknown>) => {
+  const tiempos: number[] = []
+  let peticiones = 0
+  let bytes = 0
+  for (let i = 0; i < N; i++) {
+    const r = await llamadaTool(nombre, args)
+    tiempos.push(r.ms)
+    peticiones += r.peticiones
+    bytes += r.bytes
+  }
+  const s = [...tiempos].sort((a, b) => a - b)
+  const p95 = s[Math.min(s.length - 1, Math.ceil(0.95 * s.length) - 1)] ?? 0
+  return { p50: mediana(tiempos), p95, peticiones, bytes }
+}
+
+console.log('\nherramientas (e2e, N=5, consulta representativa):')
+console.log('  tool                          p50       p95   peticiones  bytes')
+for (const [nombre, args] of Object.entries(CONSULTAS)) {
+  const r = await filaTool(nombre, args)
+  console.log(
+    `  ${nombre.padEnd(28)} ${ms(r.p50).padStart(8)}  ${ms(r.p95).padStart(8)}  ${String(r.peticiones).padStart(6)}  ${(r.bytes / 1024).toFixed(0).padStart(6)} KB`,
+  )
+}
