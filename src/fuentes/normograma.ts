@@ -60,38 +60,74 @@ type Crudo = {
 export const urlDocumento = (link: string): string => `${DOCS}/${link.replace(/^\/+/, '')}`
 
 /**
- * ponytail: caché por término, sin expiración, mientras viva el proceso.
+ * ponytail: caché por término con TTL de 30 minutos.
  *
  * El endpoint devuelve SIEMPRE el resultado completo —3,16 MB y ~20 s para
  * "retención"— y no admite tope: se probaron max, top, limite, rows, pagina/tam
  * y start/count, y los siete devuelven los mismos 6.651 elementos. Sin caché,
  * pedir la segunda página volvía a bajar los 3 MB.
  *
- * Un proceso MCP vive lo que la conversación, así que no hace falta TTL. Si
- * alguna vez corre como servicio largo, aquí es donde va.
+ * El TTL existe porque una respuesta congelada para siempre es peor que una
+ * caída declarada: el normograma publica normas nuevas con frecuencia, y la
+ * caché no debe enmascararlas indefinidamente. Cuando expira se refresca; si la
+ * red cae en ese momento, se sirve la caché obsoleta ROTULADA como tal.
  */
-const cache = new Map<string, DocDian[]>()
+const TTL_CACHE = 30 * 60 * 1000
+type Entrada = { valor: DocDian[]; expira: number }
+const cache = new Map<string, Entrada>()
 
 /**
  * Busca en el normograma de la DIAN. La respuesta no admite tope, así que se
- * recorta aquí después de leerla.
+ * recorta aquí después de leerla. Devuelve marcas opcionales de procedencia:
+ * `deCache` (se sirvió de la caché, dentro del TTL), `caducada` (había caché
+ * pero expiró y se refrescó) y `obsoleta` (la red cayó y se sirvió la caché
+ * vencida, rotulada, en vez de fallar).
  */
-export async function buscar(texto: string, limite = 15, desde = 0): Promise<{ total: number; items: DocDian[] }> {
+export async function buscar(
+  texto: string,
+  limite = 15,
+  desde = 0,
+  deps: {
+    pedir?: (url: string, timeout?: number, accept?: string) => Promise<{ status: number; cuerpo: string }>
+    ahora?: () => number
+  } = {},
+): Promise<{ total: number; items: DocDian[]; deCache?: boolean; caducada?: boolean; obsoleta?: boolean }> {
+  const pedirBusqueda = deps.pedir ?? pedir
+  const ahora = deps.ahora ?? Date.now
   const q = texto.trim()
   if (!q) throw new Error('Indica un término para buscar en el normograma de la DIAN.')
 
-  const guardado = cache.get(q.toLowerCase())
-  if (guardado) return { total: guardado.length, items: guardado.slice(desde, desde + limite) }
+  const clave = q.toLowerCase()
+  const guardado = cache.get(clave)
+  if (guardado && ahora() < guardado.expira) {
+    return { total: guardado.valor.length, items: guardado.valor.slice(desde, desde + limite), deCache: true }
+  }
+  const vencida = guardado ? guardado.valor : null
 
-  const r = await pedir(`${BUSCADOR}?texto=${encodeURIComponent(q)}`, 90_000, 'application/json,*/*')
-  if (r.status !== 200) throw new CanarioError(`el buscador de la DIAN respondió ${r.status}`)
+  let r: { status: number; cuerpo: string }
+  try {
+    r = await pedirBusqueda(`${BUSCADOR}?texto=${encodeURIComponent(q)}`, 90_000, 'application/json,*/*')
+  } catch (e) {
+    // Red caída con caché vencida: se sirve la obsoleta, declarada, en vez de
+    // tumbar la consulta; sin caché se relanza el error normal.
+    if (vencida) {
+      return { total: vencida.length, items: vencida.slice(desde, desde + limite), deCache: true, caducada: true, obsoleta: true }
+    }
+    throw e
+  }
+  if (r.status !== 200) {
+    if (vencida) {
+      return { total: vencida.length, items: vencida.slice(desde, desde + limite), deCache: true, caducada: true, obsoleta: true }
+    }
+    throw new CanarioError(`el buscador de la DIAN respondió ${r.status}`)
+  }
 
   // El backend devuelve HTTP 200 con el literal (sin comillas, no es JSON)
   // `No se encontraron resultados.` cuando no hay coincidencias: es un vacío
   // legítimo, no un cambio de estructura.
   if (/no se encontraron resultados/i.test(r.cuerpo)) {
-    cache.set(q.toLowerCase(), [])
-    return { total: 0, items: [] }
+    cache.set(clave, { valor: [], expira: ahora() + TTL_CACHE })
+    return { total: 0, items: [], caducada: Boolean(vencida) }
   }
 
   let j: unknown
@@ -120,6 +156,6 @@ export async function buscar(texto: string, limite = 15, desde = 0): Promise<{ t
     url: urlDocumento(d.link ?? ''),
   }))
 
-  cache.set(q.toLowerCase(), limpios)
-  return { total: limpios.length, items: limpios.slice(desde, desde + limite) }
+  cache.set(clave, { valor: limpios, expira: ahora() + TTL_CACHE })
+  return { total: limpios.length, items: limpios.slice(desde, desde + limite), caducada: Boolean(vencida) }
 }

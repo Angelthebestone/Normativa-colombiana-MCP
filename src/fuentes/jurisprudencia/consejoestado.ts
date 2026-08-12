@@ -82,13 +82,20 @@ export function contienenTodas(items: Providencia[], frase: string): { items: Pr
  * El enlace permanente que genera la propia página. Los paréntesis delimitan la
  * consulta en la sintaxis del buscador, así que los del término se quitan: uno
  * suelto la dejaría sin cerrar y SAMAI devolvería otra cosa sin avisar.
+ *
+ * Con `exacto=true` (default) la frase va ENTRE COMILLAS dentro del modo 'any':
+ * medido, SAMAI no soporta `searchMode` 'phrase' ni 'and' (responden una página
+ * de error sin el rótulo de paginación), pero sí interpreta las comillas como
+ * frase exacta — "nulidad electoral" pasa de 1,1 MB a 449 KB de resultados y
+ * conserva el rótulo. Con `false` se deja sin comillas (OR de palabras sueltas).
  */
-export function enlaceBusqueda(texto: string, pagina: number): string {
+export function enlaceBusqueda(texto: string, pagina: number, exacto = true): string {
+  const consulta = texto.replace(/[()]/g, ' ').replace(/\s+/g, ' ').trim()
   const dic = JSON.stringify({
     corporacion: CORPORACION,
     modo: '2',
     filtro: '',
-    busqueda: `(${texto.replace(/[()]/g, ' ').replace(/\s+/g, ' ').trim()})`,
+    busqueda: exacto ? `("${consulta}")` : `(${consulta})`,
     searchMode: 'any',
     PaginaActual: String(Math.max(0, pagina)),
   })
@@ -172,14 +179,23 @@ export async function buscar(
   texto: string,
   limite = 5,
   pagina = 1,
-): Promise<{ paginas: number; pagina: number; items: Providencia[]; url: string; nota?: string | undefined; omitidos: number }> {
+  exacto = true,
+): Promise<{
+  paginas: number
+  pagina: number
+  items: Providencia[]
+  url: string
+  nota?: string | undefined
+  omitidos: number
+  ampliada?: boolean
+}> {
   const q = limpiarTermino(texto)
   if (!q) throw new Error('Indica un término para buscar en el Consejo de Estado.')
 
   // El enlace cuenta las páginas desde cero; hacia fuera se numeran desde uno,
   // que es como las rotula la propia página ("Página 1 de 15406").
   const n = Math.max(1, Math.trunc(pagina))
-  const url = enlaceBusqueda(q, n - 1)
+  const url = enlaceBusqueda(q, n - 1, exacto)
   const r = await pedir(url, 120_000)
 
   // Un 500 de SAMAI no es un cambio de marcado. Su backend responde
@@ -213,17 +229,53 @@ export async function buscar(
     )
   }
 
+  // Escalera de precisión (igual que la Suprema): la frase exacta primero y,
+  // solo si no devuelve nada y el texto tiene más de una palabra, se amplía a
+  // OR — y se dice que se amplió. Sin esto, "no existe esa frase" se lee como
+  // "no hay nada sobre esto", que son cosas distintas y la segunda es falsa.
+  if (!res.items.length && exacto && q.trim().split(/\s+/).length > 1) {
+    const urlOr = enlaceBusqueda(q, n - 1, false)
+    const r2 = await pedir(urlOr, 120_000)
+    if (r2.status >= 500) {
+      throw new Error(
+        `SAMAI no respondió a tiempo (error ${r2.status}) en la búsqueda ampliada. Vuelve a intentarlo.`,
+      )
+    }
+    if (r2.status === 200) {
+      const resOr = parsear(r2.cuerpo, Math.min(Math.max(limite, 1), 10), urlOr)
+      if (resOr.items.length) {
+        return {
+          ...resOr,
+          pagina: n,
+          url: urlOr,
+          omitidos: 0,
+          ampliada: true,
+          nota:
+            `AVISO: la frase exacta "${q}" no apareció en ninguna providencia de esta página. Lo que sigue es una ` +
+            `búsqueda AMPLIADA, con las palabras unidas por OR, así que puede incluir providencias que solo ` +
+            `comparten alguna palabra suelta. Verifica la pertinencia de cada una antes de citarla.`,
+        }
+      }
+    }
+  }
+
   // SAMAI une los términos con OR, así que exigir TODOS es un filtro local sobre
   // el texto que el buscador publica. De la página pedida solo quedan las
   // providencias que tratan todo el asunto, no las que rozan una palabra.
-  const { items: filtrados, exigidos, omitidos } = contienenTodas(res.items, q)
+  // En el modo ampliado (OR) no se exigen todos: la ampliación ya es el aviso.
+  const { items: exigidos, omitidos } = exacto
+    ? contienenTodas(res.items, q)
+    : { items: res.items, omitidos: 0 }
   const nota =
-    exigidos.length >= 2
+    exacto && exigidos.length >= 2
       ? `Se exigieron TODOS los términos (${exigidos.join(', ')}) sobre el problema jurídico, la respuesta y la nota ` +
         `de relatoría: SAMAI los une con OR, así que esto es un filtro local de pertinencia.`
-      : undefined
+      : !exacto
+        ? `Modo ampliado (OR): el número de páginas NO mide pertinencia, solo cuántas providencias contienen ` +
+          `alguna de las palabras. Repite con exacto=true para contar la frase.`
+        : undefined
 
-  return { ...res, items: filtrados, pagina: n, url, ...(nota ? { nota } : {}), omitidos }
+  return { ...res, items: exigidos, pagina: n, url, ...(nota ? { nota } : {}), omitidos }
 }
 
 /** Página que abre la providencia con el token del buscador. No pide verificación. */

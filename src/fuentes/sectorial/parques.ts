@@ -35,6 +35,7 @@
  */
 import { CanarioError, cargar, colapsarEspacios, sinTildes } from '../../nucleo/parse.ts'
 import { pedir } from '../../nucleo/http.ts'
+import { advertenciaPortalRoto } from '../../nucleo/portal-roto.ts'
 import type * as cheerio from 'cheerio/slim'
 import type { Adaptador, ActoSectorial, OpcionesSectorial, ResultadoSectorial } from '../sectorial.ts'
 
@@ -87,14 +88,18 @@ function extraer($unidad: cheerio.Cheerio<any>, tipo: string): ActoSectorial | n
   // El resto del texto de la fila/tarjeta, quitando el título, es lo más
   // parecido a un epígrafe que ofrece esta página (no hay un campo aparte).
   const resto = colapsarEspacios(textoCompleto.replace(titulo, ''))
+  const url = href ? new URL(href, BASE).toString() : URL_NORMATIVAS
+  const aviso = advertenciaPortalRoto(titulo, url)
 
   return {
     tipo,
     numero,
     anio,
     fecha: fechaDe(textoCompleto),
-    epigrafe: resto || titulo,
-    url: href ? new URL(href, BASE).toString() : URL_NORMATIVAS,
+    // El caso verificado: "Resolución No. 056" enlazando un auto. La
+    // advertencia viaja pegada al epígrafe, para que se vea junto al acto.
+    epigrafe: aviso ? `${resto || titulo} ⚠ ${aviso}` : resto || titulo,
+    url,
   }
 }
 

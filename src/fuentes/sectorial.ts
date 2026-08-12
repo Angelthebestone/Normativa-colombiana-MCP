@@ -44,6 +44,8 @@ export type OpcionesSectorial = {
   categoria?: string | undefined
   pagina?: number | undefined
   limite?: number | undefined
+  /** Normogramas: limita a los tipos de documento propios de la entidad (INVIMA/Supersalud). */
+  solo_entidad?: boolean | undefined
 }
 
 export type Adaptador = {

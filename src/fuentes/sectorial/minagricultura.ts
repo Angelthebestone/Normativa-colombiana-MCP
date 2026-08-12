@@ -23,6 +23,7 @@
  */
 import { CanarioError, cargar, colapsarEspacios, sinTildes } from '../../nucleo/parse.ts'
 import { pedir } from '../../nucleo/http.ts'
+import { claveActo, similitudEpigrafes } from '../../nucleo/deduplicar.ts'
 import type { Adaptador, ActoSectorial, OpcionesSectorial, ResultadoSectorial } from '../sectorial.ts'
 
 const BASE = 'https://www.minagricultura.gov.co'
@@ -107,6 +108,29 @@ export default {
     const listas = await Promise.all(CATEGORIAS.map((c) => listar(c.tipo, c.ruta)))
     let items = listas.flat()
 
+    // El portal puede listar la misma norma dos veces con enlaces distintos
+    // (PDF propio y SharePoint). Se deduplica por tipo|numero|anio, pero se
+    // conservan ambas si el epígrafe difiere materialmente: dos normas con el
+    // mismo número y año pero asuntos distintos NO son la misma norma.
+    const unicos: typeof items = []
+    const vistos = new Map<string, string>()
+    let fusionadas = 0
+    for (const a of items) {
+      const clave = claveActo(a)
+      if (!clave) {
+        unicos.push(a)
+        continue
+      }
+      const previo = vistos.get(clave)
+      if (previo !== undefined && similitudEpigrafes(previo, a.epigrafe) >= 0.6) {
+        fusionadas++
+        continue // misma norma con dos enlaces: conservar la primera
+      }
+      vistos.set(clave, a.epigrafe)
+      unicos.push(a)
+    }
+    items = unicos
+
     const aguja = sinTildes(opts.texto?.trim() ?? '').toLowerCase()
     if (aguja) {
       items = items.filter((a) => sinTildes(`${a.tipo} ${a.numero} ${a.epigrafe}`).toLowerCase().includes(aguja))
@@ -119,12 +143,16 @@ export default {
     const pagina = Math.max(1, Math.trunc(opts.pagina ?? 1))
     items = items.slice((pagina - 1) * limite, (pagina - 1) * limite + limite)
 
+    const notas = [
+      'Combina leyes, decretos y resoluciones del Ministerio; la paginación (pagina/limite) es de esta ' +
+        'extensión, no del portal: cada categoría se descarga completa en una sola petición.',
+      fusionadas > 0 ? `${fusionadas} duplicado(s) fusionado(s) (la misma norma listada con enlaces distintos).` : '',
+    ].filter(Boolean)
+
     return {
       items,
       total,
-      nota:
-        'Combina leyes, decretos y resoluciones del Ministerio; la paginación (pagina/limite) es de esta ' +
-        'extensión, no del portal: cada categoría se descarga completa en una sola petición.',
+      nota: notas.join(' '),
       url: CATEGORIAS.map((c) => `${BASE}${c.ruta}`).join(' , '),
     }
   },

@@ -20,7 +20,8 @@
  * («Por la cual se efectúa nombramiento en periodo de prueba»); aquí no hay
  * categoría legible, así que el filtro va por el epígrafe.
  */
-import { CanarioError, sinTildes } from '../nucleo/parse.ts'
+import * as cheerio from 'cheerio/slim'
+import { CanarioError, colapsarEspacios, sinTildes } from '../nucleo/parse.ts'
 import { pedir } from '../nucleo/http.ts'
 
 const API = 'https://www.upme.gov.co/wp-json/wp/v2/circular_resolucion'
@@ -54,11 +55,41 @@ export const esActoDePersonal = (texto: string): boolean =>
 
 type Cruda = { title?: { rendered?: string }; excerpt?: { rendered?: string }; date?: string; link?: string }
 
-export async function buscar(opts: {
-  texto?: string | undefined
-  pagina?: number | undefined
-  limite?: number | undefined
-}): Promise<{ total: number; paginas: number; items: DocumentoUpme[] }> {
+/**
+ * Parser del HTML de resultados del buscador del portal (`?q=`), que usa
+ * SearchWP e indexa el contenido de los PDF: es el fallback cuando el REST de
+ * WordPress (que solo indexa título y resumen) devuelve 0.
+ */
+export function parsearPortal(html: string): DocumentoUpme[] {
+  const $ = cheerio.load(html)
+  const items: DocumentoUpme[] = []
+  $('.bj-tarjeta').each((_, el) => {
+    const $t = $(el)
+    const titulo = colapsarEspacios($t.find('.bj-tarjeta-titulo').first().text())
+    if (!titulo) return
+    const epigrafe = colapsarEspacios($t.find('.bj-tarjeta-texto').first().text()) || colapsarEspacios($t.find('p').first().text())
+    const m = titulo.match(/^(\S+)\s+([\d-]+)\s*(?:de\s+)?(\d{4})?/i)
+    items.push({
+      titulo,
+      tipo: m?.[1] ?? '',
+      numero: m?.[2] ?? '',
+      anio: m?.[3] ?? '',
+      epigrafe,
+      publicado: colapsarEspacios($t.find('.bj-badge-fecha').first().text()).slice(0, 10),
+      url: $t.find('.bj-btn-consultar').first().attr('href') ?? '',
+    })
+  })
+  return items.filter((d) => !esActoDePersonal(d.epigrafe))
+}
+
+export async function buscar(
+  opts: {
+    texto?: string | undefined
+    pagina?: number | undefined
+    limite?: number | undefined
+  },
+  deps: { pedirPortal?: (url: string) => Promise<{ status: number; cuerpo: string }> } = {},
+): Promise<{ total: number; paginas: number; items: DocumentoUpme[]; procedencia?: 'rest' | 'portal' }> {
   const p = new URLSearchParams({
     per_page: String(Math.min(Math.max(opts.limite ?? 10, 1), 50)),
     page: String(Math.max(1, Math.trunc(opts.pagina ?? 1))),
@@ -93,6 +124,21 @@ export async function buscar(opts: {
       url: c.link ?? '',
     }
   })
+
+  // El REST de WordPress solo indexa el título y el resumen; el buscador del
+  // portal (SearchWP) indexa el contenido de los PDF. Cuando el REST rinde 0
+  // con un término, se cae al portal: es el caso de "vehículos eléctricos".
+  if (!items.length && opts.texto?.trim()) {
+    const q = encodeURIComponent(opts.texto.trim())
+    const rp = deps.pedirPortal
+      ? await deps.pedirPortal(`https://www.upme.gov.co/nosotros/biblioteca-juridica/biblioteca-juridica/?q=${q}`)
+      : await pedir(`https://www.upme.gov.co/nosotros/biblioteca-juridica/biblioteca-juridica/?q=${q}`, 40_000)
+    if (rp.status === 200) {
+      const delPortal = parsearPortal(rp.cuerpo)
+      if (delPortal.length) return { total: delPortal.length, paginas: 1, items: delPortal, procedencia: 'portal' }
+    }
+    return { total: 0, paginas: 0, items: [], procedencia: 'portal' }
+  }
 
   return {
     total: Number(r.cabeceras['x-wp-total'] ?? items.length),

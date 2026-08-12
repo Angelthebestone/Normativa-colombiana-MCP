@@ -117,11 +117,11 @@ Después se apunta el cliente a `node /ruta/absoluta/a/Normativa-colombiana-MCP/
 
 ### Qué recibe el cliente
 
-Al conectarse, el servidor entrega **24 herramientas**, **5 prompts** y sus **propias instrucciones de uso**: a qué tipo de pregunta corresponde cada herramienta, que debe citarse siempre la fuente y que nunca debe afirmarse por cuenta propia que una norma está vigente. Los clientes que respetan el campo `instructions` del protocolo lo aprovechan sin configurar nada.
+Al conectarse, el servidor entrega **26 herramientas**, **5 prompts** y sus **propias instrucciones de uso**: a qué tipo de pregunta corresponde cada herramienta, que debe citarse siempre la fuente y que nunca debe afirmarse por cuenta propia que una norma está vigente. Los clientes que respetan el campo `instructions` del protocolo lo aprovechan sin configurar nada.
 
 | Fuente | Herramientas |
 | --- | --- |
-| Cualquiera (punto de entrada) | `resolver_cita` — cita exacta → norma o sentencia, con su vigencia si consta; acepta lote con `citas` y validación con `validar: true` |
+| Cualquiera (punto de entrada) | `resolver_cita` — cita exacta → norma o sentencia, con su vigencia si consta; acepta lote con `citas` y validación con `validar: true`. `consultar_vigencia` — el estado de vigencia con un nivel de confianza (alta/media/baja). `historial_norma` — la cadena de reformas que el Gestor anota sobre una norma (qué la modificó, adicionó o derogó y qué artículo afectó cada cambio) |
 | Gestor Normativo | `buscar_normas`, `buscar_por_tema`, `obtener_documento` (fuente `gestor`), `listar_catalogos`, `explicar_relacion_tema` |
 | Corte Constitucional | `buscar_jurisprudencia`, `obtener_documento` (fuente `corte`) |
 | Corte Suprema | `buscar_jurisprudencia_suprema`, `obtener_documento` (fuente `suprema`) |
@@ -224,14 +224,16 @@ Estructura:
 | Archivo | Responsabilidad |
 | --- | --- |
 | `src/index.ts` | Herramientas y prompts MCP |
-| `src/nucleo/` | Núcleo compartido: `parse.ts` (extracción y limpieza de HTML, troceado, canario anti-rotura), `citas.ts` (parser de citas), `http.ts` (cliente HTTP con la cadena TLS completa), `ca.ts` (intermedios TLS), `evidencia.ts`, `compiladas.ts`, `alternativas.ts`, `entidades.ts`, `jerarquia.ts`, `perfiles.ts`, `indice.ts`, `expediente.ts`, `actualizacion.ts` |
-| `src/herramientas/` | Handlers de herramientas MCP: `obtener_documento.ts`, `diff.ts` (comparación de artículos), V2 (`analizar_conflicto`, `cambios_desde`, `comparar_articulos`, `consultar_jerarquia`, `consultar_perfil`, `expedientes`, `validar_cita`, `buscar_unificado`); `resolver_cita` está en `index.ts` |
+| `src/nucleo/` | Núcleo compartido: `parse.ts` (extracción y limpieza de HTML, troceado, canario anti-rotura), `citas.ts` (parser de citas), `http.ts` (cliente HTTP con la cadena TLS completa), `ca.ts` (intermedios TLS), `evidencia.ts`, `compiladas.ts`, `alternativas.ts`, `entidades.ts`, `jerarquia.ts`, `perfiles.ts`, `indice.ts`, `expediente.ts`, `actualizacion.ts`, `deduplicar.ts`, `portal-roto.ts`, `snapshot.ts` |
+| `src/herramientas/` | Handlers de herramientas MCP: `obtener_documento.ts`, `diff.ts` (comparación de artículos), V2 (`analizar_conflicto`, `cambios_desde`, `comparar_articulos`, `consultar_jerarquia`, `consultar_perfil`, `consultar_vigencia`, `expedientes`, `historial_norma`, `validar_cita`, `buscar_unificado`); `resolver_cita` está en `index.ts` |
 | `src/fuentes/gestor.ts` | Gestor Normativo (HTML raspado, con canarios) |
 | `src/fuentes/suin.ts` | SUIN-Juriscol: ficha, vigencia e índice empaquetado |
 | `src/fuentes/normograma.ts` | Normograma de la DIAN (JSON) |
 | `src/fuentes/jurisprudencia/` | Tres tribunales: `corte.ts` (relatoría Constitucional, JSON), `cortesuprema.ts` (GraphQL), `consejoestado.ts` (WebForms, sin API) |
 | `src/fuentes/sectorial/` | Reguladores sectoriales (CREG, ANH, UPME, ANLA y 11 más vía `buscar_normativa_sectorial`) |
 | `scripts/medir.ts` | Banco de métricas, para que optimizar no sea a ojo |
+| `scripts/verificar.ts` | `npm run verificar`: comando único de salud (build → typecheck → lint → unit → cobertura tool→caso → red → barridos) |
+| `scripts/barrido-terminos.ts` | `npm run barrido-terminos`: detecta "término que antes rendía y ahora vacío" por fuente (regresión de portal) |
 | `test/smoke.ts` | Pruebas de biblioteca contra las fuentes reales |
 | `test/e2e.ts` | Arranca el servidor y le habla por stdio, como cualquier cliente MCP |
 | `test/red*.ts` | Red de regresión: casos por dominio leyendo `content[0].text` crudo e `isError` |

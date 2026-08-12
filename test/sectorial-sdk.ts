@@ -13,6 +13,7 @@ import test from 'node:test'
 import { sinTildes } from '../src/nucleo/parse.ts'
 import { adaptadores, registrar } from '../src/fuentes/sectorial.ts'
 import type { Adaptador } from '../src/fuentes/sectorial.ts'
+import { filtrarSoloEntidad } from '../src/fuentes/sectorial/normograma.ts'
 
 /** Adaptador de prueba: todo válido salvo lo que el caso rompa a propósito. */
 const base = (id: string, dominioPermitido?: string): Adaptador =>
@@ -49,6 +50,18 @@ test('registrar() rechaza un dominioPermitido que no sea https y no contamina el
 test('registrar() acepta un adaptador con los cinco campos en regla', () => {
   registrar(base('__prueba_valida', 'https://portal.prueba.gov.co'))
   assert.ok(adaptadores().some((a) => a.id === '__prueba_valida'))
+})
+
+test('filtrarSoloEntidad conserva solo los tipos propios de la entidad', () => {
+  const items = [
+    { tipo: 'Resolución', numero: '1', anio: '2024' },
+    { tipo: 'Ley', numero: '100', anio: '1993' }, // compilación sectorial, no es de la entidad
+    { tipo: 'Circular', numero: '2', anio: '2024' },
+    { tipo: 'Sentencia', numero: 'C-1', anio: '2024' }, // jurisprudencia, no es de la entidad
+  ]
+  const solo = filtrarSoloEntidad(items, ['Resolución', 'Circular'])
+  assert.equal(solo.length, 2)
+  assert.ok(solo.every((x) => x.tipo === 'Resolución' || x.tipo === 'Circular'))
 })
 
 test('Supersalud queda registrada con el contrato completo', async () => {

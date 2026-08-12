@@ -108,11 +108,19 @@
     },
     {
       "name": "comparar_articulos",
-      "description": "Compara el texto de un artículo entre dos normas, marca lo añadido y lo eliminado, clasifica cada diferencia por patrones de texto (plazo, sanción, excepción, sujeto obligado) y detecta cambios editoriales por similitud léxica (Dice bigramas, ≥0,92); lo que no encaja se marca «revisar manualmente»."
+      "description": "Compara el texto de un artículo entre dos normas, marca lo añadido y lo eliminado, clasifica cada diferencia por patrones de texto (plazo, sanción, excepción, sujeto obligado, prohibición u obligación) y detecta cambios editoriales por similitud léxica (Dice bigramas, ≥0,92); lo que no encaja se marca «revisar manualmente»."
     },
     {
       "name": "consultar_perfil",
       "description": "Ejecuta una consulta con las fuentes y los filtros preconfigurados de un perfil: laboral, tributario, ambiental, contratación estatal o energía."
+    },
+    {
+      "name": "consultar_vigencia",
+      "description": "Devuelve el estado de vigencia de una norma (\"Vigente\", \"Derogado\", \"Vigencia en Estudio\".."
+    },
+    {
+      "name": "historial_norma",
+      "description": "Devuelve la cadena de reformas que el Gestor anota sobre una norma: qué norma la modificó, adicionó, derogó, sustituyó.."
     },
     {
       "name": "buscar_unificado",

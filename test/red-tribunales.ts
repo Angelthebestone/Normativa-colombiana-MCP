@@ -98,3 +98,9 @@ test('el Consejo de Estado entrega token y texto con tope', LENTO, async () => {
   if (/no se sirve como PDF/.test(t.texto)) return
   assert.match(t.texto, /Texto total: \d[\d.,]* caracteres/)
 })
+
+test('el Consejo de Estado con exacto=false amplía a OR y lo declara', LENTO, async () => {
+  const b = await c.tool('buscar_jurisprudencia_consejo_estado', { texto: 'liquidación del contrato estatal', exacto: false, limite: 3 })
+  assert.equal(b.esError, false)
+  assert.match(b.texto, /Modo ampliado \(OR\)|une los términos con OR/)
+})

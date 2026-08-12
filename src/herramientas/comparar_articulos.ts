@@ -13,9 +13,9 @@ export const TITULO = 'Comparar dos artículos de normas distintas'
 
 export const DESCRIPCION =
   'Compara el texto de un artículo entre dos normas, marca lo añadido y lo eliminado, clasifica cada ' +
-  'diferencia por patrones de texto (plazo, sanción, excepción, sujeto obligado) y detecta cambios ' +
-  'editoriales por similitud léxica (Dice bigramas, ≥0,92); lo que no encaja se marca «revisar manualmente». ' +
-  'Sin modelo semántico.'
+  'diferencia por patrones de texto (plazo, sanción, excepción, sujeto obligado, prohibición u obligación) y ' +
+  'detecta cambios editoriales por similitud léxica (Dice bigramas, ≥0,92); lo que no encaja se marca ' +
+  '«revisar manualmente». Sin modelo semántico.'
 
 const esquema = z.object({
   norma_a: z.string().describe('Cita de la primera norma, ej. "Ley 909 de 2004"'),
@@ -32,7 +32,7 @@ type Params = z.infer<typeof esquema>
 type Articulo = { texto: string | null; url: string; titulo: string }
 
 const CIERRE =
-  'Los cambios «editorial» son léxicos (Dice ≥0,92, sin modelo semántico): «multa»→«sanción pecuniaria» no se detecta como tal y queda en «no clasificado» para revisión manual.'
+  'Los cambios «editorial» son léxicos (Dice ≥0,92, sin modelo semántico): «multa»→«sanción pecuniaria» no se detecta como tal y queda en «no clasificado» para revisión manual. Igual con la sinonimia de cumplimiento: «queda prohibido»→«se prohíbe» puede no reconocerse si la redacción no casa con los patrones.'
 
 /**
  * Trae el texto de un artículo de una norma citada. Si la cita o el artículo

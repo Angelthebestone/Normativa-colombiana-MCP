@@ -29,3 +29,5 @@ openspec/
 .claude/
 # Análisis local del repositorio: no es parte del producto.
 graphify-out/
+# Banco de mediciones locales: no es parte del producto.
+.medidas/

@@ -3,6 +3,34 @@
 Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/).
 Este proyecto sigue [versionado semántico](https://semver.org/lang/es/).
 
+## [1.12.0] — 2026-08-11
+
+**Mejora de búsqueda y cobertura, con fiabilidad operativa: la UPME encuentra "vehículos eléctricos", el Consejo de Estado busca frase exacta, hay deduplicación, caché con TTL, dos herramientas nuevas (`consultar_vigencia` e `historial_norma`) y un comando único de salud (`npm run verificar`).**
+
+### Añadido
+
+- **`consultar_vigencia`**: el estado de vigencia de una norma con un nivel de confianza (`alta` ficha SUIN directa, `media` índice del buscador con aviso de contradicciones, `baja` no consta). Degrada con elegancia ante timeouts de SUIN.
+- **`historial_norma`**: la cadena de reformas que el Gestor anota sobre una norma (qué la modificó, adicionó o derogó y qué artículo afectó cada cambio), con la nota literal citable y sin deducir vigencia. Reutiliza el parser `historial()` existente.
+- **Fallback UPME al buscador del portal**: cuando el REST de WordPress devuelve 0, se consulta `?q=` (SearchWP, que indexa el contenido de los PDF) y se rotula la procedencia. "vehículos eléctricos" ahora encuentra resultados.
+- **Frase exacta en el Consejo de Estado**: parámetro `exacto` (default true) que pone la frase entre comillas en SAMAI (medido: SAMAI no soporta `searchMode` phrase/and; las comillas dentro de `any` sí filtran, 1,1 MB → 449 KB). Con fallback OR declarado si la frase no aparece.
+- **Deduplicación de resultados**: MinAgricultura y Mintrabajo fusionan la misma norma listada con dos enlaces (conservando ambas si el epígrafe difiere), y declaran `N duplicado(s) fusionado(s)`.
+- **TTL y rotulación de la caché de la DIAN**: 30 minutos; la respuesta marca `de caché`, `caché vencida refrescada` o `red caída: caché obsoleta servida`.
+- **Perfiles `salud` y `mineria` en `buscar_unificado`**: añaden INVIMA+Supersalud y ANM al fan-out, con validación de perfil desconocido.
+- **`solo_entidad` en INVIMA/Supersalud**: limita a los tipos de documento propios de la entidad, excluyendo la compilación sectorial del normograma.
+- **Advertencia de portal roto**: discordancia entre el número del epígrafe y el del archivo enlazado (Parques, Mintrabajo), con regla conservadora.
+- **Advertencia de snapshot antiguo**: `describir_fuentes` avisa cuando un índice empaquetado supera 30 días.
+- **Patrones de cumplimiento en `comparar_articulos`**: prohibiciones ("queda prohibido", "no podrá"), obligaciones de hacer ("el responsable deberá") y plazos concretos ("a más tardar", "días hábiles"), declarando el límite léxico.
+- **Autoverificación**: `npm run verificar` (build → typecheck → lint → unit → cobertura tool→caso → red → barridos) y `npm run barrido-terminos` (detecta "término que antes rendía y ahora vacío"). Cero dependencias nuevas.
+
+### Mejorado
+
+- Documentado el opt-in de expedientes en `describir_fuentes` (EXPEDIENTES=1 y EXPEDIENTES_DIR).
+
+### Verificado
+
+- `tsc --noEmit`, `oxlint`, `npm test` 138/138, `test:red` 44/44, `smoke` 54/54, `verificar` completo.
+- Bundle `server/index.js` 2331 KB (+11,9 KB por las 2 herramientas nuevas), `npm audit` 0 vulnerabilidades. 26 herramientas declaradas.
+
 ## [1.11.2] — 2026-08-11
 
 **Optimización de latencia y de mantenimiento: la ficha de SUIN deja de colgar `resolver_cita` cuando el portal está caído, y el banco de medición mide una fila por herramienta.** Cambio no destructivo: ningún contrato de herramienta cambia.

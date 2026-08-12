@@ -3,14 +3,18 @@
  */
 import { sinTildes } from '../nucleo/parse.ts'
 
-type Clasificacion = 'plazo' | 'sancion' | 'excepcion' | 'sujeto' | 'no clasificado'
+type Clasificacion = 'plazo' | 'sancion' | 'excepcion' | 'sujeto' | 'prohibicion' | 'obligacion' | 'no clasificado'
 
 /**
  * Se evalúan en orden y gana la primera coincidencia: un plazo dentro de un
  * texto que además menciona una sanción sigue siendo, sobre todo, un plazo.
+ * Las prohibiciones y obligaciones van antes que `sujeto`/`sancion`: "Queda
+ * prohibido... el responsable deberá..." es, sobre todo, una prohibición.
  */
 const REGLAS: [Clasificacion, RegExp][] = [
-  ['plazo', /\bdentro de (los|las)? ?\d+ (dias|meses|anos|semanas|horas)\b/],
+  ['plazo', /(a mas tardar|en un termino no mayor a|dentro de (los|las)? ?\d+ (dias habiles|dias|meses|anos|semanas|horas))/],
+  ['prohibicion', /(queda prohibido|no podra|se prohibe|no se podra|queda terminantemente prohibido)/],
+  ['obligacion', /(el responsable debera|estara obligado|debe presentar|debe cumplir|tendra la obligacion|es obligacion)/],
   ['sancion', /(sancion|multa|amonestacion|comparendo)/],
   ['excepcion', /(excepto|salvo|no aplica|excepcion)/],
   ['sujeto', /(debera|esta obligado|le corresponde a)/],

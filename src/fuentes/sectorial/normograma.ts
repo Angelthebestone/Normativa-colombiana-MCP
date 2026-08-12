@@ -15,6 +15,11 @@ import type { Adaptador, ActoSectorial, OpcionesSectorial } from '../sectorial.t
 
 const SIN_RESULTADOS = 'No se encontraron resultados.'
 
+/** Con `solo_entidad=true` se recorta a los tipos propios de la entidad. Exportada para testear sin red. */
+export function filtrarSoloEntidad<T extends { tipo: string }>(items: T[], tipos: string[]): T[] {
+  return items.filter((x) => tipos.includes(x.tipo))
+}
+
 type Hit = {
   nombre?: string
   link?: string
@@ -90,7 +95,17 @@ export function adaptadorNormograma(cfg: ConfigNormograma): Adaptador {
       url: h.link ? new URL(h.link, cfg.docsBase).toString() : url,
     }))
 
-    return { items, total: datos.length, url }
+    // Con solo_entidad=true se recorta a los tipos que la propia entidad expide:
+    // el normograma mezcla la compilación completa del sector (leyes, decretos
+    // del Ministerio, sentencias), y a veces solo interesa el acto de la entidad.
+    let filtrados = items
+    let nota: string | undefined
+    if (opts.solo_entidad === true) {
+      filtrados = filtrarSoloEntidad(items, cfg.tiposDocumento)
+      nota = `solo_entidad=true: se filtraron los actos a los tipos propios de la entidad (${cfg.tiposDocumento.join(', ')}).`
+    }
+
+    return { items: filtrados, total: filtrados.length, url, ...(nota ? { nota } : {}) }
   }
 
   return {

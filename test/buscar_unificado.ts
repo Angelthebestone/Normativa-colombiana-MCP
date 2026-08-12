@@ -21,6 +21,11 @@ test('fuentesDe: perfil tributario añade DIAN', () => {
   assert.deepEqual(fuentesDe('tributario', undefined), ['gestor', 'corte', 'suin', 'dian'])
 })
 
+test('fuentesDe: perfil salud añade INVIMA y Supersalud; mineria añade ANM', () => {
+  assert.deepEqual(fuentesDe('salud', undefined), ['gestor', 'corte', 'suin', 'invima', 'supersalud'])
+  assert.deepEqual(fuentesDe('mineria', undefined), ['gestor', 'corte', 'suin', 'anm'])
+})
+
 test('fuentesDe: un filtro explícito gana a todo', () => {
   assert.deepEqual(fuentesDe(undefined, ['corte']), ['corte'])
 })
@@ -61,60 +66,72 @@ test('formatear: un vacío se explica por fuente y no concluye inexistencia', ()
   assert.match(txt, /NO significa que la norma no exista/)
 })
 
+/** Mapa de fuentes completo para los tests (7 claves), todas inyectadas. */
+function porFuenteBase(): Record<string, (texto: string, limite: number) => Promise<Item[]>> {
+  return {
+    gestor: async () => [],
+    corte: async () => [],
+    suin: async () => [],
+    dian: async () => [],
+    invima: async () => [],
+    supersalud: async () => [],
+    anm: async () => [],
+  }
+}
+
 test('escribir: una fuente que falla (503) no tumba el resto', async () => {
-  const r = await escribir(
-    { texto: 'x', limite: 5 },
-    {
-      porFuente: {
-        gestor: async () => {
-          throw new Error('503')
-        },
-        corte: async () => [item('corte-constitucional', 'T-1/24')],
-        suin: async () => [],
-        dian: async () => [],
-      },
-    },
-  )
+  const porFuente = porFuenteBase()
+  porFuente['gestor'] = async () => {
+    throw new Error('503')
+  }
+  porFuente['corte'] = async () => [item('corte-constitucional', 'T-1/24')]
+  const r = await escribir({ texto: 'x', limite: 5 }, { porFuente })
   assert.match(r, /T-1\/24/)
   // Sin perfil no se consulta DIAN, así que el vacío solo lista las consultadas.
   assert.match(r, /Sin resultados en: gestor, suin/)
 })
 
 test('escribir: una fuente que rinde 0 se reporta como hueco, no como fallo', async () => {
-  const r = await escribir(
-    { texto: 'teletrabajo', limite: 5 },
-    {
-      porFuente: {
-        gestor: async () => [item('gestor', 'Ley 1')],
-        corte: async () => [],
-        suin: async () => [],
-        dian: async () => [],
-      },
-    },
-  )
+  const porFuente = porFuenteBase()
+  porFuente['gestor'] = async () => [item('gestor', 'Ley 1')]
+  const r = await escribir({ texto: 'teletrabajo', limite: 5 }, { porFuente })
   assert.match(r, /\[gestor\] Ley 1/)
   assert.match(r, /Sin resultados en: corte, suin/)
 })
 
 test('escribir: un filtro de fuentes solo consulta esas', async () => {
-  const r = await escribir(
-    { texto: 'x', fuentes: ['corte'], limite: 5 },
-    {
-      porFuente: {
-        gestor: async () => {
-          throw new Error('gestor no debería consultarse')
-        },
-        corte: async () => [item('corte-constitucional', 'T-1/24')],
-        suin: async () => {
-          throw new Error('suin no debería consultarse')
-        },
-        dian: async () => {
-          throw new Error('dian no debería consultarse')
-        },
-      },
-    },
-  )
+  const porFuente = porFuenteBase()
+  porFuente['gestor'] = async () => {
+    throw new Error('gestor no debería consultarse')
+  }
+  porFuente['corte'] = async () => [item('corte-constitucional', 'T-1/24')]
+  porFuente['suin'] = async () => {
+    throw new Error('suin no debería consultarse')
+  }
+  porFuente['dian'] = async () => {
+    throw new Error('dian no debería consultarse')
+  }
+  const r = await escribir({ texto: 'x', fuentes: ['corte'], limite: 5 }, { porFuente })
   assert.match(r, /T-1\/24/)
   // Con filtro explícito no se reportan vacíos de fuentes no consultadas.
   assert.doesNotMatch(r, /Sin resultados en: gestor/)
+})
+
+test('escribir: perfil salud consulta INVIMA y Supersalud y declara sus vacíos', async () => {
+  const porFuente = porFuenteBase()
+  porFuente['invima'] = async () => [item('invima', 'Resolución 1')]
+  const r = await escribir({ texto: 'medicamentos', perfil: 'salud', limite: 5 }, { porFuente })
+  assert.match(r, /\[invima\] Resolución 1/)
+  // Las fuentes del perfil salud que rindieron 0 se declaran (gestor, corte, suin, supersalud).
+  assert.match(r, /Sin resultados en: gestor, corte, suin, supersalud/)
+})
+
+test('escribir: perfil desconocido devuelve la lista de admitidos sin consultar nada', async () => {
+  const porFuente = porFuenteBase()
+  porFuente['gestor'] = async () => {
+    throw new Error('no debería consultarse')
+  }
+  const r = await escribir({ texto: 'x', perfil: 'no-existe' as never, limite: 5 }, { porFuente })
+  assert.match(r, /No existe el perfil "no-existe"/)
+  assert.match(r, /salud, mineria/)
 })

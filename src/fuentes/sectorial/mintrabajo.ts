@@ -29,6 +29,8 @@
  */
 import { CanarioError, cargar, colapsarEspacios, sinTildes } from '../../nucleo/parse.ts'
 import { pedir } from '../../nucleo/http.ts'
+import { claveActo, similitudEpigrafes } from '../../nucleo/deduplicar.ts'
+import { advertenciaPortalRoto } from '../../nucleo/portal-roto.ts'
 import type { OpcionesSectorial, ResultadoSectorial } from '../sectorial.ts'
 
 const BASE = 'https://www.mintrabajo.gov.co'
@@ -106,18 +108,44 @@ export async function buscar(opts: OpcionesSectorial): Promise<ResultadoSectoria
     const anio =
       norma.match(ANIO_TRAS_DE)?.[1] ??
       (suelto && suelto !== numero ? suelto : (fecha.match(ANIO)?.[0] ?? ''))
+    const hrefAbsoluto = href.startsWith('http') ? href : new URL(href, BASE).toString()
+    const aviso = advertenciaPortalRoto(epigrafe, hrefAbsoluto)
     items.push({
       tipo: colapsarEspacios(tipo),
       numero,
       anio,
       fecha,
-      epigrafe,
-      url: href.startsWith('http') ? href : new URL(href, BASE).toString(),
+      // La advertencia de «portal roto» (número del epígrafe ≠ número del
+      // archivo) viaja pegada al acto, para que se vea junto a él.
+      epigrafe: aviso ? `${epigrafe} ⚠ ${aviso}` : epigrafe,
+      url: hrefAbsoluto,
     })
   })
 
   let resultantes = items
-  if (opts.anio) resultantes = items.filter((x) => x.anio === String(opts.anio))
+  // El portal repite filas (p.ej. "Ley 2021 de 2021" enlazando el PDF de la
+  // Ley 2101 de 2021). Se deduplica por tipo|numero|anio conservando ambas si
+  // el epígrafe difiere materialmente.
+  const conClave = resultantes.map((x) => ({ x, clave: claveActo(x) }))
+  const vistos = new Map<string, string>()
+  const unicos: typeof resultantes = []
+  let fusionadas = 0
+  for (const { x, clave } of conClave) {
+    if (!clave) {
+      unicos.push(x)
+      continue
+    }
+    const previo = vistos.get(clave)
+    if (previo !== undefined && similitudEpigrafes(previo, x.epigrafe) >= 0.6) {
+      fusionadas++
+      continue
+    }
+    vistos.set(clave, x.epigrafe)
+    unicos.push(x)
+  }
+  resultantes = unicos
+
+  if (opts.anio) resultantes = resultantes.filter((x) => x.anio === String(opts.anio))
   if (opts.texto?.trim()) {
     const aguja = sinTildes(opts.texto.trim()).toLowerCase()
     resultantes = resultantes.filter((x) =>
@@ -130,6 +158,7 @@ export async function buscar(opts: OpcionesSectorial): Promise<ResultadoSectoria
   const tope = Math.min(Math.max(opts.limite ?? 20, 1), 100)
   const notas = [
     omitidas > 0 ? `Se omitieron ${omitidas} filas del portal sin enlace de descarga.` : '',
+    fusionadas > 0 ? `${fusionadas} duplicado(s) fusionado(s) (la misma norma listada dos veces).` : '',
     resultantes.length > tope ? `Coinciden ${resultantes.length}; se muestran ${tope}. Sube limite para ver más.` : '',
   ].filter(Boolean)
   return {

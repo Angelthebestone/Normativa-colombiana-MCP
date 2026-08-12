@@ -8,6 +8,7 @@ import { normalizarEntidad, NO_EN_GESTOR } from './nucleo/entidades.ts'
 import { esCompiladora } from './nucleo/compiladas.ts'
 import { conAlternativas } from './nucleo/alternativas.ts'
 import { validarUrl } from './nucleo/evidencia.ts'
+import { advertenciaSnapshot } from './nucleo/snapshot.ts'
 import * as consultarJerarquia from './herramientas/consultar_jerarquia.ts'
 import * as analizarConflicto from './herramientas/analizar_conflicto.ts'
 import * as cambiosDesde from './herramientas/cambios_desde.ts'
@@ -15,6 +16,8 @@ import * as validarCita from './herramientas/validar_cita.ts'
 import * as compararArticulos from './herramientas/comparar_articulos.ts'
 import * as expedientes from './herramientas/expedientes.ts'
 import * as consultarPerfil from './herramientas/consultar_perfil.ts'
+import * as consultarVigencia from './herramientas/consultar_vigencia.ts'
+import * as historialNorma from './herramientas/historial_norma.ts'
 import * as buscarUnificado from './herramientas/buscar_unificado.ts'
 import * as obtenerDocumento from './herramientas/obtener_documento.ts'
 import {
@@ -113,13 +116,14 @@ const INSTRUCCIONES = `Fuentes oficiales de normativa colombiana: Gestor Normati
 
 Qué herramienta usar:
 - La pregunta menciona una norma concreta ("Ley 909 de 2004", "Decreto 1083", "C-337/11", "el art. 6 de la Ley 1221") → resolver_cita. Es exacta; el buscador por palabras no.
+- Saber si una norma sigue vigente (estado con nivel de confianza) → consultar_vigencia. No lo afirmes por tu cuenta: si no consta, la herramienta lo dice y orienta.
 - La pregunta es por materia ("¿qué normas hay sobre teletrabajo?") → buscar_por_tema. El buscador por palabras del portal solo indexa resúmenes y encuentra poquísimo: "teletrabajo" casa con 3 documentos cuando el subtema oficial tiene 55.
 - Hay que saber qué dice una norma sobre algo → obtener_documento con fuente="gestor" y buscar_en_texto. Esa es la verdadera búsqueda de texto completo; el portal no la ofrece.
 - Sentencias y autos → buscar_jurisprudencia (Corte Constitucional, al día). El Gestor casi no tiene jurisprudencia reciente.
 - Normativa que el Gestor no tiene, o exploración por materia/sector del corpus histórico (desde 1844) → buscar_en_suin. NUNCA la uses para saber si algo está vigente: su campo de vigencia es del índice de búsqueda y contradice la ficha. La vigencia sale de resolver_cita.
 - Impuestos, aduanas o cambios (retención, IVA, renta, importación) → buscar_normativa_tributaria y obtener_documento con fuente="dian". Ninguna otra herramienta cubre esa materia.
 - Jurisprudencia de la Corte SUPREMA (casación civil, laboral, penal y sus tutelas) → buscar_jurisprudencia_suprema, y obtener_documento con fuente="suprema" para el texto completo con la ruta y la sala de esa misma búsqueda. Es un tribunal DISTINTO de la Corte Constitucional: no las mezcles. Exige indicar sala, y cada resultado trae las normas que cita, que puedes resolver con resolver_cita.
-- Qué le pasó a una norma o a un artículo (quién lo modificó, adicionó o derogó) → obtener_documento con fuente="gestor" e historial=true. Devuelve las notas literales del portal, sin ordenarlas ni deducir cuál rige hoy.
+- Qué le pasó a una norma o a un artículo (quién lo modificó, adicionó o derogó) → historial_norma (cadena navegable de reformas) u obtener_documento con fuente="gestor" e historial=true. Devuelve las notas literales del portal, sin ordenarlas ni deducir cuál rige hoy.
 - El fallo de una sentencia, sin leerla entera → obtener_documento con fuente="corte" y seccion="decision": trae el RESUELVE. La T-099/24 pasa de 140.162 a 39.906 caracteres.
 - Jurisprudencia del CONSEJO DE ESTADO (contencioso administrativo: nulidad y restablecimiento, contratación estatal, nulidad electoral, reparación directa) → buscar_jurisprudencia_consejo_estado, y obtener_documento con fuente="consejo" y el token de esa búsqueda para el texto completo. Tercer tribunal distinto de los otros dos; cada resultado trae el problema jurídico y su respuesta. El token caduca en una hora: para CITAR usa el radicado, nunca el enlace con token.
 - Por qué una norma aplica a un tema → explicar_relacion_tema con el temsubid ("ts-…") y el normid de la MISMA fila de buscar_por_tema.
@@ -783,8 +787,15 @@ server.registerTool(
     const items = r.items
     if (!items.length) return vacio(`resultados a partir de la posición ${desde}`, `La búsqueda reúne ${r.total}; pide un "desde" menor.`)
     const fin = desde + items.length
+    const cacheNota = r.obsoleta
+      ? '\n(red caída: se sirvió la caché vencida de esta búsqueda, rotulada como obsoleta)'
+      : r.caducada
+        ? '\n(la caché de este término había vencido y se refrescó)'
+        : r.deCache
+          ? '\n(de caché, dentro de los últimos 30 minutos)'
+          : ''
     return txt(
-      `${r.total} documento(s) en el normograma de la DIAN; se muestran ${desde + 1}–${fin}.\n\n` +
+      `${r.total} documento(s) en el normograma de la DIAN; se muestran ${desde + 1}–${fin}.${cacheNota}\n\n` +
         items
           .map(
             (d) =>
@@ -908,10 +919,18 @@ server.registerTool(
       'Sala de Consulta. Es un tribunal DISTINTO de la Corte Constitucional y de la Corte Suprema. Cada resultado ' +
       'trae el problema jurídico que la Sala se planteó y su respuesta, que es lo que de verdad sirve para ' +
       'orientarse. No devuelve el texto completo, pero sí el enlace a la ficha del proceso en SAMAI. ' +
-      'CÓMO BUSCA: une los términos con OR, así que el número de páginas mide el tamaño del corpus, no la ' +
-      'pertinencia. Usa términos distintivos y avanza con pagina.',
+      'CÓMO BUSCA: une los términos con OR por defecto, así que el número de páginas mide el tamaño del corpus, no la ' +
+      'pertinencia. Con exacto=true (viene activado) busca la FRASE EXACTA: el número de páginas sí mide la frase, ' +
+      'y si no aparece se amplía solo a OR avisándolo. Usa términos distintivos y avanza con pagina.',
     inputSchema: {
       texto: z.string().describe('Términos a buscar, ej. "nulidad electoral", "liquidación del contrato"'),
+      exacto: z
+        .boolean()
+        .default(true)
+        .describe(
+          'Buscar la frase exacta (entre comillas en el buscador SAMAI). Viene activado; si la frase no aparece en ' +
+            'la página, se amplía solo a OR con un aviso. Ponlo en false para ampliar a propósito.',
+        ),
       pagina: z.coerce
         .number()
         .int()
@@ -924,8 +943,8 @@ server.registerTool(
       limite: z.coerce.number().int().min(1).max(10).default(5).describe('Cuántas mostrar de la página (hasta 10)'),
     },
   },
-  async ({ texto, pagina, limite }) => {
-    const r = await consejo.buscar(texto, limite, pagina)
+  async ({ texto, pagina, limite, exacto }) => {
+    const r = await consejo.buscar(texto, limite, pagina, exacto)
 
     // SAMAI pagina por titulación, no por caso: el radicado 25000233600020190090701
     // sale en la página 1 y otra vez en la 2 con otras tesis, y quien suma páginas
@@ -1196,12 +1215,17 @@ server.registerTool(
         `circulares o resoluciones de la UPME${texto ? ` sobre "${texto}"` : ''}`,
         ocultos.length
           ? `Las ${ocultos.length} de esta página son actos de personal y se ocultaron; usa incluir_administrativos=true.`
-          : `El buscador de la UPME es el de WordPress y solo indexa el título y el resumen. Prueba un término más general.`,
+          : r.procedencia === 'portal'
+            ? `El buscador del portal no devolvió resultados para "${texto}" en el HTML de ?q= (ni el REST). Prueba un término más general.`
+            : `El buscador de la UPME es el de WordPress y solo indexa el título y el resumen. Prueba un término más general.`,
       )
     }
     return txt(
       `${r.total} documento(s) en la UPME (${r.paginas} página(s)); se muestran ${items.length} de la página ${pagina}` +
         (ocultos.length ? `, ocultando ${ocultos.length} acto(s) de personal` : '') +
+        (r.procedencia === 'portal'
+          ? '\nResultados del buscador del portal (indexa el contenido de los PDF), no del REST.'
+          : '') +
         `.\n\n` +
         items
           .map(
@@ -1359,15 +1383,22 @@ server.registerTool(
         .string()
         .optional()
         .describe('Tipo de acto o categoría (cada fuente declara cuáles soporta; solo Unidad de Víctimas lo filtra hoy)'),
+      solo_entidad: z
+        .boolean()
+        .optional()
+        .describe(
+          'Solo INVIMA/Supersalud: limita a los actos de los tipos que la propia entidad expide (Resolución, ' +
+            'Circular...), excluyendo la compilación sectorial del normograma (leyes, decretos del Ministerio, sentencias).',
+        ),
       pagina: z.coerce.number().int().min(1).default(1),
       limite: z.coerce.number().int().min(1).max(100).default(15),
     },
   },
-  async ({ entidad, texto, anio, pagina, limite, categoria }) => {
+  async ({ entidad, texto, anio, pagina, limite, categoria, solo_entidad }) => {
     const a = sectorial.adaptador(entidad)
     if (!a) return vacio(`un regulador llamado "${entidad}"`, `Disponibles: ${sectorial.ids().join(', ')}.`)
 
-    const r = await a.buscar({ texto, anio, pagina, limite, categoria })
+    const r = await a.buscar({ texto, anio, pagina, limite, categoria, ...(solo_entidad !== undefined ? { solo_entidad } : {}) })
     // La advertencia de la fuente viaja SIEMPRE, haya resultados o no: es lo que
     // impide que un vacío de un regulador se lea como que la norma no existe.
     // A partir de la segunda página se abrevia: paginar 480 resoluciones de 15 en
@@ -1494,10 +1525,10 @@ server.registerTool(
     const empaquetado = [
       idx
         ? `- Índice temático: ${idx.filas.length.toLocaleString('es')} pares tema/subtema y ` +
-          `${normasIndexadas.toLocaleString('es')} asociaciones norma–subtema. Generado el ${idx.generado}.${frescura(idx.generado)}`
+          `${normasIndexadas.toLocaleString('es')} asociaciones norma–subtema. Generado el ${idx.generado}.${frescura(idx.generado)}${advertenciaSnapshot(idx.generado)}`
         : `- Índice temático: NO viaja con esta instalación. buscar_por_tema consultará el portal en vivo y será más lento.`,
       suinIdx
-        ? `- Índice de SUIN: ${suinIdx.leyes.toLocaleString('es')} leyes. Generado el ${suinIdx.generado}.`
+        ? `- Índice de SUIN: ${suinIdx.leyes.toLocaleString('es')} leyes. Generado el ${suinIdx.generado}.${advertenciaSnapshot(suinIdx.generado)}`
         : `- Índice de SUIN: NO viaja con esta instalación, así que la vigencia no se puede consultar. No es que las ` +
           `normas no estén vigentes: es que esta capacidad está ausente.`,
     ]
@@ -1520,7 +1551,10 @@ server.registerTool(
         `"algo sectorial" no significa que tenga lo sectorial.\n` +
         `- El RASTREO AUTOMÁTICO DE NOVEDADES: ninguna fuente publica un feed de cambios; cambios_desde solo resume ` +
         `lo que el Gestor anota sobre las normas que se le listan.\n` +
-        `- La DETECCIÓN SEMÁNTICA DE CONFLICTOS entre normas: analizar_conflicto reúne evidencia, no concluye.\n\n` +
+        `- La DETECCIÓN SEMÁNTICA DE CONFLICTOS entre normas: analizar_conflicto reúne evidencia, no concluye.\n` +
+        `- Los EXPEDIENTES de investigación (expediente) existen pero vienen DESACTIVADOS por defecto: se activan ` +
+        `con EXPEDIENTES=1 (y persisten en disco con EXPEDIENTES_DIR). No es un fallo: es una capacidad que el ` +
+        `operador decide encender.\n\n` +
         `CÓMO LEER UN VACÍO: que una búsqueda no devuelva nada significa que no se encontró en ESTAS fuentes, con ` +
         `estos índices y con estos huecos. No significa que la norma no exista. El corpus del Gestor no cubre todo ` +
         `el país, y el índice de SUIN tiene agujeros conocidos.`,
@@ -1553,6 +1587,8 @@ registrarHerramienta('analizar_conflicto', analizarConflicto as never)
 registrarHerramienta('cambios_desde', cambiosDesde as never)
 registrarHerramienta('comparar_articulos', compararArticulos as never)
 registrarHerramienta('consultar_perfil', consultarPerfil as never)
+registrarHerramienta('consultar_vigencia', consultarVigencia as never)
+registrarHerramienta('historial_norma', historialNorma as never)
 registrarHerramienta('buscar_unificado', buscarUnificado as never)
 registrarHerramienta('obtener_documento', obtenerDocumento as never)
 registrarHerramienta('expediente', expedientes as never)
@@ -1595,9 +1631,10 @@ server.registerPrompt(
         content: {
           type: 'text',
           text:
-            `¿"${norma}" sigue vigente? Resuélvela con resolver_cita y revisa el texto con obtener_documento con fuente="gestor" buscando ` +
-            `"derogad" y "modificado por". Dime qué encontraste y advierte con claridad si no puedes confirmarlo: ` +
-            `el Gestor no tiene un campo de vigencia.`,
+            `¿"${norma}" sigue vigente? Consúltala con consultar_vigencia (estado con nivel de confianza) y, para ` +
+            `las marcas de derogatorias y modificaciones, revisa el texto con obtener_documento con fuente="gestor" ` +
+            `buscando "derogad" y "modificado por", o el historial con historial_norma. Dime qué encontraste y ` +
+            `advierte con claridad si no puedes confirmarlo: el Gestor no tiene un campo de vigencia.`,
         },
       },
     ],

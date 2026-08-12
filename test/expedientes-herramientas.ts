@@ -11,7 +11,7 @@ import * as os from 'node:os'
 import * as path from 'node:path'
 import test from 'node:test'
 
-import { escribir } from '../src/herramientas/expedientes.ts'
+import { escribir, DESCRIPCION } from '../src/herramientas/expedientes.ts'
 
 test('sin EXPEDIENTES las acciones avisan del feature desactivado', async () => {
   delete process.env['EXPEDIENTES']
@@ -20,6 +20,15 @@ test('sin EXPEDIENTES las acciones avisan del feature desactivado', async () => 
   assert.match(await escribir({ accion: 'agregar', id: 'x', campo: 'preguntas', texto: 'algo' }), aviso)
   assert.match(await escribir({ accion: 'leer', id: 'x' }), aviso)
   assert.match(await escribir({ accion: 'exportar', id: 'x', ruta: '/tmp/x.md' }), aviso)
+})
+
+test('el aviso y la DESCRIPCION documentan el opt-in (EXPEDIENTES=1 y EXPEDIENTES_DIR)', async () => {
+  delete process.env['EXPEDIENTES']
+  const aviso = await escribir({ accion: 'crear' })
+  assert.match(aviso, /EXPEDIENTES=1/)
+  assert.match(aviso, /EXPEDIENTES_DIR/)
+  assert.match(DESCRIPCION, /EXPEDIENTES=1/)
+  assert.match(DESCRIPCION, /EXPEDIENTES_DIR/)
 })
 
 test('con EXPEDIENTES=1 el ciclo crear/agregar/leer funciona y los ids falsos avisan', async () => {

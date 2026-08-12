@@ -17,9 +17,9 @@ before(async () => {
 })
 after(() => c.cerrar())
 
-test('tools/list declara las 24 herramientas con esquema utilizable', CONTRATO, async () => {
+test('tools/list declara las 26 herramientas con esquema utilizable', CONTRATO, async () => {
   const { tools } = await c.peticion('tools/list')
-  assert.equal(tools.length, 24, tools.map((t: any) => t.name).join(', '))
+  assert.equal(tools.length, 26, tools.map((t: any) => t.name).join(', '))
   for (const t of tools) {
     assert.ok(t.description?.length > 40, `${t.name} necesita descripción`)
     for (const [campo, esquema] of Object.entries(t.inputSchema.properties ?? {})) {

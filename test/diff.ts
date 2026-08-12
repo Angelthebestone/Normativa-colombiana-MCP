@@ -31,6 +31,18 @@ test('clasificarDiferencia distingue el tipo de cambio, en orden de prioridad', 
   assert.equal(clasificarDiferencia('texto sin marcas'), 'no clasificado')
 })
 
+test('clasificarDiferencia detecta prohibiciones y obligaciones de cumplimiento', () => {
+  assert.equal(clasificarDiferencia('Queda prohibido el cobro de sumas no autorizadas'), 'prohibicion')
+  assert.equal(clasificarDiferencia('no podrá celebrar contratos'), 'prohibicion')
+  assert.equal(clasificarDiferencia('El responsable deberá presentar el informe'), 'obligacion')
+  assert.equal(clasificarDiferencia('estará obligado a reportar'), 'obligacion')
+  // El plazo gana aunque haya una obligación: el orden manda.
+  assert.equal(clasificarDiferencia('El responsable deberá presentar el informe dentro de los 10 días hábiles'), 'plazo')
+  assert.equal(clasificarDiferencia('a más tardar el 31 de diciembre'), 'plazo')
+  // Sinónimo no cubierto: queda en no clasificado, que es el límite declarado.
+  assert.equal(clasificarDiferencia('queda vedado el cobro'), 'no clasificado')
+})
+
 test('el contrato léxico: normalizarLexico y bigramas son deterministas', () => {
   assert.equal(normalizarLexico('Sanción Pecuniaria'), 'sancion pecuniaria')
   assert.equal(normalizarLexico('  multa  de  5  '), 'multa de 5')
