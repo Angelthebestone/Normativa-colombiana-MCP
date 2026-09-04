@@ -90,12 +90,12 @@ export async function escribir({ cita }: Params): Promise<string> {
     let fichaDirecta: Awaited<ReturnType<typeof suin.fichaDirectaDecreto>>
     try {
       fichaDirecta = await suin.fichaDirectaDecreto(c.tipo, c.numero, anio)
-    } catch {
+    } catch (e) {
       return formatear({
         cita,
         estado: 'no consta (ficha caída)',
         confianza: 'baja',
-        explicacion: 'La ficha de SUIN-Juriscol no respondió en esta consulta (timeout). Vuelve a intentarlo antes de afirmar nada.',
+        explicacion: `La ficha de SUIN-Juriscol no respondió en esta consulta (${(e as Error).message}). Vuelve a intentarlo antes de afirmar nada.`,
       })
     }
     if (fichaDirecta.ok) {
@@ -113,7 +113,9 @@ export async function escribir({ cita }: Params): Promise<string> {
         cita,
         estado: 'no consta (ficha caída)',
         confianza: 'baja',
-        explicacion: 'La ficha de SUIN-Juriscol no respondió en esta consulta. Vuelve a intentarlo antes de afirmar nada.',
+        explicacion:
+          `La ficha de SUIN-Juriscol no respondió en esta consulta` +
+          `${fichaDirecta.detalle ? ` (${fichaDirecta.detalle})` : ''}. Vuelve a intentarlo antes de afirmar nada.`,
       })
     }
     // Índice de leyes empaquetado. Un fallo de red aquí también se degrada:
@@ -121,12 +123,12 @@ export async function escribir({ cita }: Params): Promise<string> {
     let v: Awaited<ReturnType<typeof suin.vigencia>>
     try {
       v = await suin.vigencia(c.tipo, c.numero, anio)
-    } catch {
+    } catch (e) {
       return formatear({
         cita,
         estado: 'no consta (ficha caída)',
         confianza: 'baja',
-        explicacion: 'La ficha de SUIN-Juriscol no respondió en esta consulta. Vuelve a intentarlo antes de afirmar nada.',
+        explicacion: `La ficha de SUIN-Juriscol no respondió en esta consulta (${(e as Error).message}). Vuelve a intentarlo antes de afirmar nada.`,
       })
     }
     if (v) {

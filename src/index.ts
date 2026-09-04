@@ -3,6 +3,7 @@ import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { z } from 'zod'
 
 import { idTipo, parsearCita } from './nucleo/citas.ts'
+import { codigoDe, codigosAusentes, referencia as refCodigo } from './nucleo/codigos.ts'
 import { cargarIndice, temaDelIndice, frescura } from './nucleo/indice.ts'
 import { normalizarEntidad, NO_EN_GESTOR } from './nucleo/entidades.ts'
 import { esCompiladora } from './nucleo/compiladas.ts'
@@ -64,7 +65,20 @@ const vacio = (que: string, sugerencia: string) =>
  */
 async function resolverUnaCita(cita: string): Promise<string> {
   const c = parsearCita(cita)
-  if (!c) return `### ${cita}\nNo encontré una cita normativa en "${cita}". Escríbela como "Ley 909 de 2004" o "C-337/11", o usa buscar_normas.`
+  if (!c) return `### ${cita}\nNo encontré una cita normativa en "${cita}". Escríbela como "Ley 909 de 2004", "art. 191 del Código de Comercio" o "C-337/11", o usa buscar_normas.`
+
+  /**
+   * Nadie cita "Decreto 410 de 1971": cita el Código de Comercio. Cuando la
+   * cita llegó por el nombre del código se dice contra qué norma se resolvió,
+   * porque es la que hay que escribir en un escrito judicial.
+   */
+  const cod = codigoDe(c.tipo, c.numero, c.anio)
+  const equivalencia =
+    c.codigo && cod
+      ? `\n«${cod.nombre}» se cita aquí como ${refCodigo(cod)}, que es su norma contenedora y lo que hay que escribir en un escrito.`
+      : ''
+  /** Un código que se sabe fuera del corpus se nombra como ausente, no como inexistente. */
+  const ausente = cod?.ausente
 
   // Las sentencias de la Corte se resuelven contra su relatoría, que está al día.
   if (c.sentencia) {
@@ -122,7 +136,7 @@ async function resolverUnaCita(cita: string): Promise<string> {
       const arts = indiceArticulos(v.texto)
       const art = c.articulo ? extraerArticulo(v.texto, c.articulo) : null
       return (
-        `### ${cita}\n${cita} no está en el Gestor Normativo de Función Pública, pero SUIN-Juriscol sí la publica.\n` +
+        `### ${cita}${equivalencia}\n${cita} no está en el Gestor Normativo de Función Pública, pero SUIN-Juriscol sí la publica.\n` +
         (v.epigrafe ? `${v.epigrafe}\n` : '') +
         `Estado de vigencia según SUIN (índice del ${v.generado}): ` +
         `${v.estado || 'SUIN no publica el estado de esta norma'}\n` +
@@ -133,8 +147,11 @@ async function resolverUnaCita(cita: string): Promise<string> {
           : `\n\nEl articulado no se devuelve entero: pide el artículo que necesitas en la cita ("art. 3 de ${cita}") o abre el enlace.`)
       )
     }
+    // Sin la línea de equivalencia: el propio texto de la ausencia ya nombra la
+    // norma, y repetirla dos veces distrae de lo único que importa aquí.
+    if (ausente) return `### ${cita}\n${ausente}`
     return (
-      `### ${cita}\nNo encontré la cita "${cita}" en las fuentes consultadas.\n\n` +
+      `### ${cita}${equivalencia}\nNo encontré la cita "${cita}" en las fuentes consultadas.\n\n` +
       ((c.anio ? `Prueba sin el año, o verifica el número.` : `Prueba indicando el año.`) + otroTipo)
     )
   }
@@ -209,7 +226,7 @@ async function resolverUnaCita(cita: string): Promise<string> {
             `de decretos del portal devuelven 404), así que de esta norma no hay estado que consultar. No ` +
             `concluyas ni que está vigente ni que está derogada: revísalo en el enlace.`
         }
-      } catch {
+      } catch (e) {
         // SUIN es un complemento y la cita se resuelve igual, pero que se haya
         // caído no puede parecerse a que la norma no tenga estado publicado.
         //
@@ -218,9 +235,14 @@ async function resolverUnaCita(cita: string): Promise<string> {
         // Azure—, y el primero se cae solo. Sin decirlo, ver esta línea junto a
         // un buscar_en_suin que responde llevaba a la conclusión contraria: que
         // fallaba el índice empaquetado y funcionaba lo que consulta en vivo.
+        //
+        // Y con el motivo literal: quince consultas seguidas devolvieron "no
+        // respondió" sin decir si era el corte de 8 s del cliente, un HTTP de
+        // error o el portal caído, que es justo lo que hay que comprobar.
         vig =
           `\nEstado de vigencia: la ficha de SUIN-Juriscol (www.suin-juriscol.gov.co) no respondió en esta ` +
-          `consulta. Vuelve a intentarlo antes de afirmar nada; no es que esta norma carezca de estado. Que ` +
+          `consulta (${(e as Error).message}). Vuelve a intentarlo antes de afirmar nada; no es que esta norma ` +
+          `carezca de estado. Que ` +
           `buscar_en_suin sí funcione no lo desmiente: esa herramienta consulta OTRO servidor (el índice de ` +
           `búsqueda), y no publica el estado de vigencia.`
       }
@@ -236,7 +258,7 @@ async function resolverUnaCita(cita: string): Promise<string> {
       : `\n\nNo encontré un "artículo ${c.articulo}" en el texto. Usa obtener_documento con fuente="gestor" y buscar_en_texto.`
   }
   return (
-    `### ${cita}\n${n.titulo}\n${tipoCorregido}id: ${n.id}\n` +
+    `### ${cita}${equivalencia}\n${n.titulo}\n${tipoCorregido}id: ${n.id}\n` +
     // No es un resumen de la norma: el Gestor no publica uno. Es el extracto
     // de UN tema al que está asociada, y en normas compiladoras como el
     // Decreto 1083 describe una porción mínima del contenido.
@@ -306,7 +328,7 @@ function sinPrefijo(c: Catalogo, valor: string): string {
 const INSTRUCCIONES = `Fuentes oficiales de normativa colombiana: Gestor Normativo de Función Pública, Corte Constitucional, Corte Suprema, Consejo de Estado, SUIN-Juriscol (MinJusticia) y normograma de la DIAN.
 
 Qué herramienta usar:
-- La pregunta menciona una norma concreta ("Ley 909 de 2004", "Decreto 1083", "C-337/11", "el art. 6 de la Ley 1221") → resolver_cita. Es exacta; el buscador por palabras no.
+- La pregunta menciona una norma concreta ("Ley 909 de 2004", "Decreto 1083", "C-337/11", "el art. 6 de la Ley 1221") o un CÓDIGO por su nombre ("el art. 191 del Código de Comercio", "el 83 del Código Penal") → resolver_cita. Es exacta; el buscador por palabras no. El único código que NO está en el corpus es el CIVIL: ante una consulta civil, dilo en vez de dar por buena una búsqueda vacía.
 - Saber si una norma sigue vigente (estado con nivel de confianza) → consultar_vigencia. No lo afirmes por tu cuenta: si no consta, la herramienta lo dice y orienta.
 - La pregunta es por materia ("¿qué normas hay sobre teletrabajo?") → buscar_por_tema. El buscador por palabras del portal solo indexa resúmenes y encuentra poquísimo: "teletrabajo" casa con 3 documentos cuando el subtema oficial tiene 55.
 - Hay que saber qué dice una norma sobre algo → obtener_documento con fuente="gestor" y buscar_en_texto. Esa es la verdadera búsqueda de texto completo; el portal no la ofrece.
@@ -397,10 +419,15 @@ server.registerTool(
     description:
       'Ruta rápida y exacta para citas como "Ley 909 de 2004", "Decreto 1083", "C-337/11", "T-099/24" o ' +
       '"artículo 6 de la Ley 1221 de 2008". Úsala SIEMPRE que la pregunta mencione una norma concreta: ' +
-      'evita el buscador por palabras, que es impreciso. Acepta también un LOTE de citas con el parámetro ' +
+      'evita el buscador por palabras, que es impreciso. Los CÓDIGOS se citan por su nombre ("art. 191 del ' +
+      'Código de Comercio", "art. 83 del Código Penal", "art. 164 del CPACA"): la respuesta dice contra qué ' +
+      'norma se resolvió. Acepta también un LOTE de citas con el parámetro ' +
       'citas (["Ley 909 de 2004", "C-337/11"]), que resuelve cada una con su enlace en una sola llamada.',
     inputSchema: {
-      cita: z.string().optional().describe('Ej.: "Ley 909 de 2004", "C-337/11", "art. 6 de la Ley 1221 de 2008"'),
+      cita: z
+        .string()
+        .optional()
+        .describe('Ej.: "Ley 909 de 2004", "C-337/11", "art. 6 de la Ley 1221 de 2008", "art. 191 del Código de Comercio"'),
       citas: z
         .array(z.string())
         .optional()
@@ -444,7 +471,10 @@ server.registerTool(
       return txt(bloques.join('\n\n'))
     }
     if (!cita) {
-      return vacio('una cita normativa', 'Escríbela como "Ley 909 de 2004" o "C-337/11" (y varias a la vez con citas), o usa buscar_normas.')
+      return vacio(
+        'una cita normativa',
+        'Escríbela como "Ley 909 de 2004", "art. 191 del Código de Comercio" o "C-337/11" (y varias a la vez con citas), o usa buscar_normas.',
+      )
     }
     return txt(await resolverUnaCita(cita))
   },
@@ -1578,6 +1608,15 @@ server.registerTool(
         `hay normas y providencias YA PUBLICADAS.\n` +
         `- La vigencia de los DECRETOS: el índice de SUIN son casi solo leyes, porque los sitemaps de decretos del ` +
         `portal devuelven 404. Que un decreto no traiga estado NO significa que esté derogado ni vigente: no consta.\n` +
+        `- ${codigosAusentes().map((c) => `${c.nombre.toUpperCase()} (${refCodigo(c)})`).join(' y ')}: NO está en ` +
+        `ninguna de estas fuentes: ni el Gestor lo publica ni el índice de SUIN lo trae, y las tres vías de consulta ` +
+        `(por nombre, por su norma y por número+año) salen vacías. Con él quedan fuera la acción reivindicatoria, la ` +
+        `responsabilidad civil contractual y extracontractual, la filiación, el divorcio y la prescripción ordinaria. ` +
+        `El resto de códigos SÍ están y se citan por su nombre: Comercio, Sustantivo del Trabajo, Procesal del ` +
+        `Trabajo, Penal, Procedimiento Penal, General del Proceso, CPACA, Infancia y Adolescencia y Estatuto Tributario.\n` +
+        `- Las leyes que MODIFICAN un código se leen a través de la ley modificatoria: el artículo devuelve su ` +
+        `encabezado y el texto que sustituye, pero el cuerpo normativo modificado hay que leerlo aparte (y si es el ` +
+        `Código Civil, no está aquí).\n` +
         `- La normativa departamental y municipal, salvo la que el Gestor recoja por su cuenta.\n` +
         `- Los tribunales y juzgados distintos de las tres altas cortes.\n` +
         `- EL RESTO DE LA REGULACIÓN SECTORIAL. Con herramienta propia hay cuatro reguladores —CREG, ANH, UPME y ` +
