@@ -3,6 +3,30 @@
 Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/).
 Este proyecto sigue [versionado semántico](https://semver.org/lang/es/).
 
+## [1.13.0] — 2026-09-03
+
+**Corrección de los 9 puntos del barrido del 2026-09-03: tres afirmaciones falsas eliminadas, dos fuentes recuperadas y cuatro mejoras menores. La instalación recomendada pasa a ser `npx -y normativa-colombia-mcp`, sin rutas locales.**
+
+### Corregido
+
+- **`resolver_cita` en lote sin `validar`**: `citas: ["Ley 909 de 2004", "C-337/11"]` devolvía "no encontré una cita" porque la ruta de lote solo existía en la rama de validación. La resolución individual se extrajo a `resolverUnaCita()` y el lote itera sobre ella, un bloque `### cita` por cita; un fallo de red de una cita se anota en su bloque y no tumba a las demás.
+- **`buscar_unificado`**: una fuente caída se reportaba como "sin resultados", indistinguible de un vacío real. Ahora distingue tres estados por fuente —"respondió con N", "respondió sin nada" y "no se pudo consultar: <mensaje>"— y el fallo declara que no se sabe qué hay ahí, sin concluir inexistencia.
+- **`analizar_conflicto`**: "«términos» no aparece en el texto" era falso cuando el texto decía "término". La búsqueda sigue siendo literal, pero prueba singular y plural, declara qué variante casó y, si ninguna casa, nombra la cadena exacta buscada en vez de concluir ausencia.
+- **Relatoría de la Corte Constitucional (TLS)**: `www.corteconstitucional.gov.co` presenta su hoja sin el intermedio "Go Daddy Secure Certificate Authority - G2" y Node respondía "unable to verify the first certificate". Se añadió el intermedio (`GODADDY_G2` en `ca.ts`, bajado de la extensión AIA del propio certificado) a la cadena de `pedir()`; la verificación sigue activa. Recuperadas `buscar_jurisprudencia` y `obtener_documento` con fuente `corte`.
+- **SIC (301)**: el repositorio se mudó a la sede electrónica (`sedeelectronica.sic.gov.co/transparencia/normativa/busqueda-de-normas/entidad`) y el dominio viejo responde 301 a la sede. Se apunta directo a la sede, con sus filtros (`combine`, `field_clasificacion2_target_id`, `field_clasificacion5_target_id`, `field_tipo_acto_target_id`, `field_fecha_publicacion_value`, `page`) y su marcado de tarjetas `.normas--row`; el número y la fecha se extraen del título y la descripción cuando los traen.
+
+### Añadido
+
+- **`historial_norma` con `articulo`, `desde` y `limite`**: filtra a los cambios de un artículo concreto y pagina el resto (`se muestran N–M`, `quedan N: repite con desde=M`).
+- **`obtener_documento` con `sin_temas` (solo gestor)**: omite el bloque de temas asociados, que en un artículo puntual ocupaba varias veces lo que ocupaba el artículo.
+- **Pertinencia por fila en `buscar_normas`**: cada resultado marca qué términos menciona su extracto y cuáles no, porque el portal une con OR y dos resultados no son igual de pertinentes.
+- **Conteo de la relatoría corregido**: 44.839 providencias según su propio índice Elasticsearch (medido el 2026-09-03), con fallos de 2026 publicados el mismo año; se retiró el "49.409 / actualizada a diario".
+
+### Verificado
+
+- `tsc --noEmit`, `oxlint` (0 avisos), `npm test` 140/140, `test/e2e` 43/43, `test:red` (gestor, tribunales, v2, lote) y `smoke` en verde contra las fuentes reales.
+- Bundle `server/index.js` ~2,3 MB, `npm audit` 0 vulnerabilidades. 26 herramientas declaradas.
+
 ## [1.12.0] — 2026-08-11
 
 **Mejora de búsqueda y cobertura, con fiabilidad operativa: la UPME encuentra "vehículos eléctricos", el Consejo de Estado busca frase exacta, hay deduplicación, caché con TTL, dos herramientas nuevas (`consultar_vigencia` e `historial_norma`) y un comando único de salud (`npm run verificar`).**

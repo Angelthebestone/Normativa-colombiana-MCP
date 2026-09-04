@@ -130,6 +130,25 @@ export function terminosSignificativos(frase: string): string[] {
 }
 
 /**
+ * Pertinencia por fila: qué términos significativos aparecen de verdad en el
+ * extracto temático de cada resultado. El portal une con OR, así que un
+ * resultado puede venir por un solo término; marcarlo evita que dos
+ * resultados se lean como igual de pertinentes cuando uno ni menciona el tema.
+ */
+export function pertinenciaDe(items: Resultado[], frase: string): Map<string, { menciona: string[]; omite: string[] }> {
+  const exigidos = terminosSignificativos(frase)
+  const mapa = new Map<string, { menciona: string[]; omite: string[] }>()
+  for (const i of items) {
+    const heno = sinTildes(`${i.titulo} ${i.resumen}`).toLowerCase()
+    mapa.set(i.id, {
+      menciona: exigidos.filter((t) => heno.includes(t)),
+      omite: exigidos.filter((t) => !heno.includes(t)),
+    })
+  }
+  return mapa
+}
+
+/**
  * Filtro local AND sobre lo que el portal devolvió con OR. Sobre título y
  * resumen, sin tildes y en minúsculas: los resultados de esta herramienta solo
  * traen esos dos campos, y ahí es donde el usuario busca.

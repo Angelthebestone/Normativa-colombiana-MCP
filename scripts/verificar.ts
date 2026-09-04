@@ -38,7 +38,7 @@ function correr(nombre: string, comando: string, args: string[]): Promise<number
  * y los tests unitarios por módulo. Una tool sin caso aquí rompe `verificar`.
  */
 const MAPA_TOOL_TEST: Record<string, string> = {
-  resolver_cita: 'test/red-gestor.ts',
+  resolver_cita: 'test/red-gestor.ts + test/lote-resolver.ts (lote)',
   buscar_normas: 'test/red-gestor.ts',
   buscar_por_tema: 'test/smoke.ts',
   listar_catalogos: 'test/smoke.ts',
@@ -51,7 +51,7 @@ const MAPA_TOOL_TEST: Record<string, string> = {
   buscar_normativa_upme: 'test/upme.ts',
   buscar_resoluciones_creg: 'test/smoke.ts',
   listar_normativa_ambiental_anla: 'test/smoke.ts',
-  buscar_normativa_sectorial: 'test/sectorial-sdk.ts',
+  buscar_normativa_sectorial: 'test/sectorial-sdk.ts + test/sic-sede.ts (sede electrónica)',
   buscar_normativa_tributaria: 'test/normograma-ttl.ts',
   describir_fuentes: 'test/smoke.ts',
   consultar_por_jerarquia: 'test/consultar_jerarquia.ts',

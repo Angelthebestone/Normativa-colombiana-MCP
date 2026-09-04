@@ -44,7 +44,7 @@ test('norma sin reformas avisa sin afirmar que está intacta', () => {
   assert.match(s, /NO equivale a que esté intacta/)
 })
 
-test('el tope de 20 cambios se declara con los omitidos', () => {
+test('el tope se pagina con desde/limite y se declara lo que queda', () => {
   const cambios = Array.from({ length: 25 }, (_, i) => ({
     accion: 'modificado',
     norma: `Ley ${i}`,
@@ -53,5 +53,22 @@ test('el tope de 20 cambios se declara con los omitidos', () => {
     literal: `nota ${i}`,
   }))
   const s = formatearHistorial(cambios, 'N', 'https://x.gov.co/n')
-  assert.match(s, /se muestran 20 de 25/)
+  assert.match(s, /25 cambio\(s\) anotado\(s\).*se muestran 1–20/s)
+  assert.match(s, /Quedan 5: repite con desde=20/)
+  const s2 = formatearHistorial(cambios, 'N', 'https://x.gov.co/n', { desde: 20 })
+  assert.match(s2, /se muestran 21–25/)
+  assert.doesNotMatch(s2, /Quedan/)
+  const s3 = formatearHistorial(cambios, 'N', 'https://x.gov.co/n', { desde: 99 })
+  assert.match(s3, /Pide un "desde" menor/)
+})
+
+test('el filtro por articulo solo trae los cambios de ese artículo', () => {
+  const cambios = historial(CON_REFORMAS)
+  const s = formatearHistorial(cambios, 'Ley 1221 de 2008', 'https://x.gov.co/norma.php?i=1', { articulo: '54' })
+  assert.match(s, /sobre el artículo 54/)
+  assert.match(s, /ADICIONADO por Ley 2466 de 2025/)
+  assert.doesNotMatch(s, /MODIFICADO por Decreto 666/)
+  const vacio = formatearHistorial(cambios, 'Ley 1221 de 2008', 'https://x.gov.co/norma.php?i=1', { articulo: '999' })
+  assert.match(vacio, /ninguno sobre el artículo 999/)
+  assert.match(vacio, /NO equivale a que siga intacto/)
 })

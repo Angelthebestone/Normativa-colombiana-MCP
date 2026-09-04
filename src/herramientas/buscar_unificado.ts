@@ -148,8 +148,16 @@ function ordenar(items: Item[], perfil?: string): Item[] {
   return items.sort((a, b) => (peso[a.fuente] ?? 9) - (peso[b.fuente] ?? 9))
 }
 
-export function formatear(resultados: Partial<Record<Fuente, Item[]>>, texto: string, perfil?: string): string {
-  const vacias = (Object.keys(resultados) as Fuente[]).filter((f) => !resultados[f]?.length)
+export function formatear(
+  resultados: Partial<Record<Fuente, Item[]>>,
+  texto: string,
+  perfil?: string,
+  /** Fallos por fuente (fuente → mensaje): se declaran como fallo, nunca como vacío. */
+  fallidas: Partial<Record<Fuente, string>> = {},
+): string {
+  const consultadas = Object.keys(resultados) as Fuente[]
+  const conFallo = new Set(Object.keys(fallidas) as Fuente[])
+  const vacias = consultadas.filter((f) => !resultados[f]?.length && !conFallo.has(f))
   const lineas: string[] = []
   for (const item of ordenar(Object.values(resultados).flat(), perfil)) {
     lineas.push(`- [${item.fuente}] ${item.titulo}\n  ${item.url}${item.detalle ? `\n  ${item.detalle}` : ''}`)
@@ -161,8 +169,16 @@ export function formatear(resultados: Partial<Record<Fuente, Item[]>>, texto: st
   if (vacias.length) {
     bloque.push(
       '',
-      `Sin resultados en: ${vacias.join(', ')}.`,
+      `Sin resultados en: ${vacias.join(', ')} (respondieron sin nada).`,
       'Un vacío en una fuente NO significa que la norma no exista; para una cita exacta usa resolver_cita.',
+    )
+  }
+  const caidas = consultadas.filter((f) => conFallo.has(f))
+  if (caidas.length) {
+    bloque.push(
+      '',
+      `No se pudo consultar: ${caidas.map((f) => `${f} (${fallidas[f] ?? 'la fuente no respondió'})`).join('; ')}.`,
+      'Esto es un FALLO de la fuente, no un vacío: no concluyas que no hay resultados ahí. Vuelve a intentarlo.',
     )
   }
   return bloque.join('\n')
@@ -181,14 +197,19 @@ export async function escribir(
   const limite = Math.min(params.limite ?? 15, 30)
   const resultado = {} as Record<Fuente, Item[]>
   for (const f of FUENTES) resultado[f] = []
+  const fallidas: Partial<Record<Fuente, string>> = {}
 
   await Promise.all(
     fuentes.map(async (f) => {
       try {
         resultado[f] = await porFuente[f](params.texto, limite)
-      } catch {
-        // Una fuente caída no tumba el resto: se deja vacía y se explica.
+      } catch (e) {
+        // Una fuente caída no tumba el resto: se anota como FALLO con su
+        // mensaje, no como vacío. Un vacío dice "respondió sin nada"; un fallo
+        // dice "no se sabe qué hay ahí". En materia jurídica confundirlos es
+        // afirmar que no hay jurisprudencia sobre algo.
         resultado[f] = []
+        fallidas[f] = e instanceof Error ? e.message : String(e)
       }
     }),
   )
@@ -197,5 +218,5 @@ export async function escribir(
   // explícito (fuentes=["corte"]) no debe reportar "sin resultados" en las
   // que nunca se pidieron.
   const consultadas = Object.fromEntries(fuentes.map((f) => [f, resultado[f]])) as Record<Fuente, Item[]>
-  return formatear(consultadas, params.texto, params.perfil)
+  return formatear(consultadas, params.texto, params.perfil, fallidas)
 }

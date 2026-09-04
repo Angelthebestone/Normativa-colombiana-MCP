@@ -8,7 +8,7 @@ import { idTipo, parsearCita, candidatosAmbiguos } from '../nucleo/citas.ts'
 import * as gestor from '../fuentes/gestor.ts'
 import * as suin from '../fuentes/suin.ts'
 import { caracterDelNivel, tipoANivel } from '../nucleo/jerarquia.ts'
-import { fragmentos, historial } from '../nucleo/parse.ts'
+import { fragmentos, historial, sinTildes } from '../nucleo/parse.ts'
 
 export const TITULO = 'Analizar un posible conflicto entre dos normas'
 
@@ -34,9 +34,26 @@ export type Evidencia = {
   vigencia: string
   reformas: string[]
   pasajes: string[]
+  /** Término que de verdad casó en el texto (puede ser una variante del pedido). */
+  terminoCasado?: string
+  /** Otras formas probadas de la palabra, para orientar la siguiente búsqueda. */
+  variantes?: string[]
   noEncontrada: boolean
   ambigua: boolean
   candidatos: { titulo: string; id: string; anio: string; url: string }[]
+}
+
+/** Variantes morfológicas mínimas: la búsqueda es literal y el plural y el singular son cadenas distintas. */
+function variantesDe(termino: string): string[] {
+  const t = termino.trim()
+  if (!t || /\s/.test(t)) return [t]
+  const plano = sinTildes(t).toLowerCase()
+  const cands = new Set<string>([t])
+  if (plano.endsWith('es') && plano.length > 4) cands.add(t.slice(0, -2))
+  else if (plano.endsWith('s') && plano.length > 3) cands.add(t.slice(0, -1))
+  else cands.add(`${t}s`)
+  if (plano.endsWith('cion') || plano.endsWith('sion')) cands.add(`${t}es`)
+  return [...cands].filter((v, i, a) => a.findIndex((x) => sinTildes(x).toLowerCase() === sinTildes(v).toLowerCase()) === i)
 }
 
 export async function evidenciaDe(cita: string, sobre?: string): Promise<Evidencia> {
@@ -101,7 +118,23 @@ export async function evidenciaDe(cita: string, sobre?: string): Promise<Evidenc
         (x) => `- ${x.accion.toUpperCase()}${x.norma ? ` por ${x.norma}${x.anio ? ` de ${x.anio}` : ''}` : ''} — nota literal: «${x.literal}»`,
       )
     }
-    if (sobre) base.pasajes = fragmentos(norma.texto, sobre, 300, 3, 1200).trozos
+    if (sobre) {
+      // La búsqueda es literal y no lematiza: "términos" no casa con
+      // "término", y decir "no aparece en el texto" sería una conclusión
+      // falsa sobre el documento. Se prueban singular y plural y se dice
+      // cuál casó; si ninguno casa, se nombra la cadena exacta buscada.
+      const variantes = variantesDe(sobre)
+      for (const v of variantes) {
+        const f = fragmentos(norma.texto, v, 300, 3, 1200)
+        if (f.total) {
+          base.pasajes = f.trozos
+          base.terminoCasado = v
+          base.variantes = variantes.filter((x) => x !== v)
+          break
+        }
+      }
+      if (!base.pasajes.length) base.variantes = variantes
+    }
   } catch {
     /* el texto es un complemento de la evidencia; sin él, seguimos con lo demás */
   }
@@ -140,8 +173,20 @@ export function formatear(evA: Evidencia, evB: Evidencia, sobre?: string): strin
     if (ev.noEncontrada || ev.ambigua || !ev.parseada) continue
     if (ev.reformas.length) bloques.push('', `${etiqueta} — reformas anotadas en el texto (primeras 5):`, ...ev.reformas)
     if (sobre) {
-      bloques.push('', `${etiqueta} — pasajes que mencionan «${sobre}»:`)
-      bloques.push(...(ev.pasajes.length ? ev.pasajes : [`  «${sobre}» no aparece en el texto.`]))
+      const pedido = `«${sobre}»`
+      const casado = ev.terminoCasado && ev.terminoCasado !== sobre ? ` (casó la variante «${ev.terminoCasado}»)` : ''
+      bloques.push('', `${etiqueta} — pasajes que mencionan ${pedido}${casado}:`)
+      bloques.push(
+        ...(ev.pasajes.length
+          ? ev.pasajes
+          : [
+              `  La cadena exacta ${pedido} no casó en el texto revisado (la búsqueda es literal y no lematiza: ` +
+                `el plural y el singular son cadenas distintas).` +
+                (ev.variantes?.length
+                  ? ` También se probó sin éxito: ${ev.variantes.map((v) => `«${v}»`).join(', ')}. Prueba otras formas de la palabra.`
+                  : ''),
+            ]),
+      )
     }
   }
   bloques.push(

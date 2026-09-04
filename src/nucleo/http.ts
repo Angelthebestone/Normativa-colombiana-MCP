@@ -2,16 +2,17 @@ import { request } from 'node:https'
 import { pipeline } from 'node:stream'
 import { rootCertificates } from 'node:tls'
 import { createGunzip, createInflate } from 'node:zlib'
-import { GLOBALSIGN_OV, SECTIGO_EV, SECTIGO_OV } from './ca.ts'
+import { GLOBALSIGN_OV, GODADDY_G2, SECTIGO_EV, SECTIGO_OV } from './ca.ts'
 
 /**
  * Raíces de Node más los intermedios que funcionpublica.gov.co,
- * suin-juriscol.gov.co y sic.gov.co omiten. La verificación del certificado
- * sigue ACTIVA: solo se completa una cadena que el servidor envía incompleta.
+ * suin-juriscol.gov.co, sic.gov.co y corteconstitucional.gov.co omiten. La
+ * verificación del certificado sigue ACTIVA: solo se completa una cadena que
+ * el servidor envía incompleta.
  * Nunca usar rejectUnauthorized:false — este MCP entrega información legal y
  * la autenticidad de la fuente es parte del producto.
  */
-const CA = [...rootCertificates, SECTIGO_OV, SECTIGO_EV, GLOBALSIGN_OV]
+const CA = [...rootCertificates, SECTIGO_OV, SECTIGO_EV, GLOBALSIGN_OV, GODADDY_G2]
 
 /** Peticiones HTTP salientes y bytes de cuerpo recibidos (solo para el banco de medición). */
 let totalPeticiones = 0

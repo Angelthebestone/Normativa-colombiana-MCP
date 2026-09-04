@@ -9,7 +9,7 @@ Consulta la normativa y la jurisprudencia colombiana desde cualquier asistente d
 Conecta seis fuentes oficiales:
 
 - **Gestor Normativo** del Departamento Administrativo de la Función Pública — leyes, decretos, resoluciones, circulares y conceptos del sector público, con la consulta temática y los *restrictores* que explican por qué cada norma aplica a un tema.
-- **Relatoría de la Corte Constitucional** — 49.000 sentencias y autos, actualizados a diario.
+- **Relatoría de la Corte Constitucional** — 44.839 providencias según su propio índice, con fallos recientes publicados el mismo año.
 - **SUIN-Juriscol** del Ministerio de Justicia — **el estado de vigencia**, que ninguna otra fuente del país publica, y 11.599 leyes de 1844 a 2026, muchas de las cuales el Gestor no tiene.
 - **Corte Suprema de Justicia** — providencias de las salas de Tutelas, Civil, Laboral y Penal, cada una con las normas que cita.
 - **Consejo de Estado** — providencias tituladas de lo contencioso administrativo, con el problema jurídico que la Sala se planteó, su respuesta y el texto completo. Con esta se completan las tres altas cortes, y las tres entregan texto.
@@ -31,9 +31,9 @@ La más sencilla si usas Claude Desktop: no requiere Node ni tocar archivos de c
 
 Claude Desktop trae su propio Node, así que no hace falta instalar nada más.
 
-### Opción B — cualquier otro cliente MCP, desde npm
+### Opción B — cualquier otro cliente MCP, desde npm (recomendada)
 
-Publicado como [`normativa-colombia-mcp`](https://www.npmjs.com/package/normativa-colombia-mcp). Requiere **Node 18 o superior**. No hay que clonar ni compilar nada: el paquete trae el servidor ya construido y el índice temático dentro, y no arrastra ninguna dependencia.
+La forma más sencilla y la que evita errores de rutas: no hay que clonar nada ni apuntar a archivos locales. Requiere **Node 18 o superior**.
 
 ```bash
 # sin instalar nada, la forma habitual en clientes MCP
@@ -115,14 +115,16 @@ npm run build            # genera server/index.js
 
 Después se apunta el cliente a `node /ruta/absoluta/a/Normativa-colombiana-MCP/server/index.js`, con el mismo formato de arriba. Funciona desde cualquier directorio de trabajo.
 
+> Carpeta sin espacios: si la ruta local contiene espacios (p. ej. `C:\Users\…\normativa mcp\server\index.js`), algunos clientes lanzan el comando sin comillas y Node solo ve la primera parte (`C:\Users\…\normativa`) y sale con código 1. Para instalación local, clona en una carpeta sin espacios o usa la Opción B (`npx`), que no tiene este problema.
+
 ### Qué recibe el cliente
 
 Al conectarse, el servidor entrega **26 herramientas**, **5 prompts** y sus **propias instrucciones de uso**: a qué tipo de pregunta corresponde cada herramienta, que debe citarse siempre la fuente y que nunca debe afirmarse por cuenta propia que una norma está vigente. Los clientes que respetan el campo `instructions` del protocolo lo aprovechan sin configurar nada.
 
 | Fuente | Herramientas |
 | --- | --- |
-| Cualquiera (punto de entrada) | `resolver_cita` — cita exacta → norma o sentencia, con su vigencia si consta; acepta lote con `citas` y validación con `validar: true`. `consultar_vigencia` — el estado de vigencia con un nivel de confianza (alta/media/baja). `historial_norma` — la cadena de reformas que el Gestor anota sobre una norma (qué la modificó, adicionó o derogó y qué artículo afectó cada cambio) |
-| Gestor Normativo | `buscar_normas`, `buscar_por_tema`, `obtener_documento` (fuente `gestor`), `listar_catalogos`, `explicar_relacion_tema` |
+| Cualquiera (punto de entrada) | `resolver_cita` — cita exacta → norma o sentencia, con su vigencia si consta; acepta lote con `citas` y validación con `validar: true`. `consultar_vigencia` — el estado de vigencia con un nivel de confianza (alta/media/baja). `historial_norma` — la cadena de reformas que el Gestor anota sobre una norma (qué la modificó, adicionó o derogó y qué artículo afectó cada cambio), filtrable por `articulo` y paginable con `desde`/`limite` |
+| Gestor Normativo | `buscar_normas` (con marca de pertinencia por fila: qué términos menciona cada extracto), `buscar_por_tema`, `obtener_documento` (fuente `gestor`, con `sin_temas` para omitir el bloque de temas), `listar_catalogos`, `explicar_relacion_tema` |
 | Corte Constitucional | `buscar_jurisprudencia`, `obtener_documento` (fuente `corte`) |
 | Corte Suprema | `buscar_jurisprudencia_suprema`, `obtener_documento` (fuente `suprema`) |
 | Consejo de Estado | `buscar_jurisprudencia_consejo_estado`, `obtener_documento` (fuente `consejo`) |
@@ -131,7 +133,7 @@ Al conectarse, el servidor entrega **26 herramientas**, **5 prompts** y sus **pr
 | CREG | `buscar_resoluciones_creg`, `obtener_documento` (fuente `creg`) |
 | ANH / UPME / ANLA | `buscar_normativa_anh`, `buscar_normativa_upme`, `listar_normativa_ambiental_anla` |
 | 14 reguladores sectoriales | `buscar_normativa_sectorial` (entidad: `sic`, `superfinanciera`, `supersalud`, `ant`, `unidadvictimas`…) + `obtener_documento` (fuente `sectorial`) |
-| V2 — jerarquía y conflictos | `consultar_por_jerarquia`, `analizar_conflicto`, `comparar_articulos`, `cambios_desde` |
+| V2 — jerarquía y conflictos | `consultar_por_jerarquia`, `analizar_conflicto` (reúne EVIDENCIA; la búsqueda de tema prueba singular y plural y declara la variante), `comparar_articulos`, `cambios_desde` |
 | V2 — perfiles y expedientes | `consultar_perfil`, `expediente` (acción `crear\|agregar\|leer\|exportar`) |
 | Alcance | `describir_fuentes` — qué cubre cada fuente y qué no, sin consultar la red |
 
@@ -181,16 +183,16 @@ Tres advertencias sobre ese dato, todas comprobadas:
 
 Y la regla de fondo no cambia: **verifica en el enlace antes de actuar.**
 
-**El buscador del Gestor no busca en el texto completo**, solo en los resúmenes temáticos, y une los términos con OR. Su índice de palabras además es muy pobre: «teletrabajo» casa con 3 documentos en todo el portal, y con ninguno de los 43 conceptos que sí están clasificados bajo ese subtema. El servidor compensa de tres formas: quita las palabras vacías antes de consultar, reintenta por el subtema oficial cuando la búsqueda por palabras rinde poco, y busca dentro del articulado en tu computador cuando pides una norma concreta.
+**El buscador del Gestor no busca en el texto completo**, solo en los resúmenes temáticos, y une los términos con OR. Su índice de palabras además es muy pobre: «teletrabajo» casa con 3 documentos en todo el portal, y con ninguno de los 43 conceptos que sí están clasificados bajo ese subtema. El servidor compensa de tres formas: quita las palabras vacías antes de consultar, reintenta por el subtema oficial cuando la búsqueda por palabras rinde poco, y busca dentro del articulado en tu computador cuando pides una norma concreta. Además, cada resultado de `buscar_normas` marca qué términos menciona su extracto y cuáles no, para que un resultado parcial no se lea como totalmente pertinente.
 
 **Ritmo de consulta.** El servidor hace como máximo una petición por segundo sostenida a cada portal, con ráfagas de hasta cinco, y nunca dos a la vez al mismo sitio. Si un portal responde que está limitando las consultas, espera lo que él indique en vez de insistir. Son servicios públicos y conviene que un asistente automático les pese menos que una persona navegando.
 
 **Privacidad.** Cada consulta viaja a servidores del Estado colombiano, que registran las peticiones y tu dirección IP, igual que si navegaras el sitio. No se envía nada a ningún otro servidor, no hay analítica y no se recoge información tuya. Tenlo en cuenta si vas a consultar sobre un asunto propio.
 
-**Datos empaquetados.** Se incluyen dos índices, ambos con fecha de generación:
+**Datos empaquetados.** Se incluyen dos índices, ambos con fecha de generación (2026-08-01):
 
-- El **temático** (12.063 subtemas) responde al instante y sigue sirviendo si el portal se cae. Si supera los tres meses, el servidor te lo advierte.
-- El de **SUIN** (11.599 documentos, de 1844 a 2026) traduce una cita a su documento, porque SUIN no tiene buscador utilizable. La vigencia se consulta en vivo; el índice solo dice dónde mirar. **Cubre leyes, no decretos**: los sitemaps de decretos del portal devuelven 404, así que para un decreto la vigencia normalmente no consta —lo que no significa ni que esté vigente ni que esté derogado.
+- El **temático** (12.063 pares tema/subtema, 56.458 asociaciones norma–subtema) responde al instante y sigue sirviendo si el portal se cae. Si supera los tres meses, el servidor te lo advierte.
+- El de **SUIN** (11.599 leyes, de 1844 a 2026) traduce una cita a su documento, porque SUIN no tiene buscador utilizable. La vigencia se consulta en vivo; el índice solo dice dónde mirar. **Cubre leyes, no decretos**: los sitemaps de decretos del portal devuelven 404, así que para un decreto la vigencia normalmente no consta —lo que no significa ni que esté vigente ni que esté derogado.
 
 **Cobertura de la búsqueda tributaria.** La primera consulta de cada término a la DIAN tarda unos 20 segundos: su portal devuelve el resultado completo y no admite límite. Las páginas siguientes del mismo término son instantáneas, así que conviene paginar en lugar de repetir búsquedas.
 
@@ -242,9 +244,11 @@ Las instrucciones de uso que recibe el modelo están en `INSTRUCCIONES`, en `src
 
 Dos notas para quien vaya a tocar esto:
 
-- **Dos portales envían la cadena TLS incompleta.** `funcionpublica.gov.co` presenta un certificado de «Sectigo RSA Organization Validation» pero manda el intermedio de Domain Validation; `suin-juriscol.gov.co` omite directamente el suyo. `curl` lo tolera porque su bundle ya los trae; Node no. `src/nucleo/ca.ts` incluye ambos intermedios para completar la cadena **sin desactivar la verificación**: las raíces que los firman sí vienen con Node. No lo cambies por `rejectUnauthorized: false`.
+- **Cuatro portales envían la cadena TLS incompleta.** `funcionpublica.gov.co` presenta un certificado de «Sectigo RSA Organization Validation» pero manda el intermedio de Domain Validation; `suin-juriscol.gov.co`, `sic.gov.co` y `www.corteconstitucional.gov.co` (intermedio «Go Daddy Secure Certificate Authority - G2») omiten directamente el suyo. `curl` lo tolera porque su bundle ya los trae; Node no. `src/nucleo/ca.ts` incluye los cuatro intermedios para completar la cadena **sin desactivar la verificación**: las raíces que los firman sí vienen con Node. No lo cambies por `rejectUnauthorized: false`.
 - **Los códigos HTTP mienten en dos fuentes.** El backend de la Corte Suprema responde 200 con una página de mantenimiento ante rutas inventadas, y la relatoría de la Constitucional devuelve el armazón de su SPA en vez de un 404. Por eso los canarios validan la forma de la respuesta y nunca el código de estado.
 - **El canario.** Si el HTML del portal cambia, los parsers lanzan `CanarioError` en vez de devolver listas vacías. Es deliberado: una lista vacía silenciosa se lee como «no existe esa norma», y en materia legal esa confusión es el peor fallo posible.
+- **Un fallo de red nunca se presenta como un vacío.** `buscar_unificado` distingue "respondió sin nada" de "no se pudo consultar: <mensaje>" por fuente; una fuente caída no autoriza a concluir que no hay resultados ahí.
+- **La SIC vive en la sede electrónica.** El repositorio viejo (`www.sic.gov.co/repositorio-de-normatividad`) responde 301 a `sedeelectronica.sic.gov.co/transparencia/normativa/busqueda-de-normas/entidad`; el adaptador apunta directo a la sede porque `pedir` no sigue redirecciones.
 
 ## Contribuir
 

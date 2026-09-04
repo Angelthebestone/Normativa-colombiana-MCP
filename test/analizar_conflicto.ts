@@ -61,5 +61,17 @@ test('las reformas se citan literales, con su nota', () => {
 test('el tema sobre el que se busca se reporta incluso cuando no aparece', () => {
   const t = formatear(a, b, 'teletrabajo')
   assert.ok(t.includes('pasajes que mencionan «teletrabajo»'))
-  assert.ok(t.includes('«teletrabajo» no aparece en el texto.'))
+  assert.ok(t.includes('La cadena exacta «teletrabajo» no casó en el texto revisado'))
+  assert.ok(t.includes('la búsqueda es literal y no lematiza'))
+})
+
+test('el plural casa con el singular: "términos" encuentra "término" y lo declara', () => {
+  // El caso del informe: el Decreto 2591 habla de "término" y se pedía "términos".
+  const conVariante = formatear(
+    evidencia({ pasajes: ['…el término corre…'], terminoCasado: 'término', variantes: ['términos'] }),
+    b,
+    'términos',
+  )
+  assert.ok(conVariante.includes('casó la variante «término»'))
+  assert.ok(conVariante.includes('…el término corre…'))
 })

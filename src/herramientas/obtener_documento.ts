@@ -85,6 +85,10 @@ export const schema = {
     .boolean()
     .optional()
     .describe('Solo gestor: en vez del texto, devuelve los cambios anotados sobre la norma'),
+  sin_temas: z
+    .boolean()
+    .optional()
+    .describe('Solo gestor: omite el bloque de temas asociados (ahorra contexto cuando solo se quiere el articulado)'),
   ruta: z.string().optional().describe('corte/suprema/creg: ruta del documento'),
   seccion: z
     .enum(['antecedentes', 'consideraciones', 'decision'])
@@ -288,14 +292,19 @@ async function gestorDocumento(p: Resueltas, tope: number): Promise<string> {
   const ordenados = aguja ? [...n.temas].sort((a, b) => pertinente(b) - pertinente(a)) : n.temas
   const cuantosTemas = tope < 2000 ? 3 : 10
 
-  const temas = ordenados.length
-    ? `\n\nTemas asociados (${Math.min(10, ordenados.length)} de ${ordenados.length}` +
-      `${aguja ? ', primero los que mencionan lo buscado' : ', sin ordenar por relevancia'}):\n` +
-      ordenados
-        .slice(0, cuantosTemas)
-        .map((t) => `- ${normalizarRotulo(t.tema)} / ${normalizarRotulo(t.subtema)}: ${t.restrictor}`)
-        .join('\n')
-    : ''
+  // El bloque de temas es costoso (en un artículo puntual ocupa varias veces
+  // lo que ocupa el artículo) y casi siempre ruido: se puede omitir.
+  const temas =
+    p.sin_temas || !ordenados.length
+      ? p.sin_temas
+        ? '\n\n(Bloque de temas asociados omitido con sin_temas=true.)'
+        : ''
+      : `\n\nTemas asociados (${Math.min(10, ordenados.length)} de ${ordenados.length}` +
+        `${aguja ? ', primero los que mencionan lo buscado' : ', sin ordenar por relevancia'}):\n` +
+        ordenados
+          .slice(0, cuantosTemas)
+          .map((t) => `- ${normalizarRotulo(t.tema)} / ${normalizarRotulo(t.subtema)}: ${t.restrictor}`)
+          .join('\n')
 
   return (
     `${cab}\n${compiladora ? `\n${avisoCompiladora(n.titulo, n.texto)}\n` : ''}${avisoTexto ? `\n${avisoTexto}\n` : ''}${avisos.length ? `\n${avisos.join('\n')}\n` : ''}` +

@@ -79,7 +79,7 @@ function porFuenteBase(): Record<string, (texto: string, limite: number) => Prom
   }
 }
 
-test('escribir: una fuente que falla (503) no tumba el resto', async () => {
+test('escribir: una fuente que falla (503) se declara como fallo, no como vacío', async () => {
   const porFuente = porFuenteBase()
   porFuente['gestor'] = async () => {
     throw new Error('503')
@@ -87,8 +87,21 @@ test('escribir: una fuente que falla (503) no tumba el resto', async () => {
   porFuente['corte'] = async () => [item('corte-constitucional', 'T-1/24')]
   const r = await escribir({ texto: 'x', limite: 5 }, { porFuente })
   assert.match(r, /T-1\/24/)
-  // Sin perfil no se consulta DIAN, así que el vacío solo lista las consultadas.
-  assert.match(r, /Sin resultados en: gestor, suin/)
+  // La fuente caída se declara aparte con su mensaje: ya no se mezcla con los vacíos.
+  assert.match(r, /No se pudo consultar: gestor \(503\)/)
+  assert.match(r, /es un FALLO de la fuente, no un vacío/)
+  // Sin perfil no se consulta DIAN, así que el vacío solo lista las consultadas que respondieron.
+  assert.match(r, /Sin resultados en: suin/)
+  assert.doesNotMatch(r, /Sin resultados en: gestor/)
+})
+
+test('formatear: distingue "respondió sin nada" de "no se pudo consultar"', () => {
+  const r = { gestor: [], corte: [item('corte', 'T-1/24')], suin: [] }
+  const txt = formatear(r, 'tutela', undefined, { gestor: 'unable to verify the first certificate' })
+  assert.match(txt, /Sin resultados en: suin \(respondieron sin nada\)/)
+  assert.doesNotMatch(txt, /Sin resultados en: gestor/)
+  assert.match(txt, /No se pudo consultar: gestor \(unable to verify the first certificate\)/)
+  assert.match(txt, /no concluyas que no hay resultados ahí/)
 })
 
 test('escribir: una fuente que rinde 0 se reporta como hueco, no como fallo', async () => {

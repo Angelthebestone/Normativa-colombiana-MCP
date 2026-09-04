@@ -57,6 +57,197 @@ const txt = (s: string) => ({
 const vacio = (que: string, sugerencia: string) =>
   txt(`No encontré ${que} en las fuentes consultadas.\n\n${sugerencia}`)
 
+/**
+ * Resuelve UNA cita de `resolver_cita` en texto puro (sin el envoltorio `txt`,
+ * que lo pone quien llama). La ruta individual llama con una sola cita; el
+ * lote itera sobre esta misma función, así que ambas vías resuelven igual.
+ */
+async function resolverUnaCita(cita: string): Promise<string> {
+  const c = parsearCita(cita)
+  if (!c) return `### ${cita}\nNo encontré una cita normativa en "${cita}". Escríbela como "Ley 909 de 2004" o "C-337/11", o usa buscar_normas.`
+
+  // Las sentencias de la Corte se resuelven contra su relatoría, que está al día.
+  if (c.sentencia) {
+    const p = await corte.porSentencia(c.sentencia)
+    if (p) {
+      return [
+        `### ${cita}`,
+        `${p.sentencia} (${p.tipo}) — Corte Constitucional`,
+        `Fecha: ${p.fecha} · Publicación: ${p.publicacion} · Expediente: ${p.expediente}`,
+        p.magistrados.length ? `Magistrados: ${p.magistrados.join(', ')}` : '',
+        p.tema ? `Tema: ${p.tema}` : '',
+        p.sintesis ? `Síntesis: ${p.sintesis}` : '',
+        `Texto completo: usa obtener_documento con fuente="corte" y ruta="${p.ruta}"`,
+        `URL: ${p.url}`,
+      ]
+        .filter(Boolean)
+        .join('\n')
+    }
+  }
+
+  let r = await gestor.buscar({ tipo: idTipo(c.tipo) ?? c.tipo, numero: c.numero, anio: c.anio })
+
+  /**
+   * El tipo escrito casi nunca es el tipo oficial: "Decreto 1567 de 1998" no
+   * existe, pero "Decreto Ley 1567 de 1998" sí. Se reintenta sin filtrar por
+   * tipo, PERO solo se acepta si el tipo oficial contiene al escrito: número y
+   * año no identifican una norma —existen a la vez la Ley 1541 de 2012 y el
+   * Decreto 1541 de 2012—, y devolver el otro sería peor que no encontrar
+   * nada, porque nadie sospecharía del cambio.
+   */
+  let tipoCorregido = ''
+  let otroTipo = ''
+  if (!r.items.length && c.anio) {
+    const sinTipo = await gestor.buscar({ numero: c.numero, anio: c.anio })
+    const real = sinTipo.items[0]?.titulo.match(/^(.+?)\s+\d/)?.[1]?.trim()
+    const escrito = sinTildes(c.tipo).toLowerCase()
+    if (real && new RegExp(`\\b${escrito}\\b`, 'i').test(sinTildes(real).toLowerCase())) {
+      r = sinTipo
+      tipoCorregido = `\nNo existe un «${c.tipo} ${c.numero} de ${c.anio}»; el tipo oficial es «${real}».\n`
+    } else if (real) {
+      // No se corta aquí: la norma puede existir en SUIN aunque el Gestor solo
+      // tenga la homónima de otro tipo. La pista se guarda para el vacío.
+      otroTipo =
+        ` Con ese número y año el Gestor sí tiene «${sinTipo.items[0]!.titulo}», que es de otro tipo: si te referías` +
+        ` a esa, pídela con su tipo exacto.`
+    }
+  }
+
+  if (!r.items.length) {
+    // Que el Gestor no la tenga no significa que no exista: su corpus no
+    // cubre todo el país. Antes de decir "no encontré" —que se lee como "esa
+    // norma no existe"— se pregunta a SUIN, que sí la puede registrar.
+    const v = c.anio ? await suin.vigencia(c.tipo, c.numero, c.anio).catch(() => null) : null
+    if (v) {
+      const arts = indiceArticulos(v.texto)
+      const art = c.articulo ? extraerArticulo(v.texto, c.articulo) : null
+      return (
+        `### ${cita}\n${cita} no está en el Gestor Normativo de Función Pública, pero SUIN-Juriscol sí la publica.\n` +
+        (v.epigrafe ? `${v.epigrafe}\n` : '') +
+        `Estado de vigencia según SUIN (índice del ${v.generado}): ` +
+        `${v.estado || 'SUIN no publica el estado de esta norma'}\n` +
+        `URL: ${v.url}\n` +
+        `Texto: ${v.texto.length} caracteres${arts.length ? `; artículos ${arts.join(', ')}` : ''}.` +
+        (art
+          ? `\n\n--- Artículo ${c.articulo} ---\n${art}\n${advertenciasVigencia(art).join('\n')}`
+          : `\n\nEl articulado no se devuelve entero: pide el artículo que necesitas en la cita ("art. 3 de ${cita}") o abre el enlace.`)
+      )
+    }
+    return (
+      `### ${cita}\nNo encontré la cita "${cita}" en las fuentes consultadas.\n\n` +
+      ((c.anio ? `Prueba sin el año, o verifica el número.` : `Prueba indicando el año.`) + otroTipo)
+    )
+  }
+  /**
+   * Sin año, el número NO identifica una norma. "Decreto 1072" existe en 2025
+   * (tarifas de energía), 2015 (Único Reglamentario del Sector Trabajo), 2004
+   * y 1999, y el Gestor devuelve primero el más reciente. Entregar ese como si
+   * fuera "el" Decreto 1072 es el error caro de esta herramienta: acierta la
+   * forma —es un decreto real con ese número— y falla el fondo, sin que nada
+   * en la respuesta invite a sospecharlo. Se devuelven los candidatos y se
+   * pide el año, igual que ya se hace cuando el tipo no coincide.
+   */
+  if (!c.anio) {
+    const conAnio = r.items
+      .map((i) => ({ i, anio: i.titulo.match(/\bde\s+(\d{4})\b/i)?.[1] ?? '' }))
+      .filter((x) => x.anio)
+    if (new Set(conAnio.map((x) => x.anio)).size > 1) {
+      return (
+        `### ${cita}\nLa cita "${cita}" es ambigua: el Gestor tiene ${conAnio.length} normas con ese tipo y número, de años ` +
+        `distintos. No se elige una por ti.\n\n` +
+        conAnio
+          .sort((a, b) => Number(b.anio) - Number(a.anio))
+          .map(({ i }) => `- ${i.titulo} (id ${i.id})\n  ${i.url}`)
+          .join('\n') +
+        `\n\nRepite la cita con el año ("${c.tipo} ${c.numero} de ${conAnio[0]!.anio}")` +
+        (c.articulo ? `, conservando el artículo ("art. ${c.articulo} de …")` : '') +
+        `. Si no sabes cuál es, díselo a quien pregunta en vez de escoger: el número solo no identifica la norma.`
+      )
+    }
+  }
+
+  const n = r.items[0]!
+  // Idea 11 — el dominio del enlace se comprueba siempre (falla blanda): si
+  // no coincide con el esperado, se avisa en vez de devolver un enlace a ciegas.
+  const dominioOk = validarUrl(n.url, 'funcionpublica.gov.co')
+  const avisoDominio = dominioOk
+    ? ''
+    : `\nAVISO: el enlace devuelto no pertenece al dominio esperado (funcionpublica.gov.co): ${n.url}. Verifícalo antes de citarlo.`
+
+  // La vigencia solo la publica SUIN, y solo si el índice empaquetado tiene
+  // esta norma. Que falte no es un fallo: se calla y sigue mandando la regla
+  // de no afirmar vigencia.
+  // Si la cita vino sin año ("Decreto 1083"), se toma el del título que
+  // resolvió el Gestor: sin esto la vigencia se perdía justo en las citas
+  // cómodas, que son las que la gente escribe.
+  const anio = c.anio ?? n.titulo.match(/\bde\s+(\d{4})\b/i)?.[1]
+  let vig = ''
+  if (anio) {
+    // Tres silencios distintos que antes se veían iguales: que la capacidad no
+    // esté instalada, que la fuente no responda y que la norma no conste en el
+    // índice. Solo el tercero se sigue callando —la regla general ya cubre "no
+    // consta"—; los otros dos son estados del sistema, no respuestas sobre la
+    // norma, y presentarlos como ausencia de dato induce a concluir de más.
+    if (!suin.coberturaIndice()) {
+      vig =
+        `\nEstado de vigencia: NO SE PUEDE CONSULTAR en esta instalación, porque el índice de SUIN no viaja con ` +
+        `ella. Es una capacidad ausente, no un dato negativo: no concluyas nada sobre la vigencia.`
+    } else {
+      try {
+        const v = await suin.vigencia(c.tipo, c.numero, anio)
+        if (v) {
+          vig =
+            `\nEstado de vigencia según SUIN-Juriscol (índice del ${v.generado}): ` +
+            `${v.estado || 'SUIN no publica el estado de esta norma'}\n  ${v.url}`
+        } else {
+          // Callarse aquí era una asimetría: las leyes siempre traían la línea
+          // —aunque fuera para decir que SUIN no respondió— y los decretos la
+          // perdían sin más, que se lee como "el dato no aplica" en vez de "no
+          // se puede saber". El índice de SUIN son casi solo leyes.
+          vig =
+            `\nEstado de vigencia: no consta. El índice de SUIN que viaja aquí son casi solo leyes (los sitemaps ` +
+            `de decretos del portal devuelven 404), así que de esta norma no hay estado que consultar. No ` +
+            `concluyas ni que está vigente ni que está derogada: revísalo en el enlace.`
+        }
+      } catch {
+        // SUIN es un complemento y la cita se resuelve igual, pero que se haya
+        // caído no puede parecerse a que la norma no tenga estado publicado.
+        //
+        // Y hay que nombrar QUÉ se cayó: SUIN vive en dos servidores distintos
+        // —la ficha en www.suin-juriscol.gov.co y el buscador en un índice de
+        // Azure—, y el primero se cae solo. Sin decirlo, ver esta línea junto a
+        // un buscar_en_suin que responde llevaba a la conclusión contraria: que
+        // fallaba el índice empaquetado y funcionaba lo que consulta en vivo.
+        vig =
+          `\nEstado de vigencia: la ficha de SUIN-Juriscol (www.suin-juriscol.gov.co) no respondió en esta ` +
+          `consulta. Vuelve a intentarlo antes de afirmar nada; no es que esta norma carezca de estado. Que ` +
+          `buscar_en_suin sí funcione no lo desmiente: esa herramienta consulta OTRO servidor (el índice de ` +
+          `búsqueda), y no publica el estado de vigencia.`
+      }
+    }
+  }
+
+  let extra = ''
+  if (c.articulo) {
+    const norma = await gestor.obtenerNorma(n.id)
+    const art = extraerArticulo(norma.texto, c.articulo)
+    extra = art
+      ? `\n\n--- Artículo ${c.articulo} ---\n${art}\n${advertenciasVigencia(art).join('\n')}`
+      : `\n\nNo encontré un "artículo ${c.articulo}" en el texto. Usa obtener_documento con fuente="gestor" y buscar_en_texto.`
+  }
+  return (
+    `### ${cita}\n${n.titulo}\n${tipoCorregido}id: ${n.id}\n` +
+    // No es un resumen de la norma: el Gestor no publica uno. Es el extracto
+    // de UN tema al que está asociada, y en normas compiladoras como el
+    // Decreto 1083 describe una porción mínima del contenido.
+    (n.resumen
+      ? `Extracto de un tema asociado (NO resume la norma; usa obtener_documento con fuente="gestor" para su objeto y articulado): ${n.resumen}\n`
+      : '') +
+    (esCompiladora(n.titulo, 0) ? '\nAVISO: esta es una norma compilada que incorpora reformas; para un tema concreto usa obtener_documento con fuente="gestor" y buscar_en_texto.\n' : '') +
+    `URL: ${n.url}${avisoDominio}${vig}${extra}`
+  )
+}
+
 // --- índice temático empaquetado -----------------------------------------
 
 // --- servidor ------------------------------------------------------------
@@ -235,193 +426,27 @@ server.registerTool(
         }),
       )
     }
+    // Lote sin validación: cada cita se resuelve por la misma vía que una
+    // cita individual, con su bloque propio. Un fallo de red de una cita se
+    // anota en su bloque y no tumba a las demás.
+    if (citas?.length) {
+      const bloques: string[] = []
+      for (const una of citas) {
+        try {
+          bloques.push(await resolverUnaCita(una))
+        } catch (e) {
+          bloques.push(
+            `### ${una}\nLa fuente no respondió en esta consulta (${(e as Error).message}). ` +
+              `Vuelve a intentarlo antes de afirmar nada.\nEnlace: (sin enlace)`,
+          )
+        }
+      }
+      return txt(bloques.join('\n\n'))
+    }
     if (!cita) {
       return vacio('una cita normativa', 'Escríbela como "Ley 909 de 2004" o "C-337/11" (y varias a la vez con citas), o usa buscar_normas.')
     }
-    const c = parsearCita(cita)
-    if (!c) return vacio(`una cita normativa en "${cita}"`, 'Escríbela como "Ley 909 de 2004" o "C-337/11", o usa buscar_normas.')
-
-    // Las sentencias de la Corte se resuelven contra su relatoría, que está al día.
-    if (c.sentencia) {
-      const p = await corte.porSentencia(c.sentencia)
-      if (p) {
-        return txt(
-          [
-            `${p.sentencia} (${p.tipo}) — Corte Constitucional`,
-            `Fecha: ${p.fecha} · Publicación: ${p.publicacion} · Expediente: ${p.expediente}`,
-            p.magistrados.length ? `Magistrados: ${p.magistrados.join(', ')}` : '',
-            p.tema ? `Tema: ${p.tema}` : '',
-            p.sintesis ? `Síntesis: ${p.sintesis}` : '',
-            `Texto completo: usa obtener_documento con fuente="corte" y ruta="${p.ruta}"`,
-            `URL: ${p.url}`,
-          ]
-            .filter(Boolean)
-            .join('\n'),
-        )
-      }
-    }
-
-    let r = await gestor.buscar({ tipo: idTipo(c.tipo) ?? c.tipo, numero: c.numero, anio: c.anio })
-
-    /**
-     * El tipo escrito casi nunca es el tipo oficial: "Decreto 1567 de 1998" no
-     * existe, pero "Decreto Ley 1567 de 1998" sí. Se reintenta sin filtrar por
-     * tipo, PERO solo se acepta si el tipo oficial contiene al escrito: número y
-     * año no identifican una norma —existen a la vez la Ley 1541 de 2012 y el
-     * Decreto 1541 de 2012—, y devolver el otro sería peor que no encontrar
-     * nada, porque nadie sospecharía del cambio.
-     */
-    let tipoCorregido = ''
-    let otroTipo = ''
-    if (!r.items.length && c.anio) {
-      const sinTipo = await gestor.buscar({ numero: c.numero, anio: c.anio })
-      const real = sinTipo.items[0]?.titulo.match(/^(.+?)\s+\d/)?.[1]?.trim()
-      const escrito = sinTildes(c.tipo).toLowerCase()
-      if (real && new RegExp(`\\b${escrito}\\b`, 'i').test(sinTildes(real).toLowerCase())) {
-        r = sinTipo
-        tipoCorregido = `\nNo existe un «${c.tipo} ${c.numero} de ${c.anio}»; el tipo oficial es «${real}».\n`
-      } else if (real) {
-        // No se corta aquí: la norma puede existir en SUIN aunque el Gestor solo
-        // tenga la homónima de otro tipo. La pista se guarda para el vacío.
-        otroTipo =
-          ` Con ese número y año el Gestor sí tiene «${sinTipo.items[0]!.titulo}», que es de otro tipo: si te referías` +
-          ` a esa, pídela con su tipo exacto.`
-      }
-    }
-
-    if (!r.items.length) {
-      // Que el Gestor no la tenga no significa que no exista: su corpus no
-      // cubre todo el país. Antes de decir "no encontré" —que se lee como "esa
-      // norma no existe"— se pregunta a SUIN, que sí la puede registrar.
-      const v = c.anio ? await suin.vigencia(c.tipo, c.numero, c.anio).catch(() => null) : null
-      if (v) {
-        const arts = indiceArticulos(v.texto)
-        const art = c.articulo ? extraerArticulo(v.texto, c.articulo) : null
-        return txt(
-          `${cita} no está en el Gestor Normativo de Función Pública, pero SUIN-Juriscol sí la publica.\n` +
-            (v.epigrafe ? `${v.epigrafe}\n` : '') +
-            `Estado de vigencia según SUIN (índice del ${v.generado}): ` +
-            `${v.estado || 'SUIN no publica el estado de esta norma'}\n` +
-            `URL: ${v.url}\n` +
-            `Texto: ${v.texto.length} caracteres${arts.length ? `; artículos ${arts.join(', ')}` : ''}.` +
-            (art
-              ? `\n\n--- Artículo ${c.articulo} ---\n${art}\n${advertenciasVigencia(art).join('\n')}`
-              : `\n\nEl articulado no se devuelve entero: pide el artículo que necesitas en la cita ("art. 3 de ${cita}") o abre el enlace.`),
-        )
-      }
-      return vacio(
-        `la cita "${cita}"`,
-        (c.anio ? `Prueba sin el año, o verifica el número.` : `Prueba indicando el año.`) + otroTipo,
-      )
-    }
-    /**
-     * Sin año, el número NO identifica una norma. "Decreto 1072" existe en 2025
-     * (tarifas de energía), 2015 (Único Reglamentario del Sector Trabajo), 2004
-     * y 1999, y el Gestor devuelve primero el más reciente. Entregar ese como si
-     * fuera "el" Decreto 1072 es el error caro de esta herramienta: acierta la
-     * forma —es un decreto real con ese número— y falla el fondo, sin que nada
-     * en la respuesta invite a sospecharlo. Se devuelven los candidatos y se
-     * pide el año, igual que ya se hace cuando el tipo no coincide.
-     */
-    if (!c.anio) {
-      const conAnio = r.items
-        .map((i) => ({ i, anio: i.titulo.match(/\bde\s+(\d{4})\b/i)?.[1] ?? '' }))
-        .filter((x) => x.anio)
-      if (new Set(conAnio.map((x) => x.anio)).size > 1) {
-        return txt(
-          `La cita "${cita}" es ambigua: el Gestor tiene ${conAnio.length} normas con ese tipo y número, de años ` +
-            `distintos. No se elige una por ti.\n\n` +
-            conAnio
-              .sort((a, b) => Number(b.anio) - Number(a.anio))
-              .map(({ i }) => `- ${i.titulo} (id ${i.id})\n  ${i.url}`)
-              .join('\n') +
-            `\n\nRepite la cita con el año ("${c.tipo} ${c.numero} de ${conAnio[0]!.anio}")` +
-            (c.articulo ? `, conservando el artículo ("art. ${c.articulo} de …")` : '') +
-            `. Si no sabes cuál es, díselo a quien pregunta en vez de escoger: el número solo no identifica la norma.`,
-        )
-      }
-    }
-
-    const n = r.items[0]!
-    // Idea 11 — el dominio del enlace se comprueba siempre (falla blanda): si
-    // no coincide con el esperado, se avisa en vez de devolver un enlace a ciegas.
-    const dominioOk = validarUrl(n.url, 'funcionpublica.gov.co')
-    const avisoDominio = dominioOk
-      ? ''
-      : `\nAVISO: el enlace devuelto no pertenece al dominio esperado (funcionpublica.gov.co): ${n.url}. Verifícalo antes de citarlo.`
-
-    // La vigencia solo la publica SUIN, y solo si el índice empaquetado tiene
-    // esta norma. Que falte no es un fallo: se calla y sigue mandando la regla
-    // de no afirmar vigencia.
-    // Si la cita vino sin año ("Decreto 1083"), se toma el del título que
-    // resolvió el Gestor: sin esto la vigencia se perdía justo en las citas
-    // cómodas, que son las que la gente escribe.
-    const anio = c.anio ?? n.titulo.match(/\bde\s+(\d{4})\b/i)?.[1]
-    let vig = ''
-    if (anio) {
-      // Tres silencios distintos que antes se veían iguales: que la capacidad no
-      // esté instalada, que la fuente no responda y que la norma no conste en el
-      // índice. Solo el tercero se sigue callando —la regla general ya cubre "no
-      // consta"—; los otros dos son estados del sistema, no respuestas sobre la
-      // norma, y presentarlos como ausencia de dato induce a concluir de más.
-      if (!suin.coberturaIndice()) {
-        vig =
-          `\nEstado de vigencia: NO SE PUEDE CONSULTAR en esta instalación, porque el índice de SUIN no viaja con ` +
-          `ella. Es una capacidad ausente, no un dato negativo: no concluyas nada sobre la vigencia.`
-      } else {
-        try {
-          const v = await suin.vigencia(c.tipo, c.numero, anio)
-          if (v) {
-            vig =
-              `\nEstado de vigencia según SUIN-Juriscol (índice del ${v.generado}): ` +
-              `${v.estado || 'SUIN no publica el estado de esta norma'}\n  ${v.url}`
-          } else {
-            // Callarse aquí era una asimetría: las leyes siempre traían la línea
-            // —aunque fuera para decir que SUIN no respondió— y los decretos la
-            // perdían sin más, que se lee como "el dato no aplica" en vez de "no
-            // se puede saber". El índice de SUIN son casi solo leyes.
-            vig =
-              `\nEstado de vigencia: no consta. El índice de SUIN que viaja aquí son casi solo leyes (los sitemaps ` +
-              `de decretos del portal devuelven 404), así que de esta norma no hay estado que consultar. No ` +
-              `concluyas ni que está vigente ni que está derogada: revísalo en el enlace.`
-          }
-        } catch {
-          // SUIN es un complemento y la cita se resuelve igual, pero que se haya
-          // caído no puede parecerse a que la norma no tenga estado publicado.
-          //
-          // Y hay que nombrar QUÉ se cayó: SUIN vive en dos servidores distintos
-          // —la ficha en www.suin-juriscol.gov.co y el buscador en un índice de
-          // Azure—, y el primero se cae solo. Sin decirlo, ver esta línea junto a
-          // un buscar_en_suin que responde llevaba a la conclusión contraria: que
-          // fallaba el índice empaquetado y funcionaba lo que consulta en vivo.
-          vig =
-            `\nEstado de vigencia: la ficha de SUIN-Juriscol (www.suin-juriscol.gov.co) no respondió en esta ` +
-            `consulta. Vuelve a intentarlo antes de afirmar nada; no es que esta norma carezca de estado. Que ` +
-            `buscar_en_suin sí funcione no lo desmiente: esa herramienta consulta OTRO servidor (el índice de ` +
-            `búsqueda), y no publica el estado de vigencia.`
-        }
-      }
-    }
-
-    let extra = ''
-    if (c.articulo) {
-      const norma = await gestor.obtenerNorma(n.id)
-      const art = extraerArticulo(norma.texto, c.articulo)
-      extra = art
-        ? `\n\n--- Artículo ${c.articulo} ---\n${art}\n${advertenciasVigencia(art).join('\n')}`
-        : `\n\nNo encontré un "artículo ${c.articulo}" en el texto. Usa obtener_documento con fuente="gestor" y buscar_en_texto.`
-    }
-    return txt(
-      `${n.titulo}\n${tipoCorregido}id: ${n.id}\n` +
-        // No es un resumen de la norma: el Gestor no publica uno. Es el extracto
-        // de UN tema al que está asociada, y en normas compiladoras como el
-        // Decreto 1083 describe una porción mínima del contenido.
-        (n.resumen
-          ? `Extracto de un tema asociado (NO resume la norma; usa obtener_documento con fuente="gestor" para su objeto y articulado): ${n.resumen}\n`
-          : '') +
-        (esCompiladora(n.titulo, 0) ? '\nAVISO: esta es una norma compilada que incorpora reformas; para un tema concreto usa obtener_documento con fuente="gestor" y buscar_en_texto.\n' : '') +
-        `URL: ${n.url}${avisoDominio}${vig}${extra}`,
-    )
+    return txt(await resolverUnaCita(cita))
   },
 )
 
@@ -522,9 +547,20 @@ server.registerTool(
           ' usa buscar_por_tema.',
       )
     }
-    const lista = r.items
-      .slice(0, limite)
-      .map((i) => `- ${i.titulo} (id ${i.id})\n  Extracto temático: ${i.resumen || '(ninguno)'}\n  ${i.url}`)
+    const mostrados = r.items.slice(0, limite)
+    // El portal une los términos con OR: un resultado puede venir por un solo
+    // término y leerse como igual de pertinente que otro que los trae todos.
+    // Se marca por fila qué términos aparecen de verdad en su extracto.
+    const pertinencia = palabras ? gestor.pertinenciaDe(mostrados, palabras) : undefined
+    const lista = mostrados
+      .map((i) => {
+        const p = pertinencia?.get(i.id)
+        const marca =
+          p && p.omite.length && p.menciona.length
+            ? `\n  Pertinencia: menciona ${p.menciona.map((t) => `"${t}"`).join(', ')}; NO menciona ${p.omite.map((t) => `"${t}"`).join(', ')} en su extracto (el portal une con OR).`
+            : ''
+        return `- ${i.titulo} (id ${i.id})\n  Extracto temático: ${i.resumen || '(ninguno)'}${marca}\n  ${i.url}`
+      })
       .join('\n')
     const mas = r.items.length > limite ? `\n\nSe muestran ${limite} de ${r.items.length} reunidos.` : ''
     return txt(
@@ -687,8 +723,8 @@ server.registerTool(
   {
     title: 'Buscar jurisprudencia de la Corte Constitucional',
     description:
-      'Busca sentencias y autos en la relatoría de la Corte Constitucional (49.409 providencias, ' +
-      'actualizada a diario). Es la herramienta indicada para jurisprudencia constitucional reciente: el ' +
+      'Busca sentencias y autos en la relatoría de la Corte Constitucional (44.839 providencias según su ' +
+      'propio índice, con fallos de 2026 publicados el mismo año). Es la herramienta indicada para jurisprudencia constitucional reciente: el ' +
       'Gestor Normativo tiene muy poca. Devuelve sentencia, tipo, fecha, síntesis y la ruta para ' +
       'obtener_documento con fuente="corte". La relatoría no indexa frases largas: con varias palabras se reintenta con la ' +
       'más distintiva y la respuesta lo anuncia ("se buscó con el núcleo «X»"). Es de la CORTE ' +

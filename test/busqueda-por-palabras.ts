@@ -6,7 +6,7 @@
 import { strict as assert } from 'node:assert'
 import test from 'node:test'
 
-import { contienenTodos, quitarStopwords } from '../src/fuentes/gestor.ts'
+import { contienenTodos, pertinenciaDe, quitarStopwords } from '../src/fuentes/gestor.ts'
 import type { Resultado } from '../src/nucleo/parse.ts'
 import { contienenTodas, type Providencia } from '../src/fuentes/jurisprudencia/consejoestado.ts'
 import { buscarEnIndice, buscarEnSuin, type ResultadoSuin } from '../src/fuentes/suin.ts'
@@ -57,6 +57,17 @@ test('el filtro AND del Gestor compara sin tildes', () => {
   const r = contienenTodos(items, 'administración publica')
   assert.equal(r.items.length, 1)
   assert.equal(r.omitidos, 0)
+})
+
+test('pertinenciaDe marca por fila qué términos menciona el extracto (caso "acoso")', () => {
+  const items = [
+    resultado('Ley 1010 de 2006', 'Por medio de la cual se adoptan medidas para prevenir el acoso laboral'),
+    resultado('Ley 115 de 1994', 'Por la cual se expide la ley general de educación'),
+  ]
+  const m = pertinenciaDe(items, 'acoso ley')
+  assert.deepEqual(m.get(items[0]!.id), { menciona: ['acoso', 'ley'], omite: [] })
+  assert.deepEqual(m.get(items[1]!.id)?.menciona, ['ley'])
+  assert.deepEqual(m.get(items[1]!.id)?.omite, ['acoso'])
 })
 
 test('quitarStopwords descarta "de" en "auxilio de conectividad"', () => {
