@@ -3,7 +3,7 @@
 Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/).
 Este proyecto sigue [versionado semántico](https://semver.org/lang/es/).
 
-## [1.13.0] — 2026-09-04
+## [1.12.1] — 2026-09-04
 
 **Corrección de los 10 puntos del barrido del 2026-09-03: tres afirmaciones falsas eliminadas, dos fuentes recuperadas, los códigos citables por su nombre y el hueco del Código Civil declarado. La instalación recomendada pasa a ser `npx -y normativa-colombia-mcp`, sin rutas locales.**
 
