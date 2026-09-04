@@ -6,6 +6,7 @@
  * tipo+número+año devuelve exactamente un resultado, así que vale la pena
  * detectar la cita y saltarse el buscador.
  */
+import { codigoCitado } from './codigos.ts'
 
 export type Cita = {
   tipo: string
@@ -14,6 +15,8 @@ export type Cita = {
   articulo?: string | undefined
   /** Forma canónica de la Corte Constitucional: C-337/11, T-099/24, SU-123/20. */
   sentencia?: string | undefined
+  /** Nombre del código cuando la cita llegó por su nombre: "Código de Comercio". */
+  codigo?: string | undefined
 }
 
 /** Ids de `tipdoc` en el Gestor, para no depender del catálogo en la ruta rápida. */
@@ -56,7 +59,10 @@ const expandirAnio = (yy: string): string => {
   return String(n >= 50 ? 1900 + n : 2000 + n)
 }
 
-const RE_ARTICULO = /\bart(?:[íi]culo|\.)?\s*([\d]+(?:\.[\d]+)*[A-Za-z]?)/i
+// El guion es parte del número en el Estatuto Tributario ("art. 771-5", la
+// bancarización) y en los códigos con adiciones: quedarse con "771" devolvía
+// otro artículo con toda la apariencia de ser el pedido.
+const RE_ARTICULO = /\bart(?:[íi]culo|\.)?\s*([\d]+(?:[.-][\d]+)*[A-Za-z]?)/i
 // Admite "C-337/11", "C-351 de 2013" y "T-099-24": las tres formas circulan.
 const RE_SENTENCIA = /\b(C|T|SU|A)[\s.-]*(\d{1,4})\s*(?:[/-]|\s+de\s+)\s*(\d{2,4})\b/i
 // El número se toma entero, sin tope de dígitos: con `\d{1,5}` una cita como
@@ -83,6 +89,25 @@ export function parsearCita(texto: string): Cita | null {
   }
 
   const m = texto.match(RE_TIPO_NUM)
+
+  /**
+   * "Art. 191 del Código de Comercio" y "art. 191 del Decreto 410 de 1971" son
+   * la misma cita, y solo la segunda resolvía. Cuando el texto trae las dos
+   * referencias gana la que aparece ANTES: en "art. 217 del Código Civil,
+   * modificado por la Ley 1060 de 2006" se cita el Código, y en "art. 5 de la
+   * Ley 1060 de 2006, que modifica el Código Civil" se cita la ley.
+   */
+  const cod = codigoCitado(texto)
+  if (cod && (!m || m.index === undefined || cod.indice < m.index)) {
+    return {
+      tipo: cod.codigo.tipo,
+      numero: cod.codigo.numero,
+      anio: cod.codigo.anio,
+      articulo: art,
+      codigo: cod.codigo.nombre,
+    }
+  }
+
   if (!m) return null
 
   const tipoTexto = normaliza(m[1]!)

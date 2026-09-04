@@ -205,6 +205,29 @@ export function fragmentos(
   return { total, trozos, pasajes: ventanas.length, mostrados: trozos.length }
 }
 
+/** true si lo que precede a un encabezado lo anuncia como texto citado ("…quedará así:"). */
+const abreBloqueCitado = (previo: string): boolean => previo.trimEnd().endsWith(':')
+
+/**
+ * Números que un encabezado de sustitución anuncia: "Los artículos 217 y 218
+ * del Código Civil quedarán así:" → {217, 218}. Sirve para no cortar el
+ * artículo en medio del bloque que transcribe.
+ */
+// El número de un artículo: 217, 2.2.1.3.1, 771-5, 217A.
+const NUM_ARTICULO = String.raw`[\d.]+(?:-\d+)?[A-Za-z]?`
+const RE_ANUNCIADOS = new RegExp(
+  String.raw`\bart[íi]culos?\s+((?:${NUM_ARTICULO})(?:\s*(?:,|y|e)\s*${NUM_ARTICULO})*)`,
+  'gi',
+)
+const RE_NUM_SUELTO = new RegExp(NUM_ARTICULO, 'g')
+
+function articulosAnunciados(intro: string): Set<string> {
+  const nums = new Set<string>()
+  for (const m of intro.matchAll(RE_ANUNCIADOS))
+    for (const n of m[1]!.match(RE_NUM_SUELTO) ?? []) nums.add(n.replace(/\.$/, ''))
+  return nums
+}
+
 /**
  * Índice de artículos, para que Claude sepa qué pedir sin traerse la norma entera.
  *
@@ -216,26 +239,74 @@ export function fragmentos(
  */
 export function indiceArticulos(texto: string, max = 60): string[] {
   const vistos = new Set<string>()
-  const re = /(?:^|\n)\s*(?:ART[IÍ]CULO|Art[ií]culo)\s+([\d.]+[A-Za-z]?)/g
+  const citados = new Set<string>()
+  const re = new RegExp(String.raw`(?:^|\n)\s*(?:ART[IÍ]CULO|Art[ií]culo)\s+(${NUM_ARTICULO})`, 'g')
   let m: RegExpExecArray | null
-  while ((m = re.exec(texto)) && vistos.size < max) vistos.add(m[1]!.replace(/\.$/, ''))
+  while ((m = re.exec(texto)) && vistos.size < max) {
+    const num = m[1]!.replace(/\.$/, '')
+    // El artículo que una ley modificatoria transcribe NO es un artículo suyo:
+    // en la Ley 1060 de 2006 el "Artículo 217" que sigue a "quedará así:" es
+    // del Código Civil, y listarlo hacía pedir un artículo que la ley no tiene.
+    const previo = texto.slice(Math.max(0, m.index - 300), m.index)
+    if (abreBloqueCitado(previo)) {
+      for (const n of articulosAnunciados(previo)) citados.add(n)
+      continue
+    }
+    if (citados.delete(num)) continue
+    vistos.add(num)
+  }
   return [...vistos]
 }
 
+const RE_ENCABEZADO = new RegExp(String.raw`\n\s*(?:ART[IÍ]CULO|Art[ií]culo)\s+(${NUM_ARTICULO})`)
+
 export function articulo(texto: string, numero: string): string | null {
-  const n = numero.replace(/[^\d.A-Za-z]/g, '').replace(/[.]+$/, '')
+  const n = numero.replace(/[^\d.\-A-Za-z]/g, '').replace(/[.]+$/, '')
   if (!n) return null
   const esc = n.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-  const re = new RegExp(`\\b(?:ART[IÍ]CULO|Art[ií]culo)\\s+${esc}\\b`, 'g')
+  // El cierre no puede ser `\b`: con él, pedir el artículo 771 casaba con el
+  // encabezado de "Artículo 771-5" y se devolvía otro artículo sin avisar.
+  const re = new RegExp(`\\b(?:ART[IÍ]CULO|Art[ií]culo)\\s+${esc}(?![\\d\\-A-Za-z])`, 'g')
   const m = re.exec(texto)
   if (!m) return null
   const desde = m.index + m[0].length
-  // El siguiente artículo tiene que ser un encabezado (inicio de renglón y
-  // seguido de su número). Sin esta exigencia, una referencia cruzada dentro de
-  // una nota —"Artículo 15 Ley 91 de 1989"— cortaba el artículo por la mitad y
-  // se perdían justo las notas de vigencia.
-  const sig = texto.slice(desde).search(/\n\s*(?:ART[IÍ]CULO|Art[ií]culo)\s+[\d]/)
-  return texto.slice(m.index, sig >= 0 ? desde + sig : Math.min(texto.length, m.index + 20000)).trim()
+  const fin = () => texto.slice(m.index, Math.min(texto.length, m.index + 20000)).trim()
+
+  /**
+   * El siguiente artículo tiene que ser un encabezado (inicio de renglón y
+   * seguido de su número). Sin esa exigencia, una referencia cruzada dentro de
+   * una nota —"Artículo 15 Ley 91 de 1989"— cortaba el artículo por la mitad y
+   * se perdían justo las notas de vigencia.
+   *
+   * Y el encabezado no basta: la legislación modificatoria, que en Colombia es
+   * la mayoría, transcribe el artículo que sustituye. "Artículo 5°. El artículo
+   * 217 del Código Civil quedará así:" seguido de "Artículo 217. …" cortaba
+   * justo en los dos puntos y el artículo se devolvía sin su contenido, que era
+   * todo lo que se había pedido. Un encabezado se salta cuando lo anuncian los
+   * dos puntos que lo preceden o cuando su número es de los que la sustitución
+   * declara.
+   */
+  let anunciados: Set<string> | null = null
+  let cursor = desde
+  for (;;) {
+    const enc = RE_ENCABEZADO.exec(texto.slice(cursor))
+    if (!enc) return fin()
+    const abs = cursor + enc.index
+    // Pasado el encabezado entero: avanzar un carácter volvía a encontrar el
+    // mismo, porque `\n\s*` casa también desde el renglón en blanco anterior.
+    cursor = abs + enc[0].length
+    const previo = texto.slice(m.index, abs)
+    if (anunciados === null) anunciados = abreBloqueCitado(previo) ? articulosAnunciados(previo) : new Set()
+    const num = enc[1]!.replace(/\.$/, '')
+    if (abreBloqueCitado(previo) || anunciados.has(num)) {
+      // Cada número anunciado se salta UNA vez: si la ley tuviera un artículo
+      // propio con ese mismo número, saltárselo también se comería un artículo
+      // entero sin que nada lo delatara.
+      anunciados.delete(num)
+      continue
+    }
+    return texto.slice(m.index, abs).trim()
+  }
 }
 
 /**

@@ -187,7 +187,13 @@ export type Vigencia = Ficha & { url: string; generado: string; texto: string }
 /** Los tres estados de la ficha directa, para que quien llama los distinga. */
 export type EstadoFichaDirecta =
   | { ok: true; vigencia: Vigencia }
-  | { ok: false; razon: 'indice-ausente' | 'ficha-caida' | 'no-consta' }
+  | {
+      ok: false
+      razon: 'indice-ausente' | 'ficha-caida' | 'no-consta'
+      /** Qué se vio exactamente ("HTTP 503"): sin esto, una caída del portal y
+       *  un corte del cliente se leen igual y no hay nada que comprobar. */
+      detalle?: string
+    }
 
 const cacheFichaDirecta = new Map<string, { vigencia: Vigencia; ts: number }>()
 const TTL_FICHA_DIRECTA = 30 * 60 * 1000
@@ -240,7 +246,7 @@ export async function fichaDirectaDecreto(
 
   const url = `${BASE}/viewDocument.asp?id=${id}`
   const r2 = await pedirFicha(url, 40_000)
-  if (r2.status !== 200) return { ok: false, razon: 'ficha-caida' }
+  if (r2.status !== 200) return { ok: false, razon: 'ficha-caida', detalle: `HTTP ${r2.status}` }
   const ficha = fichaSuin(r2.cuerpo)
   if (!ficha) return { ok: false, razon: 'no-consta' }
   const vigencia: Vigencia = {

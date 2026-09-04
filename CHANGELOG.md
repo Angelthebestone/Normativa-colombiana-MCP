@@ -3,9 +3,9 @@
 Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/).
 Este proyecto sigue [versionado semántico](https://semver.org/lang/es/).
 
-## [1.13.0] — 2026-09-03
+## [1.12.1] — 2026-09-04
 
-**Corrección de los 9 puntos del barrido del 2026-09-03: tres afirmaciones falsas eliminadas, dos fuentes recuperadas y cuatro mejoras menores. La instalación recomendada pasa a ser `npx -y normativa-colombia-mcp`, sin rutas locales.**
+**Corrección de los 10 puntos del barrido del 2026-09-03: tres afirmaciones falsas eliminadas, dos fuentes recuperadas, los códigos citables por su nombre y el hueco del Código Civil declarado. La instalación recomendada pasa a ser `npx -y normativa-colombia-mcp`, sin rutas locales.**
 
 ### Corregido
 
@@ -14,6 +14,11 @@ Este proyecto sigue [versionado semántico](https://semver.org/lang/es/).
 - **`analizar_conflicto`**: "«términos» no aparece en el texto" era falso cuando el texto decía "término". La búsqueda sigue siendo literal, pero prueba singular y plural, declara qué variante casó y, si ninguna casa, nombra la cadena exacta buscada en vez de concluir ausencia.
 - **Relatoría de la Corte Constitucional (TLS)**: `www.corteconstitucional.gov.co` presenta su hoja sin el intermedio "Go Daddy Secure Certificate Authority - G2" y Node respondía "unable to verify the first certificate". Se añadió el intermedio (`GODADDY_G2` en `ca.ts`, bajado de la extensión AIA del propio certificado) a la cadena de `pedir()`; la verificación sigue activa. Recuperadas `buscar_jurisprudencia` y `obtener_documento` con fuente `corte`.
 - **SIC (301)**: el repositorio se mudó a la sede electrónica (`sedeelectronica.sic.gov.co/transparencia/normativa/busqueda-de-normas/entidad`) y el dominio viejo responde 301 a la sede. Se apunta directo a la sede, con sus filtros (`combine`, `field_clasificacion2_target_id`, `field_clasificacion5_target_id`, `field_tipo_acto_target_id`, `field_fecha_publicacion_value`, `page`) y su marcado de tarjetas `.normas--row`; el número y la fecha se extraen del título y la descripción cuando los traen.
+- **Los códigos se citan por su nombre**: `art. 191 del Código de Comercio` fallaba y `art. 191 del Decreto 410 de 1971` funcionaba, siendo la misma cita. `src/nucleo/codigos.ts` traduce diez códigos —Civil, Comercio, Sustantivo del Trabajo, Procesal del Trabajo, Penal, Procedimiento Penal, General del Proceso, CPACA, Infancia y Adolescencia y Estatuto Tributario— y sus siglas (CST, CGP, CPP, CPACA). La respuesta declara contra qué norma resolvió. Con las dos referencias en la misma frase gana la que aparece antes: en «art. 217 del Código Civil, modificado por la Ley 1060 de 2006» se cita el Código, y en «art. 5 de la Ley 1060 de 2006, que modifica el Código Civil» se cita la ley.
+- **El Código Civil se declara ausente, no inexistente**: la Ley 84 de 1873 no está ni en el Gestor ni en el índice de SUIN, y «no encontré la cita» se leía como que la norma no existe. Ahora `resolver_cita` nombra la ausencia y lo que arrastra (acción reivindicatoria, responsabilidad civil, filiación, divorcio, prescripción ordinaria), y `describir_fuentes` la incluye en lo NO cubierto, que es donde se mira antes de concluir que algo no existe.
+- **Las leyes modificatorias ya no se leen truncas**: `art. 5 de la Ley 1060 de 2006` devolvía «El artículo 217 del Código Civil quedará así:» y nada más, porque el extractor cortaba en el encabezado del artículo transcrito. El corte ahora salta los encabezados que la propia sustitución anuncia (uno o varios) y el índice de artículos deja de ofrecer como propios los que la ley solo transcribe.
+- **El guion es parte del número del artículo**: pedir el `771-5` del Estatuto Tributario (bancarización) devolvía el artículo 771, que es otro, con toda la apariencia de ser el pedido.
+- **La ficha de SUIN dice por qué no respondió**: quince consultas seguidas informaron «no respondió» sin distinguir el corte de 8 s del cliente de un HTTP de error o del portal caído. El motivo literal viaja ahora en `resolver_cita` y en `consultar_vigencia`, que es lo que permite comprobarlo.
 
 ### Añadido
 
@@ -25,6 +30,7 @@ Este proyecto sigue [versionado semántico](https://semver.org/lang/es/).
 ### Verificado
 
 - `tsc --noEmit`, `oxlint` (0 avisos), `npm test` 140/140, `test/e2e` 43/43, `test:red` (gestor, tribunales, v2, lote) y `smoke` en verde contra las fuentes reales.
+- Los cinco arreglos del 2026-09-04 (códigos por su nombre, ausencia del Código Civil, sustitución de artículos, guion en el número y motivo de la ficha SUIN) se comprobaron con `tsc --noEmit`, `oxlint`, `SIN_RED=1 npm test` (157 pruebas, 0 fallos; 14 nuevas en `test/codigos.ts` y `test/articulo-sustitucion.ts`) y `SIN_RED=1 npm run test:e2e`. **Sin red contra los portales**: el entorno donde se escribieron bloquea la salida a funcionpublica.gov.co, suin-juriscol.gov.co y corteconstitucional.gov.co, así que la parte que depende de la respuesta real de las fuentes —que el Gestor devuelva vacío para la Ley 84 de 1873 y que el texto del portal tenga la forma reproducida en las pruebas— queda por reconfirmar con `npm run test:red` desde una máquina con acceso.
 - Bundle `server/index.js` ~2,3 MB, `npm audit` 0 vulnerabilidades. 26 herramientas declaradas.
 
 ## [1.12.0] — 2026-08-11
