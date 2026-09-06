@@ -15,6 +15,9 @@ GOAL.md
 # no documentación del proyecto (los cambios que piden viven en CHANGELOG.md).
 INFORME-FALLOS-*.md
 
+# Encargos a subagentes: prompts de trabajo, no documentación del proyecto.
+ENCARGO-*.md
+
 # datos/ SÍ se versiona: es lo que npm empaqueta, y sin ello un clon limpio no
 # pasa las pruebas (se comprobó: dos e2e fallan). Además el índice de SUIN
 # cuesta 45 min de peticiones a un servicio público; regenerarlo en cada clon
@@ -35,3 +38,7 @@ AGENTS.md
 .medidas/  
 command-code-session-6a9ce306.jsonl
 command-code-session-6a9ce306.md
+
+# El plugin de Cowork para abogados vive aquí mientras se desarrolla, pero se
+# publica en su propio repositorio: no es parte del servidor MCP.
+plugin/
