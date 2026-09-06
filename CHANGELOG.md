@@ -3,6 +3,40 @@
 Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/).
 Este proyecto sigue [versionado semántico](https://semver.org/lang/es/).
 
+## [1.13.0] — 2026-09-05
+
+**Esta versión es también la primera que llega a npm con los arreglos de la 1.12.1**, que **ni se etiquetó ni se publicó**: no existe una etiqueta `v1.12.1` en el repositorio y `npm view normativa-colombia-mcp version` devolvía `1.12.0`. Por eso una instalación por `npx` seguía fallando contra la relatoría de la Corte Constitucional con "unable to verify the first certificate": el intermedio `GODADDY_G2` estaba en el repo y no en el paquete.
+
+**`resolver_cita` deja de repetirse: varios artículos de la misma norma en una llamada, el extracto de tema una sola vez por norma, y el lote validado corrige el tipo igual que la consulta individual.**
+
+### Añadido
+
+- **`articulos` en `resolver_cita`**: varios artículos de la MISMA norma en una sola llamada (`cita: "Decreto Ley 624 de 1989", articulos: ["705","707","710","714","720","732"]`). La norma se resuelve y se descarga **una vez**, la ficha y el bloque de vigencia salen **una vez**, y después va un bloque por artículo en el orden pedido, con las advertencias de vigencia que ya calculaba `advertenciasVigencia`. Un artículo que no aparezca se marca en su propio bloque y no aborta los demás. Si la cita ya trae artículo y además se pasa `articulos`, gana `articulos` y la respuesta dice que se ignoró el de la cita. Con `citas` (lote) no se sabe a qué norma aplicarlo, así que se ignora **diciéndolo**, no en silencio.
+- **`contexto` en `resolver_cita`**: con `contexto: false` se omite el extracto de tema asociado y queda la identificación, la vigencia y el texto pedido. El hueco se declara —"(Extracto de tema asociado omitido con contexto=false; vuelve con contexto=true.)"—, mismo criterio que `sin_temas` en `obtener_documento`: callarlo se lee como que la norma no tiene tema asociado.
+
+  No se implementó la caché de cinco minutos que se consideró para lo mismo: haría que la misma llamada devolviera cosas distintas según cuándo se hizo, y eso rompe la reproducibilidad de las pruebas de red y de una respuesta copiada hace un rato. El parámetro explícito da el mismo ahorro y es determinista.
+
+### Corregido
+
+- **El extracto de tema asociado no se repite dentro de una respuesta**: un lote de `citas` de la misma norma lo emitía íntegro en cada bloque (en el Estatuto Tributario, unas 90 palabras por bloque). Ahora sale una vez por norma y los bloques siguientes lo dicen en una línea. Es deduplicación por respuesta, sin estado entre llamadas.
+- **El lote con `validar: true` ya corrige el tipo de la norma**: `citas: ["Decreto 624 de 1989"], validar: true` respondía "no fue posible validar" mientras `cita: "Decreto Ley 624 de 1989"` devolvía el id 6533. La rama normal reintentaba sin filtrar por tipo y aceptaba el resultado solo si el tipo oficial contiene al escrito; `validarCita` no lo hacía. Esa lógica se extrajo a `buscarCorrigiendoTipo()` en `src/herramientas/validar_cita.ts` —y no en `src/index.ts`, donde nació, porque `index.ts` ya importa ese módulo y al revés sería un ciclo de imports— y ahora la usan las dos vías. La validación anuncia la corrección: "No existe un «decreto 624 de 1989»; el tipo oficial es «Decreto Ley»".
+
+### Verificado
+
+Medido contra las fuentes reales el 2026-09-05, con un script fuera del repo que arranca el servidor por stdio y lee los contadores de red de `redResumen()` en la telemetría de stderr:
+
+| Caso | Caracteres | Peticiones HTTP | Bytes de cuerpo |
+|---|---|---|---|
+| 6 llamadas sueltas (`art. N del Decreto Ley 624 de 1989`) | 14.344 | 13 | 12.656.560 |
+| `articulos` con los 6 artículos | 7.396 | **2** | 2.108.880 |
+| lo mismo con `contexto: false` | 6.658 | 2 | 2.108.880 |
+| `citas: ["Decreto 624 de 1989"], validar: true` | 486 | 2 | 1.401 |
+
+- **Una sola descarga de la norma**: las 2 peticiones de la llamada con `articulos` son la búsqueda en el Gestor y `norma.php?i=6533`. Los 2.108.880 bytes son exactamente una sexta parte de los 12.656.560 de las seis llamadas sueltas, que bajaban seis veces el mismo documento. En la respuesta, `id:` aparece 1 vez, `Estado de vigencia` 1 vez y `--- Artículo` 6 veces.
+- **Coste del extracto**: 7.396 caracteres con `contexto: true` frente a 6.658 con `contexto: false` (−738, un 10,0 %) sobre una respuesta con seis artículos; frente a las seis llamadas sueltas la respuesta entera baja de 14.344 a 7.396 caracteres (−48,4 %), porque ahí lo que se repetía seis veces era la ficha, el enlace, la vigencia y el extracto.
+- `npm run typecheck`, `npm run lint` (0 avisos), `npm test`, `npm run test:e2e` 42/43 (1 saltada: SUIN-Juriscol no respondía ese día) y `node --test test/lote-resolver.ts` 9/9, con seis casos nuevos: `articulos` con tres artículos, uno inexistente entre dos válidos, `articulos` ganando al artículo de la cita, `contexto: false`, el extracto no repetido en el lote, y el lote validado sobre "Decreto 624 de 1989".
+- Sin relación con este cambio: `test/smoke.ts` falla el caso de la ANH por tiempo de espera agotado contra su portal (40 s).
+
 ## [1.12.1] — 2026-09-04
 
 **Corrección de los 10 puntos del barrido del 2026-09-03: tres afirmaciones falsas eliminadas, dos fuentes recuperadas, los códigos citables por su nombre y el hueco del Código Civil declarado. La instalación recomendada pasa a ser `npx -y normativa-colombia-mcp`, sin rutas locales.**

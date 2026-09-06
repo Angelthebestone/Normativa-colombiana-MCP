@@ -1,7 +1,8 @@
 import { z } from 'zod'
 
-import { idTipo, parsearCita, candidatosAmbiguos } from '../nucleo/citas.ts'
+import { idTipo, parsearCita, candidatosAmbiguos, type Cita } from '../nucleo/citas.ts'
 import { clasificarValidacion, validarArticulo, validarNumeroAnio, validarUrl } from '../nucleo/evidencia.ts'
+import { sinTildes } from '../nucleo/parse.ts'
 import * as gestor from '../fuentes/gestor.ts'
 
 export const TITULO = 'Validar una cita y su enlace'
@@ -37,12 +38,51 @@ export function formatear(
   resultado: string,
   comprobaciones: { nombre: string; ok: boolean }[],
   encontrada?: { titulo: string; url: string },
+  nota?: string,
 ): string {
   const lineas = comprobaciones.map((c) => `- ${c.nombre}: ${c.ok ? '✓' : '✗'}`)
   const cuerpo = encontrada
     ? [encontrada.titulo, encontrada.url]
     : ['Que no aparezca NO significa que la norma no exista; pruébala en SUIN con resolver_cita.']
-  return [`Resultado: ${resultado}`, ...lineas, ...cuerpo].join('\n')
+  return [`Resultado: ${resultado}`, ...lineas, ...(nota ? [nota] : []), ...cuerpo].join('\n')
+}
+
+/**
+ * Busca en el Gestor corrigiendo el tipo escrito, que casi nunca es el oficial:
+ * «Decreto 1567 de 1998» no existe, pero «Decreto Ley 1567 de 1998» sí. Se
+ * reintenta sin filtrar por tipo, PERO solo se acepta si el tipo oficial
+ * contiene al escrito: número y año no identifican una norma —existen a la vez
+ * la Ley 1541 de 2012 y el Decreto 1541 de 2012—, y devolver el otro sería peor
+ * que no encontrar nada, porque nadie sospecharía del cambio.
+ *
+ * Nació dentro de `resolverUnaCita` en index.ts y se mudó aquí porque index.ts
+ * ya importa este módulo: dejarla allí y llamarla desde aquí sería un ciclo de
+ * imports. Compartirla es justo el arreglo: sin ella el lote con validar=true
+ * respondía «no fue posible validar» a «Decreto 624 de 1989» mientras la
+ * consulta individual devolvía el id 6533.
+ */
+export async function buscarCorrigiendoTipo(
+  c: Cita,
+  buscar: typeof gestor.buscar = gestor.buscar,
+): Promise<{
+  r: Awaited<ReturnType<typeof gestor.buscar>>
+  /** Tipo oficial cuando el escrito se quedó corto; vacío si no hubo corrección. */
+  tipoOficial: string
+  /** Norma homónima de OTRO tipo que sí tiene el Gestor; pista para explicar el vacío. */
+  otroTitulo: string
+}> {
+  const r = await buscar({ tipo: idTipo(c.tipo) ?? c.tipo, numero: c.numero, anio: c.anio })
+  if (r.items.length || !c.anio) return { r, tipoOficial: '', otroTitulo: '' }
+
+  const sinTipo = await buscar({ numero: c.numero, anio: c.anio })
+  const real = sinTipo.items[0]?.titulo.match(/^(.+?)\s+\d/)?.[1]?.trim()
+  if (!real) return { r, tipoOficial: '', otroTitulo: '' }
+  if (new RegExp(`\\b${sinTildes(c.tipo).toLowerCase()}\\b`, 'i').test(sinTildes(real).toLowerCase())) {
+    return { r: sinTipo, tipoOficial: real, otroTitulo: '' }
+  }
+  // No se corta aquí: la norma puede existir en SUIN aunque el Gestor solo
+  // tenga la homónima de otro tipo. La pista se guarda para el vacío.
+  return { r, tipoOficial: '', otroTitulo: sinTipo.items[0]!.titulo }
 }
 
 /**
@@ -62,7 +102,7 @@ export async function resolverUna(
   if (aviso) return aviso
 
   const c = parsearCita(cita)!
-  const r = await buscar({ tipo: idTipo(c.tipo) ?? c.tipo, numero: c.numero, anio: c.anio })
+  const { r, tipoOficial } = await buscarCorrigiendoTipo(c, buscar)
   const item = r.items[0]
   if (!item) {
     return 'No fue posible validar: la cita no se encontró en el Gestor Normativo. Que no aparezca NO significa que la norma no exista; pruébala en SUIN con resolver_cita.'
@@ -96,7 +136,10 @@ export async function resolverUna(
     const norma = await obtenerNorma(item.id)
     comprobaciones.push({ nombre: 'artículo', ok: validarArticulo(norma.texto, c.articulo) })
   }
-  return formatear(cita, clasificarValidacion(comprobaciones), comprobaciones, { titulo: item.titulo, url: item.url })
+  // La corrección de tipo se anuncia: la cita se validó contra otra forma de
+  // escribirla, y quien la use en un escrito debe escribir la oficial.
+  const nota = tipoOficial ? `No existe un «${c.tipo} ${c.numero} de ${c.anio}»; el tipo oficial es «${tipoOficial}».` : ''
+  return formatear(cita, clasificarValidacion(comprobaciones), comprobaciones, { titulo: item.titulo, url: item.url }, nota)
 }
 
 /**

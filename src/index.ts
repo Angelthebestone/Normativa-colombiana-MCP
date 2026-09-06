@@ -2,7 +2,7 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { z } from 'zod'
 
-import { idTipo, parsearCita } from './nucleo/citas.ts'
+import { parsearCita } from './nucleo/citas.ts'
 import { codigoDe, codigosAusentes, referencia as refCodigo } from './nucleo/codigos.ts'
 import { cargarIndice, temaDelIndice, frescura } from './nucleo/indice.ts'
 import { normalizarEntidad, NO_EN_GESTOR } from './nucleo/entidades.ts'
@@ -58,14 +58,52 @@ const txt = (s: string) => ({
 const vacio = (que: string, sugerencia: string) =>
   txt(`No encontré ${que} en las fuentes consultadas.\n\n${sugerencia}`)
 
+type OpcionesCita = {
+  /** Artículos de la MISMA norma: se resuelve y se descarga una vez, y se extrae cada uno. */
+  articulos?: string[] | undefined
+  /** Con false se omite el extracto de tema asociado, que es lo más caro de la respuesta. */
+  contexto?: boolean | undefined
+  /**
+   * Ids de norma cuyo extracto ya salió en ESTA respuesta. Un lote de citas de
+   * la misma norma repetía el mismo extracto en cada bloque —en el Estatuto
+   * Tributario son unas 90 palabras cada vez—; se emite una vez y las demás lo
+   * dicen en una línea. Es deduplicación por respuesta, sin estado entre
+   * llamadas: una caché haría que la misma llamada devolviera cosas distintas.
+   */
+  yaConExtracto?: Set<string> | undefined
+}
+
+/**
+ * Bloque de UN artículo con sus advertencias de vigencia, o el aviso de que no
+ * aparece. La ruta de artículo único y la de `articulos` comparten esta función
+ * porque el formato tiene que ser idéntico, y porque un artículo que falte se
+ * marca en su propio bloque sin abortar los demás.
+ */
+function bloqueArticulo(texto: string, numero: string): string {
+  const art = extraerArticulo(texto, numero)
+  return art
+    ? `\n\n--- Artículo ${numero} ---\n${art}\n${advertenciasVigencia(art).join('\n')}`
+    : `\n\nNo encontré un "artículo ${numero}" en el texto. Usa obtener_documento con fuente="gestor" y buscar_en_texto.`
+}
+
 /**
  * Resuelve UNA cita de `resolver_cita` en texto puro (sin el envoltorio `txt`,
  * que lo pone quien llama). La ruta individual llama con una sola cita; el
  * lote itera sobre esta misma función, así que ambas vías resuelven igual.
  */
-async function resolverUnaCita(cita: string): Promise<string> {
+async function resolverUnaCita(cita: string, opciones: OpcionesCita = {}): Promise<string> {
   const c = parsearCita(cita)
   if (!c) return `### ${cita}\nNo encontré una cita normativa en "${cita}". Escríbela como "Ley 909 de 2004", "art. 191 del Código de Comercio" o "C-337/11", o usa buscar_normas.`
+
+  /**
+   * `articulos` manda sobre el artículo escrito en la cita, y se anuncia:
+   * callarlo sería contestar a otra pregunta con el mismo aire de certeza.
+   */
+  const pedidos = opciones.articulos?.length ? opciones.articulos : c.articulo ? [c.articulo] : []
+  const articuloIgnorado =
+    opciones.articulos?.length && c.articulo
+      ? `Se ignoró el "artículo ${c.articulo}" de la cita: manda el parámetro articulos (${opciones.articulos.join(', ')}).\n`
+      : ''
 
   /**
    * Nadie cita "Decreto 410 de 1971": cita el Código de Comercio. Cuando la
@@ -99,33 +137,17 @@ async function resolverUnaCita(cita: string): Promise<string> {
     }
   }
 
-  let r = await gestor.buscar({ tipo: idTipo(c.tipo) ?? c.tipo, numero: c.numero, anio: c.anio })
-
-  /**
-   * El tipo escrito casi nunca es el tipo oficial: "Decreto 1567 de 1998" no
-   * existe, pero "Decreto Ley 1567 de 1998" sí. Se reintenta sin filtrar por
-   * tipo, PERO solo se acepta si el tipo oficial contiene al escrito: número y
-   * año no identifican una norma —existen a la vez la Ley 1541 de 2012 y el
-   * Decreto 1541 de 2012—, y devolver el otro sería peor que no encontrar
-   * nada, porque nadie sospecharía del cambio.
-   */
-  let tipoCorregido = ''
-  let otroTipo = ''
-  if (!r.items.length && c.anio) {
-    const sinTipo = await gestor.buscar({ numero: c.numero, anio: c.anio })
-    const real = sinTipo.items[0]?.titulo.match(/^(.+?)\s+\d/)?.[1]?.trim()
-    const escrito = sinTildes(c.tipo).toLowerCase()
-    if (real && new RegExp(`\\b${escrito}\\b`, 'i').test(sinTildes(real).toLowerCase())) {
-      r = sinTipo
-      tipoCorregido = `\nNo existe un «${c.tipo} ${c.numero} de ${c.anio}»; el tipo oficial es «${real}».\n`
-    } else if (real) {
-      // No se corta aquí: la norma puede existir en SUIN aunque el Gestor solo
-      // tenga la homónima de otro tipo. La pista se guarda para el vacío.
-      otroTipo =
-        ` Con ese número y año el Gestor sí tiene «${sinTipo.items[0]!.titulo}», que es de otro tipo: si te referías` +
-        ` a esa, pídela con su tipo exacto.`
-    }
-  }
+  // La corrección del tipo escrito vive en validar_cita.ts para que el lote con
+  // validar=true la aplique también: allí no se hacía, y devolvía "no fue
+  // posible validar" para citas que esta ruta resolvía sin problema.
+  const { r, tipoOficial, otroTitulo } = await validarCita.buscarCorrigiendoTipo(c)
+  const tipoCorregido = tipoOficial
+    ? `\nNo existe un «${c.tipo} ${c.numero} de ${c.anio}»; el tipo oficial es «${tipoOficial}».\n`
+    : ''
+  const otroTipo = otroTitulo
+    ? ` Con ese número y año el Gestor sí tiene «${otroTitulo}», que es de otro tipo: si te referías` +
+      ` a esa, pídela con su tipo exacto.`
+    : ''
 
   if (!r.items.length) {
     // Que el Gestor no la tenga no significa que no exista: su corpus no
@@ -134,16 +156,15 @@ async function resolverUnaCita(cita: string): Promise<string> {
     const v = c.anio ? await suin.vigencia(c.tipo, c.numero, c.anio).catch(() => null) : null
     if (v) {
       const arts = indiceArticulos(v.texto)
-      const art = c.articulo ? extraerArticulo(v.texto, c.articulo) : null
       return (
-        `### ${cita}${equivalencia}\n${cita} no está en el Gestor Normativo de Función Pública, pero SUIN-Juriscol sí la publica.\n` +
+        `### ${cita}${equivalencia}\n${articuloIgnorado}${cita} no está en el Gestor Normativo de Función Pública, pero SUIN-Juriscol sí la publica.\n` +
         (v.epigrafe ? `${v.epigrafe}\n` : '') +
         `Estado de vigencia según SUIN (índice del ${v.generado}): ` +
         `${v.estado || 'SUIN no publica el estado de esta norma'}\n` +
         `URL: ${v.url}\n` +
         `Texto: ${v.texto.length} caracteres${arts.length ? `; artículos ${arts.join(', ')}` : ''}.` +
-        (art
-          ? `\n\n--- Artículo ${c.articulo} ---\n${art}\n${advertenciasVigencia(art).join('\n')}`
+        (pedidos.length
+          ? pedidos.map((num) => bloqueArticulo(v.texto, num)).join('')
           : `\n\nEl articulado no se devuelve entero: pide el artículo que necesitas en la cita ("art. 3 de ${cita}") o abre el enlace.`)
       )
     }
@@ -151,7 +172,7 @@ async function resolverUnaCita(cita: string): Promise<string> {
     // norma, y repetirla dos veces distrae de lo único que importa aquí.
     if (ausente) return `### ${cita}\n${ausente}`
     return (
-      `### ${cita}${equivalencia}\nNo encontré la cita "${cita}" en las fuentes consultadas.\n\n` +
+      `### ${cita}${equivalencia}\n${articuloIgnorado}No encontré la cita "${cita}" en las fuentes consultadas.\n\n` +
       ((c.anio ? `Prueba sin el año, o verifica el número.` : `Prueba indicando el año.`) + otroTipo)
     )
   }
@@ -249,22 +270,32 @@ async function resolverUnaCita(cita: string): Promise<string> {
     }
   }
 
+  // La norma se descarga UNA vez, cualesquiera que sean los artículos pedidos:
+  // seis llamadas separadas bajaban seis veces el mismo documento y repetían
+  // seis veces la ficha y el bloque de vigencia.
   let extra = ''
-  if (c.articulo) {
+  if (pedidos.length) {
     const norma = await gestor.obtenerNorma(n.id)
-    const art = extraerArticulo(norma.texto, c.articulo)
-    extra = art
-      ? `\n\n--- Artículo ${c.articulo} ---\n${art}\n${advertenciasVigencia(art).join('\n')}`
-      : `\n\nNo encontré un "artículo ${c.articulo}" en el texto. Usa obtener_documento con fuente="gestor" y buscar_en_texto.`
+    extra = pedidos.map((num) => bloqueArticulo(norma.texto, num)).join('')
   }
+  // No es un resumen de la norma: el Gestor no publica uno. Es el extracto de
+  // UN tema al que está asociada, y en normas compiladoras como el Decreto 1083
+  // describe una porción mínima del contenido. Sale una sola vez por norma y
+  // por respuesta; cuando se omite se dice con qué parámetro vuelve, porque
+  // callarlo se lee como que la norma no tiene tema asociado (mismo criterio
+  // que sin_temas en obtener_documento).
+  const repetido = opciones.yaConExtracto?.has(String(n.id)) ?? false
+  opciones.yaConExtracto?.add(String(n.id))
+  const contextoTema = !n.resumen
+    ? ''
+    : opciones.contexto === false
+      ? '(Extracto de tema asociado omitido con contexto=false; vuelve con contexto=true.)\n'
+      : repetido
+        ? '(Extracto de tema asociado ya emitido más arriba para esta misma norma.)\n'
+        : `Extracto de un tema asociado (NO resume la norma; usa obtener_documento con fuente="gestor" para su objeto y articulado): ${n.resumen}\n`
   return (
-    `### ${cita}${equivalencia}\n${n.titulo}\n${tipoCorregido}id: ${n.id}\n` +
-    // No es un resumen de la norma: el Gestor no publica uno. Es el extracto
-    // de UN tema al que está asociada, y en normas compiladoras como el
-    // Decreto 1083 describe una porción mínima del contenido.
-    (n.resumen
-      ? `Extracto de un tema asociado (NO resume la norma; usa obtener_documento con fuente="gestor" para su objeto y articulado): ${n.resumen}\n`
-      : '') +
+    `### ${cita}${equivalencia}\n${articuloIgnorado}${n.titulo}\n${tipoCorregido}id: ${n.id}\n` +
+    contextoTema +
     (esCompiladora(n.titulo, 0) ? '\nAVISO: esta es una norma compilada que incorpora reformas; para un tema concreto usa obtener_documento con fuente="gestor" y buscar_en_texto.\n' : '') +
     `URL: ${n.url}${avisoDominio}${vig}${extra}`
   )
@@ -422,7 +453,9 @@ server.registerTool(
       'evita el buscador por palabras, que es impreciso. Los CÓDIGOS se citan por su nombre ("art. 191 del ' +
       'Código de Comercio", "art. 83 del Código Penal", "art. 164 del CPACA"): la respuesta dice contra qué ' +
       'norma se resolvió. Acepta también un LOTE de citas con el parámetro ' +
-      'citas (["Ley 909 de 2004", "C-337/11"]), que resuelve cada una con su enlace en una sola llamada.',
+      'citas (["Ley 909 de 2004", "C-337/11"]), que resuelve cada una con su enlace en una sola llamada. ' +
+      'Para VARIOS ARTÍCULOS de la MISMA norma usa articulos (["705", "707", "710"]) con cita apuntando a la ' +
+      'norma: se descarga una sola vez y la ficha no se repite.',
     inputSchema: {
       cita: z
         .string()
@@ -432,6 +465,21 @@ server.registerTool(
         .array(z.string())
         .optional()
         .describe('Varias citas a la vez, ej. ["Ley 909 de 2004", "C-337/11"]: cada una se resuelve y se devuelve con su enlace'),
+      articulos: z
+        .array(z.string())
+        .optional()
+        .describe(
+          'Varios artículos de la MISMA norma en una sola llamada, ej. ["705", "707", "710"]. Se usa con cita ' +
+            'apuntando a la norma ("Decreto Ley 624 de 1989"); la norma se descarga una vez y se extrae cada artículo.',
+        ),
+      contexto: z
+        .boolean()
+        .optional()
+        .describe(
+          'Por defecto true. Con false se omite el extracto de tema asociado y se devuelve solo la ' +
+            'identificación, la vigencia y el texto pedido. Útil cuando ya se conoce la norma y solo se ' +
+            'quiere el articulado.',
+        ),
       validar: z
         .boolean()
         .optional()
@@ -443,7 +491,7 @@ server.registerTool(
       url: z.string().optional().describe('Enlace a comprobar (solo con validar=true)'),
     },
   },
-  async ({ cita, citas, validar, url }) => {
+  async ({ cita, citas, articulos, contexto, validar, url }) => {
     if (validar) {
       return txt(
         await validarCita.escribir({
@@ -457,10 +505,13 @@ server.registerTool(
     // cita individual, con su bloque propio. Un fallo de red de una cita se
     // anota en su bloque y no tumba a las demás.
     if (citas?.length) {
+      // El extracto de tema sale una vez por norma en toda la respuesta: un
+      // lote de citas de la misma norma lo repetía íntegro en cada bloque.
+      const yaConExtracto = new Set<string>()
       const bloques: string[] = []
       for (const una of citas) {
         try {
-          bloques.push(await resolverUnaCita(una))
+          bloques.push(await resolverUnaCita(una, { contexto, yaConExtracto }))
         } catch (e) {
           bloques.push(
             `### ${una}\nLa fuente no respondió en esta consulta (${(e as Error).message}). ` +
@@ -468,7 +519,13 @@ server.registerTool(
           )
         }
       }
-      return txt(bloques.join('\n\n'))
+      // `articulos` es de UNA norma: con un lote no se sabe a cuál aplicarlo, y
+      // dejarlo caer en silencio contestaría a otra pregunta.
+      const sobrante = articulos?.length
+        ? `articulos (${articulos.join(', ')}) se ignoró: es para varios artículos de UNA norma, no para un lote. ` +
+          `Pídelos con cita apuntando a la norma.\n\n`
+        : ''
+      return txt(sobrante + bloques.join('\n\n'))
     }
     if (!cita) {
       return vacio(
@@ -476,7 +533,7 @@ server.registerTool(
         'Escríbela como "Ley 909 de 2004", "art. 191 del Código de Comercio" o "C-337/11" (y varias a la vez con citas), o usa buscar_normas.',
       )
     }
-    return txt(await resolverUnaCita(cita))
+    return txt(await resolverUnaCita(cita, { articulos, contexto }))
   },
 )
 
