@@ -31,3 +31,14 @@ openspec/
 graphify-out/
 # Banco de mediciones locales: no es parte del producto.
 .medidas/
+# El plugin de Cowork para abogados se desarrolla aquí pero se publica en su
+# propio repositorio: no es parte del servidor MCP ni de la extensión. Sin esta
+# línea se colaban 71 ficheros y la extensión pasaba de 6 a 8,5 MB.
+plugin/
+# Material de trabajo que .gitignore ya excluía y aquí se había quedado sin
+# excluir: la extensión los estaba publicando. Los transcripts de Command Code
+# son 2 MB de sesión interna en un artefacto que se descarga de un release.
+AGENTS.md
+ENCARGO-*.md
+INFORME-FALLOS-*.md
+command-code-session-*
