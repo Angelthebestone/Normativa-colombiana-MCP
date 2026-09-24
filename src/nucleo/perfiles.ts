@@ -23,6 +23,11 @@ export type Perfil = {
   id: string
   nombre: string
   sector: string
+  /**
+   * La fuente que consulta, con la clave de la línea de alcance. Con ella el
+   * perfil declara qué consultó, y desaparece si el operador apaga esa fuente.
+   */
+  fuente: string
   /** Qué NO cubre la fuente o a qué induce a error. Se emite siempre. */
   advertencia: string
   /** Devuelve el resultado ya formateado en líneas, no objetos. */
@@ -92,6 +97,7 @@ const LABORAL: Perfil = {
   id: 'laboral',
   nombre: 'Normativa laboral',
   sector: 'Derecho laboral y seguridad social',
+  fuente: 'gestor',
   advertencia: 'El Gestor no publica vigencia; para el estado de una norma usa resolver_cita.',
   consultar: consultarLaboral,
 }
@@ -100,6 +106,7 @@ const TRIBUTARIO: Perfil = {
   id: 'tributario',
   nombre: 'Normativa tributaria',
   sector: 'Tributario, aduanero y cambiario (DIAN)',
+  fuente: 'dian',
   advertencia: 'La primera búsqueda de la DIAN tarda unos 20 s: el buscador devuelve el catálogo completo.',
   consultar: consultarTributario,
 }
@@ -108,6 +115,7 @@ const AMBIENTAL: Perfil = {
   id: 'ambiental',
   nombre: 'Licenciamiento ambiental',
   sector: 'Licenciamiento y normativa ambiental (ANLA)',
+  fuente: 'anla',
   advertencia: 'Eureka clasifica la normativa nacional por temas; no es normativa propia de la ANLA.',
   consultar: consultarAmbiental,
 }
@@ -116,6 +124,7 @@ const CONTRATACION_ESTATAL: Perfil = {
   id: 'contratacion_estatal',
   nombre: 'Contratación estatal',
   sector: 'Contratación estatal (Consejo de Estado y Gestor)',
+  fuente: 'consejo',
   advertencia: 'Los tokens de SAMAI caducan en una hora: cita por radicado, no por enlace.',
   consultar: consultarContratacion,
 }
@@ -124,6 +133,7 @@ const ENERGIA: Perfil = {
   id: 'energia',
   nombre: 'Energía y gas',
   sector: 'Energía y gas (CREG, UPME, ANH)',
+  fuente: 'creg',
   advertencia: 'El estado (vigente/derogada) es según la compilación de la CREG, no un campo de vigencia.',
   consultar: consultarEnergia,
 }

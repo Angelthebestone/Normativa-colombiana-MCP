@@ -16,14 +16,42 @@ export const SERVIDOR = fileURLToPath(new URL('../server/index.js', import.meta.
 export const CONTRATO = { timeout: 30_000 }
 export const LENTO = { timeout: 240_000, skip: process.env['SIN_RED'] ? 'requiere red (SIN_RED=1)' : false }
 
+/** Una línea del log de uso que el servidor escribe en stderr por cada llamada. */
+export type LineaDeUso = {
+  herramienta: string
+  ms: number
+  ok: boolean
+  /** Peticiones HTTP acumuladas por el proceso hasta terminar esta llamada. */
+  peticiones: number
+  bytes: number
+  error?: string
+}
+
 export class Cliente {
   private proc: ChildProcessWithoutNullStreams
   private buffer = ''
+  private errBuffer = ''
+  private usos: LineaDeUso[] = []
   private siguiente = 1
   private pendientes = new Map<number, { ok: (v: any) => void; fallo: (e: Error) => void }>()
 
   constructor() {
     this.proc = spawn(process.execPath, [SERVIDOR], { stdio: ['pipe', 'pipe', 'pipe'] })
+    this.proc.stderr.on('data', (d: Buffer) => {
+      this.errBuffer += d.toString('utf8')
+      let corte: number
+      while ((corte = this.errBuffer.indexOf('\n')) !== -1) {
+        const linea = this.errBuffer.slice(0, corte).trim()
+        this.errBuffer = this.errBuffer.slice(corte + 1)
+        if (!linea) continue
+        try {
+          const o = JSON.parse(linea) as LineaDeUso
+          if (o && typeof o.herramienta === 'string') this.usos.push(o)
+        } catch {
+          /* el stderr del server no es solo este log: se ignora lo que no parsea */
+        }
+      }
+    })
     // Sin unref, el runner de node:test espera a que el child cierre su stdio
     // al salir y se cuelga aunque los tests hayan terminado.
     this.proc.unref()
@@ -59,6 +87,27 @@ export class Cliente {
   async tool(name: string, args: Record<string, unknown> = {}): Promise<{ texto: string; esError: boolean }> {
     const r = await this.peticion('tools/call', { name, arguments: args })
     return { texto: r.content?.[0]?.text ?? '', esError: r.isError === true }
+  }
+
+  /**
+   * Peticiones HTTP que el servidor gastó en la última llamada a `nombre`.
+   * El contador es acumulado del proceso; la diferencia entre el valor anterior
+   * y el de esa llamada es lo que costó de verdad. Sirve para lo que no se ve
+   * en la respuesta: si un error de uso llegó a la red.
+   */
+  ultimoUso(nombre: string): LineaDeUso | undefined {
+    return [...this.usos].reverse().find((u) => u.herramienta === nombre)
+  }
+
+  /**
+   * Peticiones HTTP acumuladas por el proceso hasta la última llamada terminada.
+   * El contador es del proceso entero, así que la única forma correcta de medir
+   * lo que costó UNA llamada es diferenciar contra el valor de antes: quedarse
+   * con `ultimoUso(tool).peticiones` da el total acumulado la primera vez que se
+   * usa esa herramienta, y eso convierte una resta en una suma.
+   */
+  peticionesAcumuladas(): number {
+    return this.usos[this.usos.length - 1]?.peticiones ?? 0
   }
 
   cerrar(): void {

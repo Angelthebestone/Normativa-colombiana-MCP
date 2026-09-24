@@ -6,70 +6,142 @@
  * tienen, y por eso hasta ahora ninguna respuesta podía decir si una norma
  * sigue vigente.
  *
- * No tiene buscador utilizable —su Solr no resuelve ni por nombre ni por IP—,
- * así que la norma se localiza contra un índice empaquetado que se genera con
- * scripts/generar-indice-suin.ts. Sin índice, esta fuente simplemente no opina.
+ * El portal se rehízo entre el 2026-09-16 y el 2026-09-24 (medido): hasta el 16
+ * respondía 301 a todo; desde entonces `www.suin-juriscol.gov.co` es una SPA de
+ * Angular que sirve la MISMA página vacía de 4.758 bytes a cualquier ruta,
+ * `viewDocument.asp?id=` incluida, así que la ficha HTML con sus
+ * `<span field="…">` ya no existe. Lo que hay ahora:
+ *
+ * - La FICHA sale del índice de Elasticsearch que consulta el buscador nuevo
+ *   (`lexis.minjusticia.gov.co/elasticsearch/documents_stg`), público y sin
+ *   clave: 64.792 decretos y 11.094 leyes con `tipo`, `subtipo`, `numero`,
+ *   `anio`, `epigrafe` y `estado`. Ese `estado` ES el campo de la ficha vieja:
+ *   la Ley 74 de 1923 da "Derogado" (la ficha decía DEROGADO; el índice de Azure
+ *   dice "Vigencia en Estudio") y la Ley 1541 de 2012 "Vigencia en Estudio" (el
+ *   campo de la ficha, no la prosa "Vigente"). Y trae decretos, que el índice
+ *   empaquetado casi no tenía: la vigencia de un decreto deja de ser "no consta".
+ * - Ese índice LLEGA HASTA 2020: el año más alto con documentos es 2020 (737), y
+ *   la Ley 2124 de 2021 o la 2281 de 2023 no están. Una norma posterior sale
+ *   "no consta" diciendo por qué; no se corta por año en el código, para que el
+ *   día que carguen lo reciente se lea sin tocar nada.
+ * - El TEXTO no se puede leer desde fuera: el visor nuevo lo pide a
+ *   `http://192.168.8.64:10015` y los enlaces del buscador apuntan a
+ *   `http://192.168.8.145/viewDocument.asp`, direcciones de red privada. Medido
+ *   con un navegador: la página carga, la petición del texto no termina y el
+ *   cuerpo queda con 0 caracteres. Se devuelve la ficha y se dice que el texto
+ *   no está al alcance.
  */
 import { readFileSync } from 'node:fs'
-import { CanarioError, cargar, limpiarTermino, sinTildes, textoDe } from '../nucleo/parse.ts'
-import { pedir } from '../nucleo/http.ts'
+import { CanarioError, limpiarTermino, sinTildes } from '../nucleo/parse.ts'
+import { pedir, pedirJson } from '../nucleo/http.ts'
 import { esStopword } from '../nucleo/stopwords.ts'
 
-const BASE = 'https://www.suin-juriscol.gov.co'
+/**
+ * Dirección pública del documento: la clásica de SUIN, con el id que el propio
+ * buscador nuevo usa en sus enlaces (`visualizacion`). Hoy sirve la SPA vacía,
+ * pero es el identificador con el que el documento se cita y el único enlace
+ * público: el del portal nuevo apunta a una dirección privada.
+ */
+export const enlaceSuin = (id: string | number): string => `https://www.suin-juriscol.gov.co/viewDocument.asp?id=${id}`
+
+/** El año más alto con documentos en el índice de fichas (medido el 2026-09-24). */
+const ULTIMO_ANIO_INDICE = 2020
+
+/** Lo que se dice cuando haría falta el texto de un documento de SUIN. */
+export const TEXTO_NO_PUBLICO =
+  'SUIN-Juriscol no sirve hoy el texto de sus documentos fuera de la red del Ministerio de Justicia (medido el ' +
+  '2026-09-24: su visor lo pide a una dirección privada y la página queda en blanco), así que el articulado no ' +
+  'se puede leer ni aquí ni en el enlace.'
 
 export const claveSuin = (tipo: string, numero: string, anio: string): string =>
   `${tipo.toLowerCase()} ${Number(numero)} ${anio}`
 
-export type Ficha = { tipo: string; numero: string; anio: string; epigrafe: string; estado: string }
+/**
+ * Metadatos de un documento de SUIN. El estado se devuelve literal, sin
+ * reducirlo a un booleano: SUIN distingue "Vigente", "Derogado", "Vigencia en
+ * Estudio", "Compilado"…, y un sí/no inventaría una certeza que la fuente no da.
+ *
+ * `id` es el de `visualizacion`, que es el id clásico de SUIN (el de
+ * `viewDocument.asp?id=` y el del índice empaquetado): el `id` del índice nuevo
+ * es otro y difiere en uno para 619 leyes (Ley 1945 de 2019: 30036079 frente a
+ * 30036080).
+ */
+export type Ficha = {
+  id: string
+  tipo: string
+  subtipo: string
+  numero: string
+  anio: string
+  epigrafe: string
+  estado: string
+  url: string
+}
+
+/** El índice de fichas del buscador nuevo de SUIN. */
+const FICHAS = 'https://lexis.minjusticia.gov.co/elasticsearch/documents_stg/_search'
+
+/** La forma que se espera del índice; `fichasDe` comprueba lo que usa. */
+export type RespuestaFichas = {
+  hits?: {
+    hits?: {
+      /** Solo en consultas ordenadas: lo usa la paginación del generador del índice. */
+      sort?: number[]
+      _source?: {
+        id?: number | string
+        visualizacion?: number | string | null
+        tipo?: string | null
+        subtipo?: string | null
+        numero?: string | null
+        anio?: string | null
+        epigrafe?: string | null
+        estado?: string | null
+      }
+    }[]
+  }
+}
 
 /**
- * Metadatos del documento, leídos del bloque oculto de `<span field="…">` que
- * SUIN incrusta al principio de cada página (45 campos, entre ellos `tipo`,
- * `numero`, `anio`, `epigrafe` y `estado_documento`).
- *
- * Se lee de ahí y no de la prosa por dos razones medidas: la etiqueta visible
- * "ESTADO DE VIGENCIA" falta en documentos antiguos que sí traen el campo —la
- * Ley 74 de 1923 está DEROGADA y no la muestra—, y donde aparecen los dos se
- * contradicen: en la Ley 1541 de 2012 la prosa dice "Vigente" y el campo dice
- * "Vigencia en Estudio". El campo es el dato; la prosa es su maquetación.
- *
- * El estado se devuelve literal, sin reducirlo a un booleano: SUIN distingue
- * "Vigente", "DEROGADO" y "Vigencia en Estudio", y un sí/no inventaría una
- * certeza que la fuente no da.
+ * Las fichas de una respuesta del índice. Una respuesta sin la lista de
+ * resultados es el portal cambiado, no una norma inexistente: se lanza el
+ * canario para que se note en vez de leerse como "no consta".
  */
-export function fichaSuin(html: string): Ficha | null {
-  const campos: Record<string, string> = {}
-  for (const m of html.matchAll(/<span field="([^"]+)">([\s\S]*?)<\/span>/g)) {
-    campos[m[1]!] = m[2]!.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim()
-  }
-  const { tipo, numero, anio } = campos
-  if (!tipo || !numero || !anio) return null
-  return {
-    tipo: tipo.toUpperCase(),
-    numero: numero.replace(/\D/g, ''),
-    anio,
-    epigrafe: campos['epigrafe'] ?? '',
-    estado: campos['estado_documento'] ?? '',
-  }
+export function fichasDe(json: RespuestaFichas | null | undefined): Ficha[] {
+  const hits = json?.hits?.hits
+  if (!Array.isArray(hits)) throw new CanarioError('el índice de fichas de SUIN no trae hits.hits')
+  return hits
+    .map((h) => h._source ?? {})
+    .filter((d) => (d.visualizacion ?? d.id) != null && d.tipo && d.numero && d.anio)
+    .map((d) => {
+      const id = String(d.visualizacion ?? d.id)
+      return {
+        id,
+        tipo: String(d.tipo).toUpperCase(),
+        subtipo: String(d.subtipo ?? '').toUpperCase(),
+        numero: String(d.numero),
+        anio: String(d.anio),
+        epigrafe: (d.epigrafe ?? '').replace(/\s+/g, ' ').trim(),
+        estado: (d.estado ?? '').trim(),
+        url: enlaceSuin(id),
+      }
+    })
 }
 
 // --- buscador (Azure Cognitive Search) ------------------------------------
 
 /**
- * SUIN no tiene buscador propio, pero su front nuevo consulta un índice de
- * Azure Cognitive Search: 56.832 documentos —no solo leyes— con epígrafe,
- * sector, materia y entidad emisora. Es lo único que permite explorar SUIN por
- * materia, porque el índice empaquetado solo sabe traducir una cita a un id.
+ * El índice de Azure Cognitive Search que consultaba el front anterior de SUIN:
+ * 56.832 documentos con epígrafe, sector, materia y entidad emisora. Sigue
+ * respondiendo (medido el 2026-09-24) y es lo que permite explorar SUIN por
+ * materia; el índice empaquetado solo sabe traducir una cita a un id.
  *
- * DOS LÍMITES MEDIDOS, y por eso esto NO sustituye a `vigencia()`:
+ * DOS LÍMITES MEDIDOS, y por eso esto NO sustituye a `ficha()`:
  *
- * 1. Su campo `vigencia` contradice a la ficha del documento. La Ley 74 de 1923
- *    (id 1622206) aparece aquí como "Vigencia en Estudio" y su ficha dice
- *    DEROGADO. Además solo 82 de 56.832 figuran derogadas (0,14%), cifra
- *    increíble para un corpus que arranca en 1844: parece el estado de la carga
+ * 1. Su campo `vigencia` contradice a la ficha. La Ley 74 de 1923 (id 1622206)
+ *    aparece aquí como "Vigencia en Estudio" y su ficha dice "Derogado". Solo
+ *    82 de 56.832 figuran derogadas (0,14%): parece el estado de la carga
  *    inicial, no el actual. Se devuelve rotulado como dato del buscador.
  * 2. No sirve para resolver citas: "LEY 909 DE 2004" devuelve cero resultados.
- *    Para eso está resolver_cita con el índice.
+ *    Para eso está `ficha()`.
  *
  * ponytail: la api-key es la que el propio sitio sirve a cualquier visitante en
  * js/buscador.js, y es de solo consulta. Si la rotan, esta búsqueda deja de
@@ -146,13 +218,18 @@ export async function buscar(opts: {
       epigrafe: (d.epigrafe ?? '').replace(/\s+/g, ' ').trim(),
       vigencia: (d.vigencia ?? []).join(', '),
       entidad: d.entidad_emisora ?? '',
-      url: `${BASE}/viewDocument.asp?id=${d.ID ?? ''}`,
+      url: enlaceSuin(d.ID ?? ''),
     })),
   }
 }
 
 // --- índice empaquetado ---------------------------------------------------
 
+/**
+ * Mapa "ley 909 2004" → id, generado con scripts/generar-indice-suin.ts. Ya no
+ * hace falta para la vigencia —la ficha se pide por tipo, número y año—; queda
+ * para `buscarEnIndice`, que resuelve una cita escrita como texto sin red.
+ */
 type Indice = { generado: string; normas: Record<string, string> }
 let indice: Indice | null | undefined
 
@@ -168,120 +245,105 @@ function cargarIndice(): Indice | null {
       /* siguiente ubicación */
     }
   }
-  indice = null // sin índice no hay vigencia; no es un fallo, es una capacidad ausente
+  indice = null
   return indice
 }
 
-/**
- * Qué cubre el índice empaquetado, para poder declararlo en vez de prometerlo.
- * `null` cuando el índice no viaja con la instalación: entonces esta fuente no
- * opina, y eso hay que poder decirlo también.
- */
+/** Qué cubre el índice empaquetado, para poder declararlo en vez de prometerlo. */
 export function coberturaIndice(): { generado: string; leyes: number } | null {
   const idx = cargarIndice()
   return idx ? { generado: idx.generado, leyes: Object.keys(idx.normas).length } : null
 }
 
-export type Vigencia = Ficha & { url: string; generado: string; texto: string }
+// --- ficha por identidad ------------------------------------------------------
 
-/** Los tres estados de la ficha directa, para que quien llama los distinga. */
-export type EstadoFichaDirecta =
-  | { ok: true; vigencia: Vigencia }
+/** Los estados de la ficha, para que quien llama los distinga. */
+export type EstadoFicha =
+  | { ok: true; ficha: Ficha }
   | {
       ok: false
-      razon: 'indice-ausente' | 'ficha-caida' | 'no-consta'
-      /** Qué se vio exactamente ("HTTP 503"): sin esto, una caída del portal y
-       *  un corte del cliente se leen igual y no hay nada que comprobar. */
+      razon: 'ficha-caida' | 'no-consta'
+      /** Qué se vio exactamente: sin esto, una caída del portal y un corte del
+       *  cliente se leen igual y no hay nada que comprobar. */
       detalle?: string
     }
 
-const cacheFichaDirecta = new Map<string, { vigencia: Vigencia; ts: number }>()
-const TTL_FICHA_DIRECTA = 30 * 60 * 1000
+const cacheFichas = new Map<string, { ficha: Ficha; ts: number }>()
+const TTL_FICHA = 30 * 60 * 1000
+
+/** Mayúsculas sin tildes y con los espacios colapsados. */
+const normalizaTipo = (s: string): string => sinTildes(s).toUpperCase().replace(/\s+/g, ' ').trim()
+
+/** "01235" y "1235" son el mismo número. */
+const sinCeros = (n: string): string => (/^\d+$/.test(n) ? String(Number(n)) : n)
 
 /**
- * Ficha SUIN de un DECRETO por la vía directa, sin índice: se resuelve el id
- * con el buscador de Azure filtrado por título exacto y se pide la ficha. Es
- * la ruta que cierra el hueco "todo decreto = no consta" sin reindexar.
+ * ¿Esta ficha ES la norma pedida? Número y año exactos, y el tipo pedido tiene
+ * que ser el tipo de la ficha o su subtipo. Con el portal viejo, "Decreto 1235
+ * de 2023" devolvía primero "DECRETO 1235 DE 1952": acertar la forma y fallar
+ * el fondo. El índice ya filtra por número y año, pero se vuelve a comprobar
+ * aquí porque es lo único que separa una vigencia real de una ajena.
  *
- * Devuelve un estado explícito en vez de `null` a secas: índice ausente, ficha
- * caída y norma no cubierta son tres cosas distintas y la respuesta tiene que
- * poder decirlas. El resultado se cachea 30 min por clave `tipo|numero|anio`.
- *
- * `buscar` y `pedir` son inyectables para poder probar los tres estados sin
- * red; en producción usan el buscador y el transporte reales.
+ * "Decreto" casa con un DECRETO de subtipo DECRETO LEY: en Colombia los decretos
+ * de un año comparten una sola numeración, así que son el mismo documento. Al
+ * revés no: "Ley" no casa con un DECRETO LEY.
  */
-export async function fichaDirectaDecreto(
-  tipo: string,
-  numero: string,
-  anio: string,
-  deps: {
-    buscar?: typeof buscar
-    pedir?: typeof pedir
-  } = {},
-): Promise<EstadoFichaDirecta> {
-  const buscarDecreto = deps.buscar ?? buscar
-  const pedirFicha = deps.pedir ?? pedir
-
-  const idx = cargarIndice()
-  if (!idx) return { ok: false, razon: 'indice-ausente' }
-
-  const clave = claveSuin(tipo, numero, anio)
-  // Un decreto que SÍ está en el índice ya lo cubre `vigencia()`: aquí solo
-  // entran los que el índice no trae.
-  if (idx.normas[clave]) return { ok: false, razon: 'no-consta' }
-
-  const cache = cacheFichaDirecta.get(clave)
-  if (cache && Date.now() - cache.ts < TTL_FICHA_DIRECTA) {
-    return { ok: true, vigencia: cache.vigencia }
-  }
-
-  const q = `${tipo} ${numero} de ${anio}`
-  const r = await buscarDecreto({ texto: q, limite: 5 })
-  const item = r.items.find((d) => d.titulo && /^Decreto/i.test(d.titulo))
-  if (!item || !/^https:\/\/www\.suin-juriscol\.gov\.co\/viewDocument\.asp\?id=\d+$/.test(item.url)) {
-    return { ok: false, razon: 'no-consta' }
-  }
-  const id = item.url.match(/id=(\d+)/)?.[1]
-  if (!id) return { ok: false, razon: 'no-consta' }
-
-  const url = `${BASE}/viewDocument.asp?id=${id}`
-  const r2 = await pedirFicha(url, 40_000)
-  if (r2.status !== 200) return { ok: false, razon: 'ficha-caida', detalle: `HTTP ${r2.status}` }
-  const ficha = fichaSuin(r2.cuerpo)
-  if (!ficha) return { ok: false, razon: 'no-consta' }
-  const vigencia: Vigencia = {
-    ...ficha,
-    url,
-    generado: idx.generado,
-    texto: textoDe(cargar(r2.cuerpo), 'body'),
-  }
-  cacheFichaDirecta.set(clave, { vigencia, ts: Date.now() })
-  return { ok: true, vigencia }
+export function esLaPedida(f: Ficha, tipo: string, numero: string, anio: string): boolean {
+  const pedido = normalizaTipo(tipo)
+  const tipoOk = pedido === f.tipo || pedido === normalizaTipo(f.subtipo) || pedido.startsWith(`${f.tipo} `)
+  return tipoOk && sinCeros(f.numero) === sinCeros(numero) && f.anio === anio
 }
 
 /**
- * Ficha de SUIN para una norma, o `null` si el índice no la tiene. Si SUIN no
- * publica el estado, `estado` viene vacío y la norma se informa igual: callarla
- * entera por un campo ausente equivaldría a decir que no existe.
+ * La ficha de SUIN de una norma por su tipo, número y año, con el estado de
+ * vigencia que publica. Cualquier tipo: leyes, decretos, actos legislativos.
+ *
+ * Tres estados y no un `null`: la ficha, "no consta" (SUIN no tiene esa norma)
+ * y "ficha caída" (no se pudo preguntar), porque los dos últimos se leen igual
+ * si no se separan y solo el primero es un dato. Se cachea 30 min por norma.
+ *
+ * `pedirJson` es inyectable para probar los tres estados sin red.
  */
-export async function vigencia(tipo: string, numero: string, anio: string): Promise<Vigencia | null> {
-  const idx = cargarIndice()
-  const id = idx?.normas[claveSuin(tipo, numero, anio)]
-  if (!idx || !id) return null
+export async function ficha(
+  tipo: string,
+  numero: string,
+  anio: string,
+  deps: { pedirJson?: (url: string, cuerpo: unknown) => Promise<RespuestaFichas> } = {},
+): Promise<EstadoFicha> {
+  const clave = claveSuin(tipo, numero, anio)
+  const cache = cacheFichas.get(clave)
+  if (cache && Date.now() - cache.ts < TTL_FICHA) return { ok: true, ficha: cache.ficha }
 
-  const url = `${BASE}/viewDocument.asp?id=${id}`
-  // La ficha es un complemento de la respuesta, no la respuesta: un SUIN sano
-  // la sirve en menos de dos segundos, y cuando el portal está caído el
-  // ETIMEDOUT del SO tardaba ~21 s en fallar, colgando resolver_cita entera.
-  // Con 8 s se corta antes sin perder el caso normal.
-  const r = await pedir(url, 8_000)
-  if (r.status !== 200) return null
-  const ficha = fichaSuin(r.cuerpo)
-  if (!ficha) return null
-  // La página trae el articulado completo además de la ficha, así que se
-  // devuelve: ya está descargado y es lo único que hay cuando el Gestor no tiene
-  // la norma.
-  return { ...ficha, url, generado: idx.generado, texto: textoDe(cargar(r.cuerpo), 'body') }
+  let fichas: Ficha[]
+  try {
+    const json = await (deps.pedirJson ?? ((u, c) => pedirJson<RespuestaFichas>(u, c, 8_000)))(FICHAS, {
+      size: 10,
+      query: {
+        bool: {
+          filter: [{ term: { 'numero.keyword': sinCeros(numero) } }, { term: { 'anio.keyword': anio } }],
+        },
+      },
+    })
+    fichas = fichasDe(json)
+  } catch (e) {
+    // Con un corte de 8 s: la ficha es un complemento de la respuesta, y un
+    // portal caído tardaba ~21 s en fallar por el ETIMEDOUT del sistema.
+    return { ok: false, razon: 'ficha-caida', detalle: (e as Error).message }
+  }
+  const f = fichas.find((x) => esLaPedida(x, tipo, numero, anio))
+  if (!f) {
+    return Number(anio) > ULTIMO_ANIO_INDICE
+      ? {
+          ok: false,
+          razon: 'no-consta',
+          detalle:
+            `el índice público de SUIN-Juriscol llega hasta ${ULTIMO_ANIO_INDICE} (medido el 2026-09-24), así que ` +
+            `de una norma de ${anio} no puede haber ficha ahí: su ausencia no dice nada sobre la norma`,
+        }
+      : { ok: false, razon: 'no-consta' }
+  }
+  cacheFichas.set(clave, { ficha: f, ts: Date.now() })
+  return { ok: true, ficha: f }
 }
 
 // --- búsqueda por texto con índice de leyes ----------------------------------
@@ -325,7 +387,7 @@ export function buscarEnIndice(texto: string, limite = 15): { total: number; ite
       epigrafe: '',
       vigencia: '',
       entidad: '',
-      url: `${BASE}/viewDocument.asp?id=${id}`,
+      url: enlaceSuin(id),
     })
   }
   return { total: items.length, items }

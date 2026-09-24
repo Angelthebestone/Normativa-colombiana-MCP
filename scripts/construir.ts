@@ -63,7 +63,11 @@ if (r.errors.length) process.exit(1)
  * la única fuente que no puede desincronizarse.
  */
 const herramientas = await new Promise<{ name: string; description: string }[]>((resolve, reject) => {
-  const p = spawn(process.execPath, ['server/index.js'], { stdio: ['pipe', 'pipe', 'ignore'] })
+  // Sin FUENTES: el manifiesto declara el catálogo completo, y un FUENTES que
+  // quedara en la shell de quien construye publicaría uno recortado.
+  const env = { ...process.env }
+  delete env['FUENTES']
+  const p = spawn(process.execPath, ['server/index.js'], { stdio: ['pipe', 'pipe', 'ignore'], env })
   let buf = ''
   const corta = setTimeout(() => {
     p.kill()

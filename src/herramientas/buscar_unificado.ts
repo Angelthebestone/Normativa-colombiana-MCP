@@ -20,16 +20,34 @@ import * as suin from '../fuentes/suin.ts'
 import * as dian from '../fuentes/normograma.ts'
 import { adaptador } from '../fuentes/sectorial.ts'
 import { conAlternativas } from '../nucleo/alternativas.ts'
+import { activa, alcance, proyectar } from '../nucleo/alcance.ts'
 
 export const TITULO = 'Buscar en varias fuentes a la vez'
 
 export const DESCRIPCION =
-  'Busca en paralelo en las fuentes ya existentes (Gestor Normativo, Corte Constitucional, SUIN-Juriscol y ' +
-  'DIAN) y agrega los resultados con su fuente y su enlace. Con perfil "salud" añade INVIMA y Supersalud; ' +
-  'con "mineria" añade la ANM. Úsala cuando la consulta es abierta o por materia ' +
-  'y no hay una herramienta obvia; para una cita exacta sigue siendo mejor resolver_cita, y para un tribunal ' +
-  'concreto su buscador propio. Cada resultado declara de qué fuente salió; la vigencia de SUIN se rotula ' +
-  'SEGÚN EL BUSCADOR y no es la ficha oficial.'
+  'Busca en paralelo en Gestor Normativo, Corte Constitucional, SUIN-Juriscol y DIAN, y agrega los ' +
+  'resultados con su fuente y su enlace (con perfil "salud" añade INVIMA y Supersalud; con "mineria", la ' +
+  'ANM). Úsala cuando la consulta es abierta o por materia y no hay herramienta obvia; para una cita exacta ' +
+  'sigue siendo mejor resolver_cita y para un tribunal concreto, su buscador propio. Cada resultado declara ' +
+  'su fuente; la vigencia de SUIN se rotula SEGÚN EL BUSCADOR y no es la ficha oficial.'
+
+/**
+ * Clave de la línea de alcance para cada fuente consultable. Los tres
+ * reguladores con nombre propio (INVIMA, Supersalud, ANM) comparten la clave
+ * "sectorial", así que en la línea se funden en una sola entrada.
+ */
+const CLAVE_ALCANCE: Record<Fuente, string> = {
+  gestor: 'gestor',
+  corte: 'corte',
+  suin: 'suin',
+  dian: 'dian',
+  invima: 'sectorial',
+  supersalud: 'sectorial',
+  anm: 'sectorial',
+}
+
+const FUENTES = ['gestor', 'corte', 'suin', 'dian', 'invima', 'supersalud', 'anm'] as const
+export type Fuente = (typeof FUENTES)[number]
 
 export const schema = {
   texto: z.string().describe('Términos a buscar, ej. "teletrabajo"'),
@@ -41,7 +59,8 @@ export const schema = {
         'y Supersalud; mineria → ANM)',
     ),
   fuentes: z
-    .array(z.enum(['gestor', 'corte', 'suin', 'dian', 'invima', 'supersalud', 'anm']))
+    // Solo las encendidas (FUENTES): pedir una apagada no se puede ni escribir.
+    .array(z.enum(proyectar(FUENTES, (f) => CLAVE_ALCANCE[f])))
     .optional()
     .describe('Fuentes a consultar; sin él se usan todas menos DIAN (que va con perfil=tributario)'),
   limite: z.coerce.number().int().min(1).max(30).default(15).describe('Cuántos resultados por fuente (máximo 30)'),
@@ -52,20 +71,26 @@ type Parametros = z.infer<typeof schemaCompleto>
 
 export type Item = { fuente: string; titulo: string; url: string; detalle?: string }
 
-const FUENTES = ['gestor', 'corte', 'suin', 'dian', 'invima', 'supersalud', 'anm'] as const
-export type Fuente = (typeof FUENTES)[number]
-
 const PERFILES_ADMITIDOS = ['laboral', 'tributario', 'ambiental', 'contratacion', 'energia', 'salud', 'mineria'] as const
 
-/** Qué fuentes consultar según perfil y filtro explícito. */
+/**
+ * Qué fuentes consultar según perfil y filtro explícito. Las apagadas (FUENTES)
+ * salen también de los perfiles: el perfil salud con los reguladores apagados
+ * consulta lo demás y la línea de alcance dice cuáles faltan.
+ */
 export function fuentesDe(perfil: string | undefined, fuentes: Fuente[] | undefined): Fuente[] {
   if (fuentes?.length) return fuentes
   // Sin perfil, la DIAN se deja fuera: su buscador tarda ~20 s y su materia
   // (tributario) tiene herramienta propia. Con perfil tributario entra.
-  if (perfil === 'tributario') return ['gestor', 'corte', 'suin', 'dian']
-  if (perfil === 'salud') return ['gestor', 'corte', 'suin', 'invima', 'supersalud']
-  if (perfil === 'mineria') return ['gestor', 'corte', 'suin', 'anm']
-  return ['gestor', 'corte', 'suin']
+  const base: Fuente[] =
+    perfil === 'tributario'
+      ? ['gestor', 'corte', 'suin', 'dian']
+      : perfil === 'salud'
+        ? ['gestor', 'corte', 'suin', 'invima', 'supersalud']
+        : perfil === 'mineria'
+          ? ['gestor', 'corte', 'suin', 'anm']
+          : ['gestor', 'corte', 'suin']
+  return base.filter((f) => activa(CLAVE_ALCANCE[f]))
 }
 
 async function porGestor(texto: string, limite: number): Promise<Item[]> {
@@ -190,7 +215,10 @@ export async function escribir(
 ): Promise<string> {
   // Un perfil desconocido no debe ejecutar ningún fan-out: se lista lo admitido.
   if (params.perfil && !(PERFILES_ADMITIDOS as readonly string[]).includes(params.perfil)) {
-    return `No existe el perfil "${params.perfil}". Disponibles: ${PERFILES_ADMITIDOS.join(', ')}.`
+    return (
+      'Alcance: sin consultar ninguna fuente (la llamada no llegó a salir).\n\n' +
+      `No existe el perfil "${params.perfil}". Disponibles: ${PERFILES_ADMITIDOS.join(', ')}.`
+    )
   }
   const porFuente = deps.porFuente ?? POR_FUENTE
   const fuentes = fuentesDe(params.perfil, params.fuentes)
@@ -218,5 +246,20 @@ export async function escribir(
   // explícito (fuentes=["corte"]) no debe reportar "sin resultados" en las
   // que nunca se pidieron.
   const consultadas = Object.fromEntries(fuentes.map((f) => [f, resultado[f]])) as Record<Fuente, Item[]>
-  return formatear(consultadas, params.texto, params.perfil, fallidas)
+  // La línea de alcance se arma de lo que de verdad se consultó: una entrada por
+  // clave (INVIMA y Supersalud se funden en "sectorial"), con cuántos resultados
+  // trajo cada una y "falló" para las que no respondieron. Las fuentes que no
+  // están en `fuentes` quedan declaradas como no consultadas por `alcance`.
+  const porClave = new Map<string, { n: number; fallo: boolean }>()
+  for (const f of fuentes) {
+    const visto = porClave.get(CLAVE_ALCANCE[f]) ?? { n: 0, fallo: false }
+    if (fallidas[f]) visto.fallo = true
+    else visto.n += resultado[f].length
+    porClave.set(CLAVE_ALCANCE[f], visto)
+  }
+  const usadas = [...porClave].map(([clave, v]) => ({
+    clave,
+    detalle: v.fallo ? (v.n ? `${v.n} resultado(s) y un fallo` : 'falló') : `${v.n} resultado(s)`,
+  }))
+  return `${alcance(usadas)}\n\n${formatear(consultadas, params.texto, params.perfil, fallidas)}`
 }

@@ -6,9 +6,9 @@
  * reales de un abogado —"art. 191 del Código de Comercio"— no resolvían.
  *
  * Aquí vive la tabla y, con ella, lo que se sabe de la COBERTURA de cada
- * código: el Código Civil no está ni en el Gestor ni en el índice de SUIN, y
- * decir "no encontré la cita" ante "art. 946 del Código Civil" se lee como que
- * la norma no existe. Un código ausente se nombra como ausente.
+ * código: el texto del Código Civil no está en ninguna fuente de aquí, y decir
+ * "no encontré la cita" ante "art. 946 del Código Civil" se lee como que la
+ * norma no existe. Un código ausente se nombra como ausente.
  */
 import { sinTildes } from './parse.ts'
 
@@ -38,11 +38,12 @@ export const CODIGOS: Codigo[] = [
     anio: '1873',
     alias: ['codigo civil', 'codigo civil colombiano', 'c. civil'],
     ausente:
-      'El Código Civil (Ley 84 de 1873) NO está en este corpus: el Gestor Normativo no lo publica y el índice de ' +
-      'SUIN empaquetado tampoco lo trae (comprobado el 2026-09-03 por las tres vías: por nombre, por "Ley 84 de ' +
-      '1873" y por número+año). No es que el artículo no exista: es que esta instalación no puede leerlo. Quedan ' +
-      'fuera de lo verificable aquí la acción reivindicatoria, la responsabilidad civil, la filiación, el divorcio ' +
-      'y la prescripción ordinaria: consúltalos en la edición oficial del Código Civil, no en esta respuesta.',
+      'El texto del Código Civil (Ley 84 de 1873) NO está en este corpus: el Gestor Normativo no lo publica (comprobado ' +
+      'el 2026-09-03 por nombre, por "Ley 84 de 1873" y por número+año), y SUIN-Juriscol, que desde septiembre de 2026 ' +
+      'sí tiene su ficha, no sirve el texto de sus documentos fuera de la red del Ministerio. No es que el artículo ' +
+      'no exista: es que esta instalación no puede leerlo. Quedan fuera de lo verificable aquí la acción ' +
+      'reivindicatoria, la responsabilidad civil, la filiación, el divorcio y la prescripción ordinaria: consúltalos ' +
+      'en la edición oficial del Código Civil, no en esta respuesta.',
   },
   {
     nombre: 'Código de Comercio',

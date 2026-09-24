@@ -1,131 +1,88 @@
 /**
- * Vigencia de decretos por ficha directa (sin índice): distingue índice
- * ausente / ficha caída / no consta y cachea. Se prueba con dependencias
- * inyectadas (buscar/pedir falsos) para no depender de la red ni del estado
- * del índice real: cada caso controla qué devuelve el buscador y la ficha.
+ * La ficha de SUIN por tipo, número y año (`ficha`): distingue ficha / no
+ * consta / ficha caída, comprueba la identidad y cachea. Se prueba con el
+ * índice inyectado para no depender de la red: cada caso controla qué devuelve.
  *
- * Cada test usa un número de decreto DISTINTO para no colisionar con la cache
- * de 30 min que comparte el módulo.
+ * Cada test usa un número DISTINTO para no colisionar con la caché de 30 min
+ * que comparte el módulo.
  *
  *   node --test test/suin-vigencia-decretos.ts
  */
 import { strict as assert } from 'node:assert'
 import test from 'node:test'
 
-import { fichaDirectaDecreto } from '../src/fuentes/suin.ts'
-import type { ResultadoSuin } from '../src/fuentes/suin.ts'
-import type { pedir as pedirHttp, Respuesta } from '../src/nucleo/http.ts'
+import { ficha, type RespuestaFichas } from '../src/fuentes/suin.ts'
 
-function fichaHtml(estado = 'Vigente'): string {
-  return (
-    '<span field="tipo">DECRETO</span><span field="numero">1072</span><span field="anio">2015</span>' +
-    `<span field="epigrafe">Único Reglamentario del Sector Trabajo</span><span field="estado_documento">${estado}</span>`
-  )
-}
+type Doc = { tipo: string; subtipo?: string; numero: string; anio: string; estado?: string; id?: number; visualizacion?: number }
 
-const URL_FICHA = 'https://www.suin-juriscol.gov.co/viewDocument.asp?id=999'
+/** Una respuesta del índice con esos documentos, en la forma real de Elasticsearch. */
+const indice = (docs: Doc[]) => async (): Promise<RespuestaFichas> => ({
+  hits: { hits: docs.map((d, i) => ({ _source: { id: d.id ?? 900 + i, visualizacion: d.visualizacion ?? null, epigrafe: 'x', estado: 'Vigente', ...d } })) },
+})
 
-type Deps = {
-  buscar: (typeof import('../src/fuentes/suin.ts'))['buscar']
-  pedir: typeof pedirHttp
-}
-
-function itemSuin(titulo: string, url: string): ResultadoSuin {
-  return { id: '999', titulo, subtipo: 'Decreto', epigrafe: '', vigencia: '', entidad: '', url }
-}
-
-function respuesta(status: number, cuerpo: string): Respuesta {
-  return { status, cuerpo, cookies: '', cabeceras: {} }
-}
-
-/** Dependencias falsas: el buscador devuelve el decreto y la ficha responde. */
-function deps(sobre: {
-  buscar?: Deps['buscar']
-  pedir?: Deps['pedir']
-}): Deps {
-  return {
-    buscar: sobre.buscar ??
-      (async (_opts: Parameters<Deps['buscar']>[0]) => ({
-        total: 1,
-        items: [itemSuin('Decreto 1072 de 2015', URL_FICHA)],
-      })) as Deps['buscar'],
-    pedir: sobre.pedir ??
-      (async (_url: string, _timeout?: number) => respuesta(200, fichaHtml())) as Deps['pedir'],
+test('con ficha devuelve el estado con el id clásico y cachea', async () => {
+  let consultas = 0
+  const d = {
+    pedirJson: async () => {
+      consultas++
+      return indice([{ tipo: 'DECRETO', subtipo: 'DECRETO ÚNICO', numero: '1101', anio: '2015', id: 30036079, visualizacion: 30036080 }])()
+    },
   }
-}
-
-test('fichaDirectaDecreto: con ficha disponible devuelve el estado y cachea', async () => {
-  let busquedas = 0
-  let fichas = 0
-  const d = deps({
-    buscar: (async (_opts) => {
-      busquedas++
-      return { total: 1, items: [itemSuin('Decreto 1101 de 2015', URL_FICHA)] }
-    }) as Deps['buscar'],
-    pedir: (async (_url, _timeout) => {
-      fichas++
-      return respuesta(200, fichaHtml('Vigente'))
-    }) as Deps['pedir'],
-  })
-
-  const a = await fichaDirectaDecreto('Decreto', '1101', '2015', d)
+  const a = await ficha('Decreto', '1101', '2015', d)
   assert.equal(a.ok, true)
   if (a.ok) {
-    assert.equal(a.vigencia.estado, 'Vigente')
-    assert.equal(a.vigencia.url, URL_FICHA)
+    assert.equal(a.ficha.estado, 'Vigente')
+    // El id del índice nuevo difiere del clásico: el enlace lleva el clásico.
+    assert.equal(a.ficha.url, 'https://www.suin-juriscol.gov.co/viewDocument.asp?id=30036080')
   }
-
-  // Segunda llamada en <30 min: cache, sin fetch nuevo.
-  const b = await fichaDirectaDecreto('Decreto', '1101', '2015', d)
+  const b = await ficha('Decreto', '1101', '2015', d)
   assert.equal(b.ok, true)
-  assert.equal(busquedas, 1, 'la cache debería evitar la segunda búsqueda')
-  assert.equal(fichas, 1, 'la cache debería evitar la segunda ficha')
+  assert.equal(consultas, 1, 'la caché debería evitar la segunda consulta')
 })
 
-test('fichaDirectaDecreto: si el buscador no halla el decreto, es no-consta', async () => {
-  const d = deps({
-    buscar: (async (_opts) => ({ total: 0, items: [] })) as Deps['buscar'],
-  })
-  const r = await fichaDirectaDecreto('Decreto', '99999998', '1999', d)
+test('identidad: número y año ajenos no casan aunque el índice los devuelva', async () => {
+  // Lo que devolvía el buscador viejo para "Decreto 1235 de 2023".
+  const trampas = indice([
+    { tipo: 'DECRETO', numero: '1235', anio: '1952' },
+    { tipo: 'DECRETO', numero: '1235', anio: '1982' },
+    { tipo: 'DECRETO', numero: '2023', anio: '1952' },
+  ])
+  const r = await ficha('Decreto', '1235', '2023', { pedirJson: trampas })
   assert.equal(r.ok, false)
   if (!r.ok) assert.equal(r.razon, 'no-consta')
 })
 
-test('fichaDirectaDecreto: ficha 404 se distingue de ficha caída (red)', async () => {
-  const d = deps({
-    pedir: (async (_url, _timeout) => respuesta(404, '')) as Deps['pedir'],
-  })
-  const r = await fichaDirectaDecreto('Decreto', '1102', '2015', d)
-  assert.equal(r.ok, false)
-  if (!r.ok) assert.equal(r.razon, 'ficha-caida')
+test('identidad: el tipo pedido casa con el tipo o el subtipo, y la ley no casa con un decreto ley', async () => {
+  const decretoLey = indice([{ tipo: 'DECRETO', subtipo: 'DECRETO LEY', numero: '1238', anio: '2015' }])
+  assert.equal((await ficha('decreto ley', '1238', '2015', { pedirJson: decretoLey })).ok, true)
+  // Los decretos de un año comparten numeración: "Decreto 1239" es ese documento.
+  const otro = indice([{ tipo: 'DECRETO', subtipo: 'DECRETO LEY', numero: '1239', anio: '2015' }])
+  assert.equal((await ficha('Decreto', '01239', '2015', { pedirJson: otro })).ok, true)
+  const ley = indice([{ tipo: 'DECRETO', subtipo: 'DECRETO LEY', numero: '1240', anio: '2015' }])
+  assert.equal((await ficha('Ley', '1240', '2015', { pedirJson: ley })).ok, false)
 })
 
-test('fichaDirectaDecreto: una ficha sin el bloque de campos es no-consta', async () => {
-  const d = deps({
-    pedir: (async (_url, _timeout) => respuesta(200, '<html>página sin campos</html>')) as Deps['pedir'],
-  })
-  const r = await fichaDirectaDecreto('Decreto', '1103', '2015', d)
-  assert.equal(r.ok, false)
-  if (!r.ok) assert.equal(r.razon, 'no-consta')
+test('sin resultados es no-consta, y después de 2020 dice que el índice no llega', async () => {
+  const vacio = indice([])
+  const viejo = await ficha('Decreto', '1102', '2015', { pedirJson: vacio })
+  assert.deepEqual(viejo, { ok: false, razon: 'no-consta' })
+  const reciente = await ficha('Decreto', '1103', '2023', { pedirJson: vacio })
+  assert.equal(reciente.ok, false)
+  if (!reciente.ok) {
+    assert.equal(reciente.razon, 'no-consta')
+    assert.match(reciente.detalle ?? '', /llega hasta 2020/)
+  }
 })
 
-test('fichaDirectaDecreto: un enlace que no es la ficha esperada es no-consta', async () => {
-  const d = deps({
-    buscar: (async (_opts) => ({
-      total: 1,
-      items: [itemSuin('Decreto 1104 de 2015', 'https://otro.sitio.gov.co/x')],
-    })) as Deps['buscar'],
+test('red caída o respuesta con otra forma es ficha-caida con el motivo, nunca no-consta', async () => {
+  const caida = await ficha('Decreto', '1104', '2015', {
+    pedirJson: async () => {
+      throw new Error('ETIMEDOUT')
+    },
   })
-  const r = await fichaDirectaDecreto('Decreto', '1104', '2015', d)
-  assert.equal(r.ok, false)
-  if (!r.ok) assert.equal(r.razon, 'no-consta')
-})
-
-test('fichaDirectaDecreto: un decreto que el índice no cubre y sin buscador es no-consta', async () => {
-  const d = deps({
-    buscar: (async (_opts) => ({ total: 0, items: [] })) as Deps['buscar'],
-  })
-  const r = await fichaDirectaDecreto('Decreto', '1105', '2015', d)
-  assert.equal(r.ok, false)
-  if (!r.ok) assert.equal(r.razon, 'no-consta')
+  assert.deepEqual(caida, { ok: false, razon: 'ficha-caida', detalle: 'ETIMEDOUT' })
+  // Un portal cambiado no puede leerse como "SUIN no tiene esa norma".
+  const cambiada = await ficha('Decreto', '1105', '2015', { pedirJson: async () => ({}) })
+  assert.equal(cambiada.ok, false)
+  if (!cambiada.ok) assert.equal(cambiada.razon, 'ficha-caida')
 })

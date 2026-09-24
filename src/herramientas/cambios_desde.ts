@@ -6,6 +6,7 @@ import { z } from 'zod'
 import { idTipo, parsearCita, candidatosAmbiguos } from '../nucleo/citas.ts'
 import * as gestor from '../fuentes/gestor.ts'
 import { historial, type Cambio } from '../nucleo/parse.ts'
+import { alcance } from '../nucleo/alcance.ts'
 
 export const TITULO = 'Cambios registrados sobre normas desde una fecha'
 
@@ -92,5 +93,11 @@ async function cambiosDe(cita: string, desde: string): Promise<string> {
 export async function escribir({ normas, desde }: Parametros): Promise<string> {
   const secciones: string[] = []
   for (const cita of normas) secciones.push(await cambiosDe(cita, desde))
-  return formatear(secciones)
+  // Solo se consulta el Gestor, y solo por las citas que se pudieron
+  // interpretar: una lista entera de citas ilegibles no llega a tocar la red.
+  const citas = normas.filter((c) => parsearCita(c)).length
+  const cabecera = citas
+    ? alcance([{ clave: 'gestor', detalle: `${citas} cita(s)` }])
+    : 'Alcance: sin consultar ninguna fuente (la llamada no llegó a salir).'
+  return `${cabecera}\n\n${formatear(secciones)}`
 }

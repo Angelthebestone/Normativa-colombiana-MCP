@@ -21,18 +21,6 @@ test('formatear: estado de confianza alta con URL y explicación', () => {
   assert.match(s, /URL: https:\/\//)
 })
 
-test('formatear: confianza media avisa de las contradicciones del índice', () => {
-  const s = formatear({
-    cita: 'Ley 74 de 1923',
-    estado: 'Vigencia en Estudio',
-    confianza: 'media',
-    url: 'https://x.gov.co',
-    explicacion: 'Señal del índice de búsqueda de SUIN. OJO: este índice a veces contradice la ficha.',
-  })
-  assert.match(s, /Confianza: media/)
-  assert.match(s, /contradice la ficha/)
-})
-
 test('formatear: confianza baja de no consta no afirma nada', () => {
   const s = formatear({
     cita: 'Ley 99999999 de 1800',

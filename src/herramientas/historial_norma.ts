@@ -13,6 +13,7 @@ import { z } from 'zod'
 import { historial, type Cambio } from '../nucleo/parse.ts'
 import { idTipo, parsearCita, candidatosAmbiguos } from '../nucleo/citas.ts'
 import * as gestor from '../fuentes/gestor.ts'
+import { alcance } from '../nucleo/alcance.ts'
 
 export const TITULO = 'Historial de reformas de una norma'
 
@@ -94,8 +95,13 @@ export function formatearHistorial(
 
 export async function escribir({ cita, articulo, desde, limite }: Params): Promise<string> {
   const c = parsearCita(cita)
+  // Una cita ilegible no llega a consultar nada: se dice en lugar de declarar
+  // el Gestor como consultado.
   if (!c) {
-    return `No reconocí «${cita}» como una cita del Gestor Normativo. Escríbela como "Ley 100 de 1993" o "Decreto 1072 de 2015".`
+    return (
+      'Alcance: sin consultar ninguna fuente (la llamada no llegó a salir).\n\n' +
+      `No reconocí «${cita}» como una cita del Gestor Normativo. Escríbela como "Ley 100 de 1993" o "Decreto 1072 de 2015".`
+    )
   }
   const r = await gestor.buscar({ tipo: idTipo(c.tipo) ?? c.tipo, numero: c.numero, anio: c.anio })
   // Sin año, el número no identifica la norma: se pide el año en vez de elegir.
@@ -103,6 +109,7 @@ export async function escribir({ cita, articulo, desde, limite }: Params): Promi
     const ambiguos = candidatosAmbiguos(r.items)
     if (ambiguos.length) {
       return (
+        `${alcance(['gestor'])}\n\n` +
         `La cita «${cita}» es ambigua: el Gestor tiene ${ambiguos.length} normas con ese tipo y número, de años ` +
         `distintos. Repite con el año, por ejemplo «${ambiguos[0]!.titulo}».`
       )
@@ -110,8 +117,9 @@ export async function escribir({ cita, articulo, desde, limite }: Params): Promi
   }
   const primero = r.items[0]
   if (!primero) {
-    return `No encontré la norma «${cita}» en el Gestor Normativo. Prueba con resolver_cita.`
+    return `${alcance(['gestor'])}\n\nNo encontré la norma «${cita}» en el Gestor Normativo. Prueba con resolver_cita.`
   }
   const n = await gestor.obtenerNorma(primero.id)
-  return formatearHistorial(historial(n.texto), n.titulo, n.url, { articulo, desde, limite })
+  const cambios = historial(n.texto)
+  return `${alcance([{ clave: 'gestor', detalle: `${cambios.length} cambio(s)` }])}\n\n${formatearHistorial(cambios, n.titulo, n.url, { articulo, desde, limite })}`
 }

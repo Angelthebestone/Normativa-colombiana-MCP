@@ -16,15 +16,23 @@ const AVISO_DESACTIVADO =
   'no se pierden al reiniciar el servidor ni expiran por un TTL fijo. No es un fallo: es una ' +
   'capacidad ausente.'
 
+/**
+ * Línea de alcance: el expediente es memoria del propio servidor, así que ninguna
+ * de sus acciones consulta una fuente normativa. Va en todas las respuestas para
+ * que su forma quede declarada antes de leerlas.
+ */
+const ALCANCE =
+  'Alcance: sin consultar ninguna fuente (el expediente vive en el servidor; no se consulta ninguna fuente normativa).'
+
 export const TITULO = 'Expediente temporal de investigación'
 
 export const DESCRIPCION =
   'Crea, agrega, lee o exporta un expediente para agrupar consultas, citas y observaciones de una ' +
   'investigación. Se activa con EXPEDIENTES=1 (DESACTIVADO por defecto). En memoria es TEMPORAL ' +
-  '(expira según EXPEDIENTES_TTL_MS; por defecto no expira); con EXPEDIENTES_DIR se persiste en ' +
-  'disco y sobrevive a reinicios. accion="crear" devuelve el id; accion="agregar" guarda una ' +
-  'entrada en la sección indicada de un expediente YA CREADO; accion="leer" devuelve el contenido ' +
-  'agrupado por sección; accion="exportar" escribe el expediente como markdown en la ruta pedida.'
+  '(expira según EXPEDIENTES_TTL_MS; por defecto no expira); con EXPEDIENTES_DIR persiste en disco y ' +
+  'sobrevive a reinicios. accion="crear" devuelve el id; "agregar" guarda una entrada en la sección ' +
+  'de un expediente YA CREADO; "leer" lo devuelve agrupado; "exportar" lo escribe como markdown en ' +
+  'la ruta pedida.'
 
 export const schema = z.object({
   accion: z
@@ -65,16 +73,32 @@ async function esDirectorio(ruta: string): Promise<boolean> {
   }
 }
 
-export async function escribir(args: {
+/** Argumentos de `escribir`, ya resueltos por el esquema del SDK. */
+type Args = {
   accion: 'crear' | 'agregar' | 'leer' | 'exportar'
   id?: string
   campo?: keyof Expediente
   texto?: string
   ruta?: string
-}): Promise<string> {
+}
+
+export async function escribir(args: Args): Promise<string> {
+  return `${ALCANCE}\n\n${await cuerpo(args)}`
+}
+
+async function cuerpo(args: Args): Promise<string> {
   if (!habilitado()) return AVISO_DESACTIVADO
 
   if (args.accion === 'crear') {
+    // Un id junto a "crear" es una confusión de quien llama: crear no recibe id
+    // y antes lo ignoraba, así que nacía un expediente nuevo y la llamada
+    // parecía haber acertado sobre el que se creía existente.
+    if (args.id !== undefined) {
+      return (
+        `No existe un expediente con id "${args.id}": los ids los crea accion="crear" sin id y los devuelve su ` +
+        `propia respuesta. Llama con accion="crear" y usa el id que devuelva para accion="agregar", "leer" o "exportar".`
+      )
+    }
     const id = crear()
     const persistente = enDisco()
     const final = persistente
@@ -88,7 +112,10 @@ export async function escribir(args: {
       return 'Para accion="agregar" hacen falta id, campo y texto.'
     }
     if (!agregar(args.id, args.campo, args.texto)) {
-      return `No existe un expediente con id ${args.id}, o ya expiró. Créalo de nuevo con accion="crear".`
+      return (
+        `No existe un expediente con id ${args.id} (o ya expiró). Los ids los crea accion="crear" sin id y los ` +
+        `devuelve su propia respuesta; créalo de nuevo y usa el que devuelva.`
+      )
     }
     return `Agregado a ${args.campo} del expediente ${args.id}.`
   }
@@ -96,7 +123,12 @@ export async function escribir(args: {
   if (args.accion === 'leer') {
     if (!args.id) return 'Para accion="leer" hace falta id.'
     const datos = leer(args.id)
-    if (!datos) return `No existe un expediente con id ${args.id}, o ya expiró.`
+    if (!datos) {
+      return (
+        `No existe un expediente con id ${args.id} (o ya expiró). Los ids los crea accion="crear" sin id y los ` +
+        `devuelve su propia respuesta.`
+      )
+    }
     const bloques: string[] = []
     for (const [campo, textos] of Object.entries(datos)) {
       if (textos.length) bloques.push(`${campo}:\n- ${textos.join('\n- ')}`)
@@ -107,7 +139,12 @@ export async function escribir(args: {
   if (args.accion === 'exportar') {
     if (!args.id || !args.ruta) return 'Para accion="exportar" hacen falta id y ruta.'
     const datos = leer(args.id)
-    if (!datos) return `No existe un expediente con id ${args.id}, o ya expiró. No se creó ningún archivo.`
+    if (!datos) {
+      return (
+        `No existe un expediente con id ${args.id} (o ya expiró). No se creó ningún archivo. Los ids los crea ` +
+        `accion="crear" sin id y los devuelve su propia respuesta.`
+      )
+    }
     const destino = (await esDirectorio(args.ruta))
       ? path.join(args.ruta, `${nombreSeguro(args.id)}.md`)
       : args.ruta

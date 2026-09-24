@@ -1,133 +1,79 @@
 /**
  * Genera datos/indice-suin.json: mapea "ley 909 2004" → id de SUIN-Juriscol.
  *
- * SUIN es la única fuente del país que publica el ESTADO DE VIGENCIA, pero no
- * tiene buscador utilizable —su Solr no resuelve ni por nombre ni por IP—, así
- * que la única vía es enumerar su sitemap. El sitemap solo trae ids, sin decir
- * a qué norma corresponde cada uno, de modo que hay que abrir cada documento
- * una vez para leer su título. Son ~11.700 peticiones a un servicio público:
- * a la tasa de `pedir` (1/s, serializadas) tarda unas tres horas.
+ * Hasta el 2026-09-16 esto era un crawl de ~11.700 páginas `viewDocument.asp`
+ * de tres horas, porque el sitemap solo traía ids y había que abrir cada
+ * documento para leer su título. El portal nuevo sirve la misma SPA vacía en
+ * esas rutas (medido el 2026-09-24), pero su buscador consulta un índice de
+ * Elasticsearch público con tipo, número y año de cada documento: el índice se
+ * arma paginando esa consulta, en una docena de peticiones.
  *
- * Por eso es REANUDABLE: se relee el índice ya escrito y solo se piden los ids
- * que faltan, guardando cada 200. Se puede cortar con Ctrl-C y volver luego.
- * robots.txt permite explícitamente `viewDocument.asp?id=*` y declara estos
- * sitemaps, que es justo la vía sancionada para enumerarlo.
+ * Solo leyes, como antes: el índice sirve a `buscarEnIndice`, que resuelve una
+ * cita escrita como texto sin salir a la red. La vigencia de cualquier norma,
+ * decretos incluidos, ya la pide `ficha()` en vivo por tipo, número y año.
  *
- * Uso: node scripts/generar-indice-suin.ts [sitemap…]   (por defecto, leyes)
+ * FUSIONA con el índice anterior en vez de reemplazarlo: el índice nuevo llega
+ * hasta 2020 y el crawl viejo tenía 606 leyes más (2021-2023, casi todas).
+ * Reemplazarlo las borraría del buscador sin red. Donde los dos tienen la ley,
+ * manda el nuevo, con el id de `visualizacion`, que es el mismo id clásico.
+ *
+ * Uso: node scripts/generar-indice-suin.ts
  */
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
-import { Agent, request } from 'node:https'
 import { dirname } from 'node:path'
-import { rootCertificates } from 'node:tls'
-import { createGunzip } from 'node:zlib'
 import { fileURLToPath } from 'node:url'
-import { SECTIGO_EV } from '../src/nucleo/ca.ts'
-import { pedir } from '../src/nucleo/http.ts'
-import { claveSuin, fichaSuin } from '../src/fuentes/suin.ts'
+import { pedirJson } from '../src/nucleo/http.ts'
+import { claveSuin, fichasDe, type RespuestaFichas } from '../src/fuentes/suin.ts'
 
-const BASE = 'https://www.suin-juriscol.gov.co'
-
-/**
- * El crawl no usa `pedir`: su cubo de una petición por segundo protege las
- * horas de uso interactivo, y aquí son 11.689 documentos de una sola vez. Medido
- * contra el propio servidor: conexión nueva cada vez 966 ms, reutilizándola
- * 683 ms, y con cuatro en vuelo 260 ms por documento. Cuatro es lo que abre un
- * navegador cualquiera contra un mismo host, así que no es una carga anómala.
- *
- * SUIN_CONCURRENCIA=1 lo deja secuencial si hiciera falta ir más suave.
- */
-const CONCURRENCIA = Math.max(1, Math.min(8, Number(process.env['SUIN_CONCURRENCIA'] ?? 4)))
-const agente = new Agent({ keepAlive: true, maxSockets: CONCURRENCIA, ca: [...rootCertificates, SECTIGO_EV] })
-
-/** GET con la cadena completada y gzip; devuelve '' si el documento no sirve. */
-const traer = (path: string): Promise<string> =>
-  new Promise((r) => {
-    const req = request(
-      `${BASE}${path}`,
-      { agent: agente, timeout: 60_000, headers: { 'User-Agent': 'normativa-colombia-mcp (indice SUIN)', 'Accept-Encoding': 'gzip' } },
-      (res) => {
-        const flujo = res.headers['content-encoding'] === 'gzip' ? res.pipe(createGunzip()) : res
-        const trozos: Buffer[] = []
-        flujo.on('data', (c: Buffer) => trozos.push(c))
-        flujo.on('end', () => r(res.statusCode === 200 ? Buffer.concat(trozos).toString('utf8') : ''))
-        flujo.on('error', () => r(''))
-      },
-    )
-    req.on('timeout', () => req.destroy())
-    req.on('error', () => r(''))
-    req.end()
-  })
+const FICHAS = 'https://lexis.minjusticia.gov.co/elasticsearch/documents_stg/_search'
 const SALIDA = fileURLToPath(new URL('../datos/indice-suin.json', import.meta.url))
-const sitemaps = process.argv.slice(2).length ? process.argv.slice(2) : ['sitemapleyes.xml']
+const PAGINA = 1000
 
-type Indice = { generado: string; fuente: string[]; normas: Record<string, string>; vistos: string[] }
-
-const previo: Indice = (() => {
+const previas = ((): Record<string, string> => {
   try {
-    return JSON.parse(readFileSync(SALIDA, 'utf8')) as Indice
+    return (JSON.parse(readFileSync(SALIDA, 'utf8')) as { normas: Record<string, string> }).normas
   } catch {
-    return { generado: '', fuente: [], normas: {}, vistos: [] }
+    return {}
   }
 })()
-
-const vistos = new Set(previo.vistos)
-const normas = previo.normas
-
-const guardar = () => {
-  mkdirSync(dirname(SALIDA), { recursive: true })
-  const salida: Indice = {
-    generado: new Date().toISOString().slice(0, 10),
-    fuente: [...new Set([...previo.fuente, ...sitemaps])],
-    normas,
-    vistos: [...vistos],
-  }
-  writeFileSync(SALIDA, JSON.stringify(salida))
+const normas: Record<string, string> = {}
+let despues: number | undefined
+let leidas = 0
+for (;;) {
+  const json = await pedirJson<RespuestaFichas>(
+    FICHAS,
+    {
+      size: PAGINA,
+      _source: ['id', 'visualizacion', 'tipo', 'subtipo', 'numero', 'anio', 'epigrafe', 'estado'],
+      query: { term: { 'tipo.keyword': 'LEY' } },
+      sort: [{ id: 'asc' }],
+      ...(despues === undefined ? {} : { search_after: [despues] }),
+    },
+    60_000,
+  )
+  // Un número que no es número ("LEY NaN 1936") no se puede citar: fuera.
+  for (const f of fichasDe(json)) if (/^\d+$/.test(f.numero)) normas[claveSuin(f.tipo, f.numero, f.anio)] = f.id
+  // Se pagina por los hits crudos y no por las fichas: una fila sin número ni
+  // año se descarta como ficha, y contarla de menos cortaría la paginación.
+  const hits = json.hits?.hits ?? []
+  leidas += hits.length
+  console.log(`${leidas} leyes leídas`)
+  const ultimo = hits.at(-1)?.sort?.[0]
+  if (hits.length < PAGINA || ultimo === undefined) break
+  despues = ultimo
 }
 
-const ids: string[] = []
-for (const s of sitemaps) {
-  const r = await pedir(`${BASE}/${s}`, 120_000)
-  if (r.status !== 200) throw new Error(`${s} respondió ${r.status}`)
-  const encontrados = [...r.cuerpo.matchAll(/viewDocument\.asp\?id=(\d+)/g)].map((m) => m[1]!)
-  if (!encontrados.length) throw new Error(`${s} no trae ids: el sitemap pudo cambiar de formato.`)
-  console.log(`${s}: ${encontrados.length} documentos`)
-  ids.push(...encontrados)
+if (Object.keys(normas).length < 10_000) {
+  // El índice vigente trae 11.094 leyes (medido el 2026-09-24). Muchas menos es
+  // una consulta que cambió, no un corpus que encogió: no se sobrescribe.
+  throw new Error(`solo ${Object.keys(normas).length} leyes: la consulta pudo cambiar; no se escribe el índice`)
 }
-
-const pendientes = [...new Set(ids)].filter((id) => !vistos.has(id))
+const soloPrevias = Object.keys(previas).filter((k) => !(k in normas)).length
+mkdirSync(dirname(SALIDA), { recursive: true })
+writeFileSync(
+  SALIDA,
+  JSON.stringify({ generado: new Date().toISOString().slice(0, 10), fuente: [FICHAS], normas: { ...previas, ...normas } }),
+)
 console.log(
-  `${pendientes.length} por leer (${vistos.size} ya en el índice), ${CONCURRENCIA} en paralelo: ` +
-    `~${((pendientes.length * 0.26) / (60 * (CONCURRENCIA / 4))).toFixed(0)} min.`,
+  `Índice escrito: ${Object.keys(normas).length} leyes del índice nuevo + ${soloPrevias} que solo tenía el anterior → ${SALIDA}`,
 )
-
-let hechos = 0
-let conTitulo = 0
-
-async function leer(id: string): Promise<void> {
-  const html = await traer(`/viewDocument.asp?id=${id}`)
-  if (html) {
-    const f = fichaSuin(html)
-    if (f) {
-      normas[claveSuin(f.tipo, f.numero, f.anio)] = id
-      conTitulo++
-    }
-  }
-  vistos.add(id) // un 404 también se marca: no hay que volver a pedirlo
-  if (++hechos % 100 === 0) {
-    guardar()
-    console.log(`${hechos}/${pendientes.length} — ${Object.keys(normas).length} normas identificadas`)
-  }
-}
-
-// Cola simple: CONCURRENCIA obreros tirando del mismo array. El guardado va
-// dentro de leer(), así que un Ctrl-C pierde como mucho los últimos 100.
-let siguiente = 0
-await Promise.all(
-  Array.from({ length: CONCURRENCIA }, async () => {
-    while (siguiente < pendientes.length) await leer(pendientes[siguiente++]!)
-  }),
-)
-
-guardar()
-console.log(`Índice escrito: ${Object.keys(normas).length} normas, ${vistos.size} ids visitados → ${SALIDA}`)
-console.log(`Títulos leídos en esta pasada: ${conTitulo}/${pendientes.length}`)

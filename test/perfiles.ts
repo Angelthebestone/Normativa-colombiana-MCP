@@ -31,6 +31,6 @@ test('perfil devuelve el del id y undefined para el que no existe', () => {
 })
 
 test('un perfil registrado después gana al del mismo id', () => {
-  registrarPerfil({ id: 'laboral', nombre: 'Otro', sector: 'x', advertencia: 'y', consultar: async () => '' } satisfies Perfil)
+  registrarPerfil({ id: 'laboral', nombre: 'Otro', sector: 'x', fuente: 'gestor', advertencia: 'y', consultar: async () => '' } satisfies Perfil)
   assert.equal(perfil('laboral')?.nombre, 'Otro')
 })

@@ -23,6 +23,103 @@ const mediana = (xs: number[]): number => {
 }
 const ms = (x: number): string => `${x.toFixed(1)} ms`
 
+/** Percentil por rango más cercano: con pocas muestras, promediar dos inventa un dato. */
+const percentil = (xs: number[], p: number): number => {
+  if (!xs.length) return 0
+  const s = [...xs].sort((a, b) => a - b)
+  return s[Math.min(s.length - 1, Math.ceil(p * s.length) - 1)]!
+}
+
+/**
+ * `--recorridos [ids…] [--repeticiones N]` corre SOLO los ocho recorridos de
+ * `test/recorridos.ts` y saca la tabla comparable entre ejecuciones.
+ *
+ * La latencia de una llamada suelta no dice nada útil: lo que sufre quien usa
+ * esto es CUÁNTAS LLAMADAS le cuesta contestar una pregunta. Se miden de punta a
+ * punta —llamadas, peticiones HTTP, bytes de cuerpo, caracteres, ~tokens, p50/p95
+ * de la latencia y si se llegó— y se sale antes del banco de herramientas de
+ * abajo, que son 25 consultas × N contra portales públicos.
+ *
+ * Con `--repeticiones 1` (por defecto) p50 = p95 = la corrida, y así es como se
+ * comparan el antes y el después: contra el mismo número de corridas. El p95
+ * solo significa algo con N>1.
+ */
+async function medirRecorridos(ids: number[], repeticiones: number): Promise<void> {
+  const { correrTodos, tokens } = await import('../test/recorridos.ts')
+  const { abrirCliente } = await import('../test/red.ts')
+  const cliente = await abrirCliente()
+  console.log(`recorridos (camino real, ${repeticiones} corrida(s) por recorrido):`)
+  try {
+    const corridas = []
+    for (let i = 0; i < repeticiones; i++) corridas.push(await correrTodos(cliente, ids.length ? ids : undefined))
+    const ultima = corridas[corridas.length - 1]!
+
+    console.log(
+      'rec  pregunta (recortada)                            llamadas  http      bytes  caracteres  ~tokens   ms p50   ms p95  ¿llegó?',
+    )
+    console.log(
+      '---  ---------------------------------------------  --------  ----  ---------  ----------  -------  -------  -------  --------',
+    )
+    for (const [i, r] of ultima.entries()) {
+      const muestras = corridas.map((c) => c[i]!.ms).filter((m) => m > 0)
+      const bytes = r.pasos.reduce((a, p) => a + p.bytes, 0)
+      console.log(
+        `${String(r.recorrido.id).padStart(3)}  ${r.recorrido.pregunta.slice(0, 45).padEnd(45)}  ` +
+          `${String(r.llamadas).padStart(8)}  ${String(r.http).padStart(4)}  ${String(Math.round(bytes / 1024)).padStart(6)}KB  ` +
+          `${String(r.caracteres).padStart(10)}  ${String(tokens(r.caracteres)).padStart(7)}  ` +
+          `${String(Math.round(percentil(muestras, 0.5))).padStart(7)}  ${String(Math.round(percentil(muestras, 0.95))).padStart(7)}  ` +
+          `${r.llego ? `sí (paso ${r.llegoEn})` : 'NO'}`,
+      )
+    }
+
+    console.log('\ndetalle por paso (última corrida):')
+    for (const r of ultima) {
+      console.log(`\n#${r.recorrido.id} ${r.recorrido.pregunta}`)
+      for (const p of r.pasos) {
+        console.log(
+          `   ${p.tool.padEnd(34)} ${String(Math.round(p.ms)).padStart(6)} ms  http=${p.http}  ` +
+            `${String(p.caracteres).padStart(6)} car  ~${String(tokens(p.caracteres)).padStart(5)} tok  ` +
+            `${p.esError ? 'ERROR ' : ''}${p.acierta ? '✓ llegó' : ''}  (${p.por})`,
+        )
+      }
+    }
+
+    const suma = (c: 'llamadas' | 'http' | 'caracteres') => ultima.reduce((a, r) => a + r[c], 0)
+    const sinLlegar = ultima.filter((r) => !r.llego).map((r) => r.recorrido.id)
+    const totalCar = suma('caracteres')
+    console.log(
+      `\nresumen: ${ultima.length} recorridos, ${suma('llamadas')} llamadas, ${suma('http')} peticiones HTTP, ` +
+        `${totalCar} caracteres (~${tokens(totalCar)} tokens). Sin llegar: ${sinLlegar.length ? sinLlegar.join(', ') : 'ninguno'}.`,
+    )
+    if (repeticiones > 1) {
+      const todas = corridas.flatMap((c) => c.map((r) => r.ms))
+      console.log(
+        `todas las corridas: p50 ${Math.round(percentil(todas, 0.5))} ms · p95 ${Math.round(percentil(todas, 0.95))} ms ` +
+          `(sobre ${todas.length} recorridos)`,
+      )
+    }
+  } finally {
+    cliente.cerrar()
+  }
+}
+
+const ARGS = process.argv.slice(2)
+if (ARGS.includes('--recorridos')) {
+  let repeticiones = Number(process.env['REP'] ?? 1)
+  const ids: number[] = []
+  for (let i = 0; i < ARGS.length; i++) {
+    const a = ARGS[i]!
+    if (a === '--repeticiones') {
+      repeticiones = Number(ARGS[i + 1] ?? 1)
+      i++
+      continue
+    }
+    if (/^\d+$/.test(a)) ids.push(Number(a))
+  }
+  await medirRecorridos(ids, Number.isFinite(repeticiones) && repeticiones >= 1 ? repeticiones : 1)
+  process.exit(0)
+}
+
 // --- 1. arranque en frío: spawn → respuesta a initialize -------------------
 
 function arranque(peticionExtra: object | null): Promise<{ init: number; extra: number }> {

@@ -269,26 +269,20 @@ test('buscar_en_suin busca, pagina y avisa de que su vigencia no es fiable', LEN
   assert.match(cita.texto, /No encontré|resolver_cita/)
 })
 
-test('una ley que el Gestor no tiene se resuelve contra SUIN', LENTO, async (t) => {
+test('una ley que el Gestor no tiene se resuelve contra la ficha de SUIN', LENTO, async (t) => {
   // El Gestor no cubre todo el país: la Ley 1541 de 2012 no está ahí y sí en
   // SUIN. Antes se respondía "no encontré", que se lee como "no existe".
   const r = await c.tool('resolver_cita', { cita: 'art. 3 de la Ley 1541 de 2012' })
   assert.equal(r.esError, false)
-  if (/No encontré/.test(r.texto)) {
-    // Dos causas distintas que esta prueba confundía en una: que el índice no
-    // viaje con la instalación —capacidad ausente, culpa nuestra— o que SUIN no
-    // responda —fuente caída, nada que arreglar aquí—. Acusar al índice cuando
-    // está intacto manda a regenerar 11.599 leyes para nada.
-    const fuentes = await c.tool('describir_fuentes')
-    if (/Índice de SUIN: NO viaja/.test(fuentes.texto)) {
-      assert.fail('falta datos/indice-suin.json: genera el índice con npm run generar-indice-suin')
-    }
-    t.skip('SUIN-Juriscol no respondió: el índice está, la fuente está caída')
+  if (/SUIN-Juriscol no respondió/.test(r.texto)) {
+    t.skip('el índice de fichas de SUIN no respondió: la fuente, no el servidor')
     return
   }
-  assert.match(r.texto, /SUIN-Juriscol sí la publica/)
-  assert.match(r.texto, /Estado de vigencia según SUIN/)
-  assert.match(r.texto, /--- Artículo 3 ---/)
+  assert.match(r.texto, /SUIN-Juriscol sí la registra/)
+  assert.match(r.texto, /Estado de vigencia según SUIN-Juriscol \(ficha consultada hoy\): Vigencia en Estudio/)
+  // El artículo pedido no se inventa ni se calla: se dice por qué no está.
+  assert.match(r.texto, /no sirve hoy el texto/)
+  assert.match(r.texto, /no se puede devolver el artículo 3/)
 })
 
 // --- las herramientas que nadie había ejercitado ------------------------

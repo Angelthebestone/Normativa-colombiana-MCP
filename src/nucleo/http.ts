@@ -1,8 +1,20 @@
+import { AsyncLocalStorage } from 'node:async_hooks'
 import { request } from 'node:https'
 import { pipeline } from 'node:stream'
 import { rootCertificates } from 'node:tls'
 import { createGunzip, createInflate } from 'node:zlib'
 import { GLOBALSIGN_OV, GODADDY_G2, SECTIGO_EV, SECTIGO_OV } from './ca.ts'
+import {
+  cabecerasCondicionales,
+  esDescargaCacheable,
+  guardarCopia,
+  identidadDeNorma,
+  obtenerCopia,
+  refrescarCopia,
+  ttlDeNorma,
+  type Copia,
+} from './cache.ts'
+import { diagnosticarRespuesta, fechaCorta, rotuloCopia } from './portal-roto.ts'
 
 /**
  * Raíces de Node más los intermedios que funcionpublica.gov.co,
@@ -14,15 +26,31 @@ import { GLOBALSIGN_OV, GODADDY_G2, SECTIGO_EV, SECTIGO_OV } from './ca.ts'
  */
 const CA = [...rootCertificates, SECTIGO_OV, SECTIGO_EV, GLOBALSIGN_OV, GODADDY_G2]
 
-/** Peticiones HTTP salientes y bytes de cuerpo recibidos (solo para el banco de medición). */
+/**
+ * Contadores de red del proceso: peticiones, bytes, URLs repetidas y copias
+ * servidas sin salir a la red. Los repetidos se cuentan por URL, que es como se
+ * mide cuánto se vuelve a descargar la misma norma en una sesión.
+ */
 let totalPeticiones = 0
 let totalBytes = 0
-export function redResumen(): { peticiones: number; bytes: number } {
-  return { peticiones: totalPeticiones, bytes: totalBytes }
+let totalCopias = 0
+let totalRepetidas = 0
+const pedidas = new Map<string, number>()
+
+export function redResumen(): { peticiones: number; bytes: number; repetidas: number; copias: number } {
+  return { peticiones: totalPeticiones, bytes: totalBytes, repetidas: totalRepetidas, copias: totalCopias }
 }
+
 function anotarRed(bytes: number): void {
   totalPeticiones += 1
   totalBytes += bytes
+}
+
+/** Una URL que ya se había pedido en este proceso: la métrica de lo repetido. */
+function anotarUrl(url: string): void {
+  const n = (pedidas.get(url) ?? 0) + 1
+  pedidas.set(url, n)
+  if (n > 1) totalRepetidas += 1
 }
 
 /** esbuild la sustituye desde package.json; sin empaquetar no existe. */
@@ -30,6 +58,26 @@ declare const __VERSION__: string | undefined
 export const VERSION = typeof __VERSION__ === 'string' ? __VERSION__ : 'dev'
 
 const UA = `normativa-colombia-mcp/${VERSION} (+https://github.com/Angelthebestone/Normativa-colombiana-MCP)`
+
+/**
+ * Seams de diagnóstico, apagados por defecto (nadie los define en producción):
+ * `FUENTE_CAIDA=host[,host]` hace fallar ese host como si el portal estuviera
+ * caído —es la única forma de verificar que la respuesta degradada va rotulada,
+ * porque los portales públicos no se caen cuando una prueba los necesita— y
+ * `TTL_COPIA_MS=n` fuerza el TTL de las copias, para no esperar horas a que
+ * venzan.
+ */
+const caidaForzada = (host: string): boolean => (process.env['FUENTE_CAIDA'] ?? '').split(',').includes(host)
+
+/** TTL de la copia: el de la clase de norma, salvo que se fije por opción o seam. */
+function ttlDe(url: string, texto: string, fecha: number, explicito?: number): number {
+  if (explicito !== undefined) return explicito
+  const bruto = process.env['TTL_COPIA_MS']
+  const forzado = bruto === undefined ? Number.NaN : Number(bruto)
+  if (Number.isFinite(forzado)) return forzado
+  const ident = identidadDeNorma(url, texto.slice(0, 8000))
+  return ttlDeNorma(ident.tipo, ident.anio, fecha)
+}
 
 // --- ritmo ---------------------------------------------------------------
 
@@ -173,6 +221,33 @@ export type Respuesta = {
   cookies: string
   /** Cabeceras en minúscula; la UPME publica el total en `x-wp-total`. */
   cabeceras: Record<string, string>
+  /** El cuerpo salió de una copia en memoria: no se pidió a la fuente. */
+  deCache?: boolean
+  /** La fuente contestó 304: la copia sigue vigente, comprobado, no supuesto. */
+  revalidada?: boolean
+  /** La fuente no respondió y se sirvió una copia: el llamador DEBE rotularlo. */
+  degradada?: boolean
+  /** Epoch ms de la consulta a la fuente que produjo el texto servido. */
+  fechaCopia?: number
+  /** Texto listo para pegar delante de la respuesta; vacío si no hay nada que decir. */
+  avisoCopia?: string
+  /** La fuente reenvió el documento y el texto ya no es el de la copia anterior. */
+  cambio?: boolean
+}
+
+/**
+ * Opciones de `pedir`. Van aparte de los argumentos posicionales para no tocar
+ * las cuarenta llamadas que ya existen.
+ */
+export type OpcionesPedir = {
+  /** TTL explícito de la copia; si no, sale del tipo y el año de la norma. */
+  ttlMs?: number
+  /**
+   * Si la fuente no responde y hay copia, devolver la copia con su rótulo en vez
+   * de fallar. Apagado por defecto **a propósito**: entregar una copia que el
+   * llamador no va a rotular es peor que devolver un vacío.
+   */
+  degradarDesdeCopia?: boolean
 }
 
 /**
@@ -199,6 +274,52 @@ export function decodificar(datos: Buffer, contentType = ''): string {
     // Bytes que no son UTF-8 válido: en la práctica siempre es cp1252.
     return new TextDecoder('windows-1252').decode(datos)
   }
+}
+
+// --- presupuesto de tiempo por llamada -----------------------------------
+
+/**
+ * Presupuesto de tiempo de UNA llamada a herramienta, propagado por contexto
+ * asíncrono para no pasarlo de mano en mano por cuarenta firmas.
+ *
+ * Justificación medida (2026-09-16, `scripts/medir.ts --recorridos`): el paso
+ * más lento de los ocho recorridos fue un `obtener_documento` de 3.845 ms y el
+ * p95 de los diez y nueve pasos quedó por debajo de 4 s; lo caro de verdad son
+ * la búsqueda de la DIAN (~20 s por el diseño de su endpoint, no admite tope) y
+ * el Decreto 1083 (~8 s). Un techo de 45 s deja entrar ambos con holgura y corta
+ * el caso que el usuario no tolera: minuto y medio de espera para acabar en
+ * error, habiendo podido devolver lo que ya estaba reunido.
+ */
+const presupuesto = new AsyncLocalStorage<number>()
+
+export class PresupuestoAgotado extends Error {
+  constructor(ms: number) {
+    super(
+      `Se agotó el presupuesto de ${Math.round(ms / 1000)} s para esta llamada: ` +
+        `se cortó para no hacer esperar más a cambio de nada. ` +
+        `Vuelve a pedirlo con menos pasos o más estrecho (un artículo, una fuente).`,
+    )
+    this.name = 'PresupuestoAgotado'
+  }
+}
+
+/** Corre `fn` con `ms` de presupuesto para todas las peticiones que lance. */
+export function conPresupuesto<T>(ms: number, fn: () => Promise<T>): Promise<T> {
+  return presupuesto.run(Date.now() + ms, fn)
+}
+
+/** Ms que quedan del presupuesto en curso, o null si no hay ninguno puesto. */
+export function presupuestoRestante(): number | null {
+  const hasta = presupuesto.getStore()
+  return hasta === undefined ? null : hasta - Date.now()
+}
+
+/** Recorta el `timeout` de una petición a lo que queda de presupuesto. */
+function timeoutEfectivo(timeout: number): number {
+  const queda = presupuestoRestante()
+  if (queda === null) return timeout
+  if (queda <= 0) throw new PresupuestoAgotado(0)
+  return Math.max(1000, Math.min(timeout, queda))
 }
 
 // --- petición ------------------------------------------------------------
@@ -249,6 +370,9 @@ function crudo(
   extra: Record<string, string>,
   cuerpo?: string,
 ): Promise<Cruda> {
+  if (caidaForzada(new URL(url).host)) {
+    return Promise.reject(new Error('FUENTE_CAIDA: host marcado como caído por el seam de diagnóstico'))
+  }
   return new Promise((resolve, reject) => {
     const req = request(
       url,
@@ -311,22 +435,77 @@ export async function pedir(
   extra: Record<string, string> = {},
   /** Si viene, la petición es POST con este cuerpo JSON. */
   cuerpo?: string,
+  opciones: OpcionesPedir = {},
 ): Promise<Respuesta> {
   const host = new URL(url).host
+  const esGet = cuerpo === undefined
+  anotarUrl(url)
+
+  // La copia se mira antes que el breaker: si el texto ya está y sigue fresco,
+  // no hay motivo para hablar con nadie.
+  const copia = esGet ? obtenerCopia(url) : null
+  const desdeCopia = (c: Copia, degradada: boolean, revalidada: boolean): Respuesta => {
+    totalCopias += 1
+    return {
+      status: c.status,
+      cuerpo: c.cuerpo,
+      cookies: '',
+      cabeceras: c.cabeceras,
+      deCache: true,
+      ...(degradada ? { degradada: true } : {}),
+      ...(revalidada ? { revalidada: true } : {}),
+      fechaCopia: c.fecha,
+      avisoCopia: degradada
+        ? rotuloCopia(host, c.fecha)
+        : `(servido de una copia consultada el ${fechaCorta(c.fecha)}, sin volver a la fuente)`,
+    }
+  }
+
+  if (copia && Date.now() < copia.vence) return desdeCopia(copia, false, false)
+
+  // Degradar es opt-in: el que sirve la copia es quien tiene que rotularla, y
+  // `pedir` no puede saber si su llamador lo hará.
+  const degradarO = (): Respuesta | null =>
+    copia && opciones.degradarDesdeCopia ? desdeCopia(copia, true, false) : null
 
   // Fuente degradada: no se pega a la red, se declara el estado y cuándo
   // reintentar. Las excepciones del breaker no entran en el circuito de
   // reintentos por 429/503, que solo se alimenta de respuestas reales.
   const est = estadoDe(host)
-  if (est.degradado) throw errorDegradado(host, est.reintentaEnMs!)
+  if (est.degradado) {
+    const d = degradarO()
+    if (d) return d
+    throw errorDegradado(host, est.reintentaEnMs!)
+  }
 
   for (let intento = 0; ; intento++) {
     const t0 = Date.now()
-    const r = await enCola(host, () => crudo(url, timeout, accept, extra, cuerpo))
+    const condicionales = copia ? cabecerasCondicionales(copia) : {}
+    let r: Cruda
+    try {
+      r = await enCola(host, () =>
+        crudo(url, timeoutEfectivo(timeout), accept, { ...extra, ...condicionales }, cuerpo),
+      )
+    } catch (e) {
+      const d = degradarO()
+      if (d) return d
+      throw e
+    }
     if (process.env['MEDIR_RED']) {
       process.stderr.write(
-        `${JSON.stringify({ red: Date.now() - t0, host, status: r.status, bytes: r.datos.length, ts: new Date().toISOString() })}\n`,
+        `${JSON.stringify({ red: Date.now() - t0, host, url, status: r.status, bytes: r.datos.length, copia: Boolean(copia), ts: new Date().toISOString() })}\n`,
       )
+    }
+
+    // 304: la copia sigue vigente, y eso está comprobado, no supuesto. Se le
+    // pone la fecha de hoy porque es la que el usuario va a leer; el cuerpo es
+    // el mismo y por eso la respuesta no cambia.
+    if (r.status === 304 && copia) {
+      restablecer(host)
+      anotarRed(0)
+      const fecha = Date.now()
+      refrescarCopia(url, fecha, fecha + ttlDe(url, copia.cuerpo, fecha, opciones.ttlMs))
+      return desdeCopia({ ...copia, fecha }, false, true)
     }
 
     // Si el portal pide calma, se le hace caso en vez de insistir al mismo ritmo.
@@ -338,24 +517,47 @@ export async function pedir(
       continue
     }
     if (r.status === 429 || r.status === 503) {
+      const d = degradarO()
+      if (d) return d
       throw new Error(
         `El portal está limitando las consultas (${r.status}). Espera un momento y vuelve a intentarlo.`,
       )
     }
-    // 5xx: cuenta para el breaker, que tras tres seguidos corta sin pegar a la red.
-    if (r.status >= 500) {
+
+    const texto = decodificar(r.datos, r.contentType)
+    // Un portal que se apunta a sí mismo (el 301 de SUIN) o que sirve su página
+    // de mantenimiento no está respondiendo, aunque el código HTTP no lo diga:
+    // cuenta para el breaker igual que un 5xx. La respuesta se devuelve tal cual
+    // —la fuente decide qué hacer con un 301— pero el host queda marcado.
+    const diag = diagnosticarRespuesta(url, r.status, r.cabeceras, texto)
+    if (r.status >= 500 || diag.roto) {
       anotarFallo(host)
+    } else {
+      restablecer(host)
+    }
+    if (r.status >= 500) {
+      const d = degradarO()
+      if (d) return d
       throw new Error(`El portal respondió ${r.status}.`)
     }
 
-    restablecer(host)
     anotarRed(r.datos.length)
-    return {
-      status: r.status,
-      cuerpo: decodificar(r.datos, r.contentType),
-      cookies: r.cookies,
-      cabeceras: r.cabeceras,
+    const resp: Respuesta = { status: r.status, cuerpo: texto, cookies: r.cookies, cabeceras: r.cabeceras }
+
+    // Solo se guardan documentos: congelar una búsqueda escondería lo que se
+    // publique después.
+    if (esGet && esDescargaCacheable(url, 'GET', r.contentType)) {
+      const fecha = Date.now()
+      if (copia && copia.cuerpo !== texto) resp.cambio = true
+      guardarCopia(url, {
+        cuerpo: texto,
+        status: r.status,
+        cabeceras: r.cabeceras,
+        fecha,
+        vence: fecha + ttlDe(url, texto, fecha, opciones.ttlMs),
+      })
     }
+    return resp
   }
 }
 
@@ -374,7 +576,7 @@ export async function pedirBytes(
   const est = estadoDe(host)
   if (est.degradado) throw errorDegradado(host, est.reintentaEnMs!)
   try {
-    const r = await enCola(host, () => crudo(url, timeout, accept, {}))
+    const r = await enCola(host, () => crudo(url, timeoutEfectivo(timeout), accept, {}))
     if (r.status >= 500) anotarFallo(host)
     else restablecer(host)
     anotarRed(r.datos.length)

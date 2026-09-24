@@ -9,6 +9,7 @@ import * as gestor from '../fuentes/gestor.ts'
 import * as suin from '../fuentes/suin.ts'
 import { caracterDelNivel, tipoANivel } from '../nucleo/jerarquia.ts'
 import { fragmentos, historial, sinTildes } from '../nucleo/parse.ts'
+import { activa, alcance } from '../nucleo/alcance.ts'
 
 export const TITULO = 'Analizar un posible conflicto entre dos normas'
 
@@ -41,6 +42,8 @@ export type Evidencia = {
   noEncontrada: boolean
   ambigua: boolean
   candidatos: { titulo: string; id: string; anio: string; url: string }[]
+  /** true solo si esta cita llegó a pedir el estado de vigencia a SUIN. */
+  suinConsultado?: boolean
 }
 
 /** Variantes morfológicas mínimas: la búsqueda es literal y el plural y el singular son cadenas distintas. */
@@ -98,16 +101,13 @@ export async function evidenciaDe(cita: string, sobre?: string): Promise<Evidenc
   base.caracter = caracterDelNivel(nivel)
 
   const anio = c.anio ?? n.titulo.match(/\bde\s+(\d{4})\b/i)?.[1]
-  if (anio) {
-    const v = await suin.vigencia(c.tipo, c.numero, anio).catch(() => null)
-    if (v?.estado) {
-      base.vigencia = v.estado
-    } else if (/^decreto/i.test(c.tipo)) {
-      // El índice de SUIN son casi solo leyes: para un decreto se intenta la
-      // ficha directa. Solo se expone el estado cuando la ficha responde.
-      const fd = await suin.fichaDirectaDecreto(c.tipo, c.numero, anio).catch(() => ({ ok: false as const, razon: 'ficha-caida' as const }))
-      if (fd.ok && fd.vigencia.estado) base.vigencia = fd.vigencia.estado
-    }
+  // Con SUIN apagado (FUENTES) no se pide: la línea de alcance lo declara.
+  if (anio && activa('suin')) {
+    base.suinConsultado = true
+    const f = await suin.ficha(c.tipo, c.numero, anio)
+    // Solo se expone el estado cuando la ficha responde: "no consta" y "no
+    // respondió" se quedan sin estado, que es lo que la cabecera declara.
+    if (f.ok && f.ficha.estado) base.vigencia = f.ficha.estado
   }
 
   try {
@@ -200,5 +200,17 @@ export function formatear(evA: Evidencia, evB: Evidencia, sobre?: string): strin
 export async function escribir(params: z.infer<ReturnType<typeof z.object<typeof schema>>>): Promise<string> {
   const { norma_a, norma_b, sobre } = params
   const [evA, evB] = await Promise.all([evidenciaDe(norma_a, sobre), evidenciaDe(norma_b, sobre)])
-  return formatear(evA, evB, sobre)
+  // El Gestor se consulta por cada cita interpretable; SUIN, solo si alguna
+  // llegó a la fase de vigencia. Sin ninguna cita interpretable no se tocó la
+  // red, y declarar fuentes ahí sería inventarlas.
+  const evs = [evA, evB]
+  const parseadas = evs.filter((e) => e.parseada).length
+  const detalleSuin = evs.filter((e) => e.vigencia).length
+  const cabecera = parseadas
+    ? alcance([
+        { clave: 'gestor', detalle: `${evs.filter((e) => e.titulo).length} de 2 norma(s)` },
+        ...(evs.some((e) => e.suinConsultado) ? [{ clave: 'suin', detalle: `${detalleSuin} estado(s)` }] : []),
+      ])
+    : 'Alcance: sin consultar ninguna fuente (la llamada no llegó a salir).'
+  return `${cabecera}\n\n${formatear(evA, evB, sobre)}`
 }

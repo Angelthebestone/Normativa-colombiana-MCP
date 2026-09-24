@@ -5,6 +5,7 @@
  */
 import { z } from 'zod'
 import { caracterDelNivel, NIVELES, tipoANivel, type Nivel } from '../nucleo/jerarquia.ts'
+import { alcance, proyectar } from '../nucleo/alcance.ts'
 import * as corte from '../fuentes/jurisprudencia/corte.ts'
 import * as gestor from '../fuentes/gestor.ts'
 
@@ -19,7 +20,11 @@ export const DESCRIPCION =
   'en el enlace.'
 
 export const schema = {
-  nivel: z.enum(NIVELES).describe('Nivel de autoridad: constitución, ley, decreto, resolución, concepto o jurisprudencia'),
+  // La jurisprudencia sale de la Corte Constitucional: con ella apagada
+  // (FUENTES), el nivel desaparece del enum en vez de devolver un vacío.
+  nivel: z
+    .enum(proyectar(NIVELES, (n) => (n === 'jurisprudencia' ? 'corte' : 'gestor')))
+    .describe('Nivel de autoridad: constitución, ley, decreto, resolución, concepto o jurisprudencia'),
   texto: z.string().min(1).describe('Términos a buscar dentro del nivel, ej. "teletrabajo"'),
   limite: z.coerce
     .number()
@@ -72,5 +77,9 @@ export const buscar: BuscadorNormas = async (nivel, texto, limite) =>
   nivel === 'jurisprudencia' ? porCorte(texto, limite) : porGestor(nivel, texto, limite)
 
 export async function escribir({ nivel, texto, limite }: Parametros): Promise<string> {
-  return formatear(await buscar(nivel, texto, limite), nivel, texto)
+  const items = await buscar(nivel, texto, limite)
+  // Cada nivel sale de UNA sola fuente: la jurisprudencia, de la relatoría de la
+  // Corte; el resto, del Gestor. El número de resultados va en el detalle.
+  const fuente = nivel === 'jurisprudencia' ? 'corte' : 'gestor'
+  return `${alcance([{ clave: fuente, detalle: `${items.length} resultado(s)` }])}\n\n${formatear(items, nivel, texto)}`
 }

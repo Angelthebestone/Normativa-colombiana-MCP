@@ -137,6 +137,18 @@ Al conectarse, el servidor entrega **26 herramientas**, **5 prompts** y sus **pr
 | V2 — perfiles y expedientes | `consultar_perfil`, `expediente` (acción `crear\|agregar\|leer\|exportar`) |
 | Alcance | `describir_fuentes` — qué cubre cada fuente y qué no, sin consultar la red |
 
+### Elegir las fuentes al instalar
+
+Cada herramienta se paga en contexto en cada conversación, se use o no. Si no necesitas algunas fuentes, apágalas con la variable de entorno `FUENTES` (en Claude Desktop, el campo **Fuentes** de la extensión): sus herramientas desaparecen de la lista y su valor sale de los parámetros de las herramientas compartidas (`obtener_documento.fuente`, `buscar_unificado.fuentes`, `consultar_perfil.perfil`, el nivel `jurisprudencia` de `consultar_por_jerarquia`), así que la llamada a una fuente apagada no se puede ni escribir.
+
+| `FUENTES` | Efecto | Herramientas | `tools/list` |
+| --- | --- | --- | --- |
+| vacía (por defecto) | todas | 26 | 36.803 B |
+| `-creg,-anh,-upme,-anla,-sectorial` | todas menos la regulación sectorial | 21 | 29.434 B |
+| `corte` | Gestor Normativo y Corte Constitucional | 17 | 23.282 B |
+
+Dos formas, sin mezclar: la lista de las que quieres (`corte,suin`) o la de las que quitas (`-creg,-anh`). Claves: `corte`, `suprema`, `consejo`, `dian`, `suin`, `creg`, `anh`, `upme`, `anla`, `sectorial`. El Gestor Normativo va siempre: es el corpus de `resolver_cita` y de las herramientas V2. Una clave mal escrita **impide arrancar** con el motivo en el log, en vez de dejarte sin una fuente sin avisar. Las respuestas declaran lo apagado aparte de lo no consultado (`Desactivadas en esta instalación, no consultadas: CREG, ANH…`), y `describir_fuentes` sigue describiendo las fuentes apagadas, marcadas como tales.
+
 ## Qué puedes preguntar
 
 - «¿Qué dice la Ley 1221 de 2008 sobre el auxilio de conectividad?»
@@ -193,10 +205,12 @@ Y la regla de fondo no cambia: **verifica en el enlace antes de actuar.**
 
 **Privacidad.** Cada consulta viaja a servidores del Estado colombiano, que registran las peticiones y tu dirección IP, igual que si navegaras el sitio. No se envía nada a ningún otro servidor, no hay analítica y no se recoge información tuya. Tenlo en cuenta si vas a consultar sobre un asunto propio.
 
-**Datos empaquetados.** Se incluyen dos índices, ambos con fecha de generación (2026-08-01):
+**Datos empaquetados.** Se incluyen dos índices, cada uno con su fecha de generación:
 
-- El **temático** (12.063 pares tema/subtema, 56.458 asociaciones norma–subtema) responde al instante y sigue sirviendo si el portal se cae. Si supera los tres meses, el servidor te lo advierte.
-- El de **SUIN** (11.599 leyes, de 1844 a 2026) traduce una cita a su documento, porque SUIN no tiene buscador utilizable. La vigencia se consulta en vivo; el índice solo dice dónde mirar. **Cubre leyes, no decretos**: los sitemaps de decretos del portal devuelven 404, así que para un decreto la vigencia normalmente no consta —lo que no significa ni que esté vigente ni que esté derogado.
+- El **temático** (12.063 pares tema/subtema, 56.458 asociaciones norma–subtema, 2026-08-01) responde al instante y sigue sirviendo si el portal se cae. Si supera los tres meses, el servidor te lo advierte.
+- El de **SUIN** (11.613 leyes, 2026-09-24) traduce una cita escrita como texto a su documento sin salir a la red. La vigencia **no** depende de él: se pide en vivo a la ficha de SUIN por tipo, número y año, para leyes y decretos.
+
+**SUIN-Juriscol cambió de portal (septiembre de 2026).** La ficha con el estado de vigencia sale ahora del índice público de su buscador nuevo, que trae leyes y decretos y **llega hasta 2020**: de una norma posterior no hay ficha, y la respuesta lo dice en vez de callarlo. El **texto** de los documentos ya no se puede leer desde fuera: el visor del portal lo pide a una dirección privada del Ministerio y se queda en blanco (medido con un navegador el 2026-09-24). Se entrega la ficha, el estado y el enlace clásico `viewDocument.asp?id=`.
 
 **Cobertura de la búsqueda tributaria.** La primera consulta de cada término a la DIAN tarda unos 20 segundos: su portal devuelve el resultado completo y no admite límite. Las páginas siguientes del mismo término son instantáneas, así que conviene paginar en lugar de repetir búsquedas.
 
@@ -213,11 +227,11 @@ npm install
 npm run check              # typecheck + lint + pruebas de biblioteca + de extremo a extremo
 npm run medir              # métricas: bundle, arranque, índices y una fila por herramienta (p50/p95/peticiones/bytes)
 npm run generar-indice     # regenera datos/indice-tematico.json (~20 MB de descarga)
-npm run generar-indice-suin # regenera datos/indice-suin.json (~45 min; reanudable)
+npm run generar-indice-suin # regenera datos/indice-suin.json (unos segundos: pagina el índice del portal de SUIN)
 npm run pack               # produce normativa-colombia.mcpb
 ```
 
-`datos/` **sí está versionado**: sin él un clon limpio no pasa las pruebas, y el índice de SUIN cuesta 45 minutos de peticiones a un servicio público. Regenéralos solo cuando quieras actualizarlos.
+`datos/` **sí está versionado**: sin él un clon limpio no pasa las pruebas. Regenéralo solo cuando quieras actualizarlo.
 
 Las pruebas consultan los portales oficiales. `SIN_RED=1 npm test` corre solo la lógica pura, útil para iterar rápido o sin conexión.
 

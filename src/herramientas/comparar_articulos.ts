@@ -8,6 +8,7 @@ import { agruparEditoriales, clasificarDiferencia, diffArticulos } from './diff.
 import { idTipo, parsearCita, candidatosAmbiguos } from '../nucleo/citas.ts'
 import { articulo as extraerArticulo, limpiarArticulo } from '../nucleo/parse.ts'
 import * as gestor from '../fuentes/gestor.ts'
+import { alcance } from '../nucleo/alcance.ts'
 
 export const TITULO = 'Comparar dos artículos de normas distintas'
 
@@ -103,13 +104,19 @@ export async function escribir(params: Params): Promise<string> {
   const { norma_a, articulo_a, norma_b, articulo_b } = params
   const A = await articuloDe(norma_a, articulo_a)
   const B = await articuloDe(norma_b, articulo_b)
+  // Solo se consulta el Gestor, y solo por las citas interpretables: dos citas
+  // ilegibles no llegan a tocar la red y por eso no se declaran.
+  const citas = [norma_a, norma_b].filter((c) => parsearCita(c)).length
+  const cabecera = citas
+    ? alcance([{ clave: 'gestor', detalle: `${citas} cita(s)` }])
+    : 'Alcance: sin consultar ninguna fuente (la llamada no llegó a salir).'
   const notas = [A.nota, B.nota].filter(Boolean)
   if (A.articulo.texto === null || B.articulo.texto === null) {
     const lineas = [...notas]
     if (A.articulo.url) lineas.push(`- ${A.articulo.titulo}: ${A.articulo.url}`)
     if (B.articulo.url) lineas.push(`- ${B.articulo.titulo}: ${B.articulo.url}`)
     lineas.push('', CIERRE)
-    return lineas.join('\n')
+    return `${cabecera}\n\n${lineas.join('\n')}`
   }
-  return [...notas, formatear(diffArticulos(A.articulo.texto, B.articulo.texto), A.articulo, B.articulo)].join('\n')
+  return `${cabecera}\n\n${[...notas, formatear(diffArticulos(A.articulo.texto, B.articulo.texto), A.articulo, B.articulo)].join('\n')}`
 }

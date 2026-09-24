@@ -45,7 +45,7 @@ test('resolver_cita: validar=true produce el veredicto ✓/✗', LENTO, async ()
 test('obtener_documento: fuente="gestor" sin id es un error de validación, no un vacío', CONTRATO, async () => {
   const r = await c.tool('obtener_documento', { fuente: 'gestor' })
   assert.equal(r.esError, true)
-  assert.match(r.texto, /hace falta id/)
+  assert.match(r.texto, /hace falta id/i)
 })
 
 test('obtener_documento: un id inexistente se reporta como texto, no como fallo', LENTO, async () => {

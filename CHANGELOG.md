@@ -3,6 +3,221 @@
 Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/).
 Este proyecto sigue [versionado semántico](https://semver.org/lang/es/).
 
+## [1.14.0] — 2026-09-24
+
+**Cierre del 2026-09-24: los pendientes que dejó la auditoría, y SUIN-Juriscol, que volvió con otro portal.** El operador elige qué fuentes consulta al instalar; la Corte Suprema y el Consejo de Estado rotulan cada pasaje con su parte de la providencia; la vigencia sale de la ficha nueva de SUIN, decretos incluidos; la revalidación condicional está medida portal por portal y corregida; un `tipo_documento` que no existe se rechaza antes de buscar. Las tres entradas del 2026-09-16 que siguen debajo se publican con esta versión.
+
+### Añadido
+
+- **`FUENTES`: el operador elige qué fuentes consulta, al instalar.** En la extensión `.mcpb` es el campo «Fuentes»; por npm, la variable de entorno. Dos formas sin mezclar: las que se quieren (`corte,suin`) o las que se quitan (`-creg,-anh,-upme,-anla,-sectorial`). Una fuente apagada **desaparece** de `tools/list` y su valor sale de los enums de las herramientas que cubren varias (`obtener_documento.fuente`, `buscar_unificado.fuentes`, `consultar_perfil.perfil` y el nivel `jurisprudencia` de `consultar_por_jerarquia`): la llamada a una fuente apagada no se puede ni escribir, la rechaza el esquema. Las herramientas compartidas que la tocarían por dentro (`resolver_cita`, `consultar_vigencia`, `analizar_conflicto`) dejan de consultarla diciéndolo, la línea de alcance separa `NO consulté …` de `Desactivadas en esta instalación, no consultadas: …`, las instrucciones del servidor nombran lo apagado, y `describir_fuentes` sigue describiendo las fuentes apagadas, marcadas. El Gestor Normativo no se puede apagar: es el corpus de `resolver_cita` y de las herramientas V2. Una clave mal escrita **impide arrancar** con el motivo en una línea (`FUENTES="cort": "cort" no es una fuente que se pueda elegir…`) en vez de dejar la instalación sin una fuente sin avisar. Es el patrón de `EXPEDIENTES=1` generalizado, y sustituye a la consolidación de las sectoriales que se decidió no hacer.
+
+  | `FUENTES` | Herramientas | `tools/list` |
+  |---|---|---|
+  | vacía (todas) | 26 | 36.803 B |
+  | `-creg,-anh,-upme,-anla,-sectorial` | 21 | 29.434 B (−20,0 %) |
+  | `corte` | 17 | 23.282 B (−36,7 %) |
+
+- **`consultar_perfil` declara su alcance**, que era la única de las 26 que no lo hacía: cada perfil sabe qué fuente consulta y lo dice delante, con cuántos resultados trajo.
+
+### Cambiado
+
+- **SUIN-Juriscol cambió de portal, y la vigencia sale de su ficha nueva, para leyes y decretos.** Desde el 2026-09-16 `www.suin-juriscol.gov.co` es una SPA que sirve la misma página vacía de 4.758 bytes a cualquier ruta, `viewDocument.asp` incluida: la ficha HTML que se leía ya no existe, y la prueba de humo que la leía pasó de saltarse a fallar. La ficha sale ahora del índice de Elasticsearch que consulta el buscador nuevo del portal (`lexis.minjusticia.gov.co`), público y sin clave, pedida por tipo, número y año. Su `estado` **es** el campo de la ficha: la Ley 74 de 1923 da «Derogado» (el índice de Azure dice «Vigencia en Estudio») y la Ley 1541 de 2012 «Vigencia en Estudio». Y trae **64.792 decretos**, que el índice empaquetado casi no tenía: el Decreto 1083 de 2015 pasa de «no consta» a «Vigente». `suin.vigencia()` y `suin.fichaDirectaDecreto()` se funden en `suin.ficha()`, con tres estados (ficha / no consta / ficha caída) y la identidad comprobada por número, año y tipo o subtipo; `consultar_vigencia` pierde la rama de confianza «media», que existía porque la vía de las leyes era otro índice que contradecía a la ficha.
+- **Dos límites del portal nuevo, medidos y declarados en la respuesta.** Su índice **llega hasta 2020** (el año más alto con documentos es 2020, con 737; la Ley 2124 de 2021 no está): una norma posterior sale «no consta» diciendo por qué, sin cortar por año en el código, para que lo reciente se lea el día que lo carguen. Y el **texto** ya no se puede leer desde fuera: el visor nuevo lo pide a `http://192.168.8.64:10015` y los enlaces del buscador apuntan a `http://192.168.8.145`, direcciones privadas; con un navegador la página carga y el cuerpo queda con 0 caracteres. `resolver_cita` entrega la ficha, el estado y el enlace clásico, y dice que el artículo pedido no se puede devolver.
+- **`scripts/generar-indice-suin.ts` pagina el índice del portal en 12 peticiones** en vez de abrir 11.700 páginas durante tres horas, y **fusiona** con el índice anterior: el nuevo llega hasta 2020 y el crawl viejo tenía 606 leyes de 2021 a 2023 que no se tiran. El id es `visualizacion`, el clásico; el `id` del índice nuevo difiere en uno para 619 leyes. `datos/indice-suin.json`: 11.613 leyes, generado el 2026-09-24.
+- **La revalidación condicional pregunta por fecha antes que por ETag.** Medido portal por portal (tabla en `src/nucleo/cache.ts`): la Corte, la DIAN, la CREG, la Supersalud y el INVIMA publican `ETag` y `Last-Modified`; el Gestor ninguno. El ETag de IIS cambia según el nodo de la granja que conteste (`"62318d036a9cc1:0"` y `"80aa1d036a9cc1:0"` para el mismo archivo de la Corte): `If-None-Match` acertó 6 de 7 en la Corte, la DIAN y la CREG y 0 de 7 en la Supersalud, mientras `If-Modified-Since` dio 304 en todas. Se manda solo la fecha —con `If-None-Match` presente el servidor ignora la fecha (RFC 9110 §13.1.3)— y el ETag queda para quien no publique fecha. De punta a punta, con la copia vencida: la Corte y la DIAN revalidan con 0 bytes; el Gestor vuelve a bajar sus 222.021.
+- **El Código Civil ya tiene ficha en SUIN, pero no texto.** `resolver_cita` da su estado cuando SUIN responde; el aviso de ausencia dice ahora que lo que falta es el texto.
+
+### Corregido
+
+- **`obtener_documento(fuente="suprema"|"consejo")` rotula cada pasaje con su parte de la providencia**, como la Corte Constitucional: `Estructura:` en la cabecera, `[aclaración de voto — FERNANDO CASTILLO CADENA]` delante de cada pasaje, el aviso cuando salen de partes distintas y `seccion` admitido en las tres. Un solo camino para las tres cortes (`leerProvidencia`): el error que evita es el mismo y los encabezados también. Medido sobre doce providencias reales: el Consejo usa las mismas formas que la Corte; la Suprema escribe a veces el encabezado con dos puntos (`RESUELVE:`, casación penal 22186 de 2004) o con apellido (`ANTECEDENTES RELEVANTES`, ATP284-2021), y pone el nombre del firmante en el renglón siguiente al voto con `Magistrado` debajo (SL4068-2022). Lo que precede al primer encabezado se rotula `encabezado de la providencia (corporación, partes y proceso)`: en esas dos cortes no hay relatoría delante. Sin regresión en la Corte Constitucional: SU-371/21, T-099/24, T-015/22, C-355/06 y SU-020/22 dan 9, 7, 5, 9 y 7 tramos y 4, 2, 0, 4 y 2 firmantes, lo mismo que la tabla de abajo.
+- **`buscar_normas` con un `tipo_documento` que no existe ya no busca sin el filtro.** Antes el portal buscaba sin él y devolvía normas de todos los tipos con el aire de estar filtradas, y el aviso quedaba en una nota. Ahora se valida contra el catálogo vivo del Gestor —el mismo que usa la búsqueda, cacheado: no cuesta una petición más— y se rechaza antes de buscar, con los tipos que publica hoy (27, medido el 2026-09-24). No se cierra en un enum porque la lista la sirve el portal y un enum la haría envejecer.
+- **Dos pruebas del arnés de LLM que no podían pasar**: buscaban `Gestor (` y `SUIN (` donde la línea de alcance escribe `Gestor Normativo (` y `SUIN-Juriscol (`.
+
+### Verificado
+
+Medido el 2026-09-24 con el bundle compilado.
+
+| Qué | Resultado |
+|---|---|
+| `npm run typecheck` · `npm run lint` | limpios |
+| `npm test` | 203 pruebas · **203 pasan** · 0 saltadas (la de SUIN ya no se salta) |
+| `npm run test:e2e` | 43 pruebas · **43 pasan** |
+| `npm run test:red` | 68 pruebas · **68 pasan** |
+| `npm run test:llm` | 13 pruebas · **13 pasan** |
+| Barrido LLM, familia 1 | **30/30** |
+| Barrido LLM, familia 2 | todas las reglas aplicables pasan |
+| Los 8 recorridos | 19 llamadas · 23 peticiones HTTP · **7 de 8 llegan** (era 6; el 3 no, ver Pendiente) |
+| `tools/list` con todas las fuentes | 26 herramientas · 36.803 B |
+| `FUENTES` inválida (`cort`, `corte,-suin`, `-gestor`) | no arranca, con el motivo en una línea de stderr |
+| `.mcpb` | `npx @anthropic-ai/mcpb validate manifest.json`: el esquema pasa con `user_config.fuentes` |
+
+No medido: la familia 3 del barrido (el juez).
+
+### Pendiente
+
+- **El recorrido 3 («¿está vigente el Decreto 1235 de 2023?») sigue sin llegar, ahora por el límite de 2020 del índice de SUIN**, no porque el portal esté caído. La respuesta es la correcta —«no consta», diciendo por qué—; lo que falta es el dato en la fuente.
+- **El texto de los documentos de SUIN**, mientras el portal lo sirva solo dentro de la red del Ministerio.
+- `buscar_jurisprudencia.tipos` y `buscar_normativa_sectorial.categoria` siguen siendo texto libre.
+
+---
+
+**Un pasaje de una providencia ya dice de qué parte del fallo sale.** Una sentencia no es texto plano: es la mayoría, y después los votos de quienes no la comparten. Devolverlos indistinguibles es la vía directa a atribuirle a la Corte lo que dijo un magistrado a título propio, y el error no se ve, porque el texto es auténtico.
+
+### Corregido
+
+- **`obtener_documento(fuente="corte")` rotula cada pasaje con su parte de la providencia.** Medido en la SU-371/21: `buscar_en_texto: "instigar"` devuelve tres pasajes, uno en las consideraciones (car. 142.092) y dos en la aclaración de voto de la magistrada Ortiz Delgado (155.175 y 157.770). Salían sin distinguir, y los de la aclaración se citaron como doctrina de la Sala Plena en un memorial que iba a radicarse. Ahora cada pasaje va precedido de `[consideraciones de la mayoría]` o `[aclaración de voto — GLORIA STELLA ORTIZ DELGADO]`, y cuando los pasajes salen de partes distintas la respuesta lo advierte arriba, antes de los pasajes.
+
+- **`seccion: "decision"` deja de tragarse los votos y las notas.** En la SU-371/21 devolvía 52.659 caracteres: desde el encabezado "DECISIÓN" hasta el final del documento, con las cuatro aclaraciones de voto completas dentro. Ahora devuelve 1.365, que es la decisión. La causa era que el corte se hacía en el siguiente encabezado conocido y los votos no estaban entre los conocidos.
+
+- **El aparato de notas al pie se separa.** En la T-015/22 son 34.436 caracteres, el 21 % del documento, que viajaban rotulados como parte de la decisión. Se detecta por el último `[1]` a renglón propio del último 40 % del documento, y solo si le siguen cinco llamadas más: sin las dos condiciones, un `[1]` de referencia dentro del cuerpo se llevaba media providencia.
+
+### Añadido
+
+- **`seccion` admite `salvamentos`, `aclaraciones`, `notas` y `encabezado`**, además de las tres que ya había. Los votos se devuelven todos, cada uno bajo su rótulo con el nombre de quien lo suscribe.
+
+- **La cabecera de toda respuesta de la Corte declara la estructura del documento**, con cada tramo y su tamaño: `encabezado de la relatoría (tema y síntesis) (4.505 car.) · antecedentes (35.041 car.) · consideraciones de la mayoría (103.500 car.) · decisión (1.350 car.) · aclaración de voto — PAOLA ANDREA MENESES MOSQUERA (2.373 car.) · …`. Sirve para saber a qué se está entrando antes de pedirlo.
+
+- **`mapaDeSecciones()` y `etiquetaEn()` en `src/nucleo/parse.ts`**: la estructura completa de una providencia en tramos contiguos y sin huecos, cada carácter en exactamente un tramo. `seccion()` pasó a construirse sobre el mapa en vez de tener su propia lógica de corte, así que hay un solo camino y no dos.
+
+- **`fragmentos()` devuelve `inicios`**, la posición de la primera coincidencia de cada ventana. Es lo que permite rotular un pasaje sin volver a buscar. Se usa la posición de la coincidencia y no la de la ventana, porque el contexto de 400 caracteres puede haber cruzado una frontera de sección.
+
+### Verificado
+
+Medido el 2026-09-16 contra las providencias reales descargadas de la relatoría, con `npx tsc --noEmit` limpio:
+
+| Providencia | Caracteres | Tramos detectados | Firmantes recuperados |
+|---|---|---|---|
+| SU-371/21 | 195.706 | 9 | 4 de 4 aclaraciones |
+| T-099/24 | 140.646 | 7 | 1 salvamento y 1 aclaración |
+| T-015/22 | 164.003 | 5 | sin votos, correcto |
+| C-355/06 | 1.744.595 | 9 | 4 de 4, incluido el voto conjunto |
+| SU-020/22 | 1.851.581 | 7 | 2 de 2, incluido el voto conjunto |
+
+Invariantes comprobados en las cinco: el mapa empieza en 0, termina en el último carácter y no deja huecos ni solapes entre tramos.
+
+Dos formas de encabezado que rompían el reconocimiento y quedaron cubiertas: el encabezado partido por renglones (`ACLARACIÓN\nDE VOTO DEL MAGISTRADO`, SU-371/21 car. 146.769) y el voto conjunto, donde los nombres van separados por "Y" y un renglón en blanco (SU-020/22: `PAOLA ANDREA MENESES MOSQUERA Y GLORIA STELLA ORTIZ DELGADO`).
+
+El nombre del firmante degrada a cadena vacía sin romper nada: saber que un pasaje sale de un voto particular ya evita el error de atribución, y el nombre es precisión añadida, no el requisito.
+
+### Pendiente
+
+- El rotulado es solo para la Corte Constitucional. — **Resuelto** en la 1.14.0, para la Corte Suprema y el Consejo de Estado, sin tipo común en `evidencia.ts`: la procedencia es la misma estructura de tramos para las tres cortes, y un tipo más no añadía nada que el mapa no diera.
+
+---
+
+**Auditoría del 2026-09-16, tres frentes en paralelo: una llamada imposible falla antes de tocar la red, una descarga repetida se sirve de copia, y un artículo que remite a un documento que este servidor no tiene lo dice en vez de callarlo.**
+
+Los tres agentes trabajaron sobre ficheros disjuntos y **ninguno llegó a escribir su informe** (ver «Estado de la auditoría» al final): lo que sigue son los cambios que sí quedaron en el árbol, medidos y verificados por el cierre. **Las cifras de esta entrada son las de ese momento**: la «Segunda pasada» de más abajo las mejora y resuelve cuatro de sus seis pendientes, que quedan marcados como tales para que esta lista no siga afirmando lo que ya no es cierto.
+
+### Corregido
+
+- **`obtener_documento` dice qué falta, qué sobra y el ejemplo mínimo que funciona, y lo dice antes de salir a la red.** Las siete fuentes comparten un esquema plano de 18 propiedades donde solo `fuente` es obligatorio, así que la combinación inválida se podía escribir y el error llegaba en ejecución. Ahora el mensaje nombra los dos lados del error y la fuente concreta: `Hace falta sala. Cada valor de "fuente" exige lo suyo (gestor→id, corte→ruta, suprema→ruta+sala, consejo→token, dian→link, creg→ruta, sectorial→entidad+url). Ejemplo mínimo que funciona: {"fuente":"suprema","ruta":"<la de buscar_jurisprudencia_suprema>","sala":"Laboral"}`. Y cuando se pasa un parámetro de otra fuente lo dice —`sobra ruta (es de corte)`— en vez de descartarlo en silencio, que era el peor resultado posible: quien llamaba no deducía que se había equivocado de parámetro, deducía que no había resultados.
+  - **No se pudo expresar como unión discriminada**: el SDK publica un `inputSchema` plano. Medido sobre el `tools/list` real: `obtener_documento` sigue con 18 propiedades y solo `fuente` obligatoria. El sustituto aplicado es la validación temprana con mensaje que enseña.
+- **Cada recorrido de la auditoría se midió de punta a punta y los ocho siguen ahí** (`test/recorridos.ts` + `scripts/medir.ts --recorridos`). Tres de los ocho costaban peticiones HTTP de más para devolver lo mismo.
+
+### Añadido
+
+- **`consultar_perfil.perfil` y `describir_fuentes.fuente` dejan de ser texto libre y pasan a enum cerrado.** Un modelo que conoce el dominio pero no el esquema escribía el sinónimo plausible y se llevaba un vacío; ahora el rechazo nombra los valores válidos y no toca la red. Quedan abiertos `buscar_normas.tipo_documento`, `buscar_jurisprudencia.tipos` y `buscar_normativa_sectorial.categoria`.
+- **La respuesta declara a qué documento externo remite un artículo, aunque no lo tenga.** El numeral 1.16 del artículo 2.4.1.2.44 remite al *Manual de Uso, Manejo y Recomendaciones de Medidas de Prevención y Protección* de la UNP, que decidía el punto central de un caso real y no está en ninguna fuente del servidor. Ahora se dice: «Este artículo remite a un documento externo: «…». Esta herramienta NO lo consulta». Detectar la remisión es barato; conseguir el documento es otro proyecto.
+- **Caché con TTL por clase de norma y revalidación condicional.** El TTL no es único porque las normas no envejecen igual: la Constitución casi no cambia, un decreto de este año puede cambiar mañana. `claseDeNorma()` lo deriva del tipo y el año, que el servidor ya conoce. Con copia en memoria y `cabecerasCondicionales()` se manda `If-Modified-Since`/`ETag` donde el portal lo soporte.
+- **Respuesta degradada y rotulada**: cuando la fuente no responde y hay copia, se devuelve la copia **diciéndolo** y con la fecha de la copia. Sin el rótulo no se sirve: una degradada muda es peor que un vacío.
+- **Presupuesto de tiempo por llamada** (`conPresupuesto`, `presupuestoRestante`): una llamada que tarda noventa segundos y luego falla es peor que una que a los diez devuelve lo rotulado que alcanzó a reunir.
+- **Seams de diagnóstico por variable de entorno**: `FUENTE_CAIDA=host` simula el portal caído y `TTL_COPIA_MS` fuerza el vencimiento de las copias. Es lo que permite probar la degradación sin esperar a que un portal público se caiga de verdad.
+- **El arnés de fallos de LLM** (`test/red-llm.ts`, `scripts/barrido-llm.ts`): tres familias —la llamada verosímil y equivocada generada del JSON Schema publicado, nueve reglas sobre el texto de una respuesta correcta, y el juez. `scripts/barrido-disruptivo.ts` no se toca: cubre otra clase y sigue haciendo falta.
+
+### Verificado
+
+Medido el 2026-09-16 con el bundle compilado, `npm run check` y `npm run test:red`.
+
+| Qué | Antes | Después |
+|---|---|---|
+| `tools/list`, JSON compacto | 38.545 B | **36.431 B** (−5,5 %) |
+| `tool.description` | 14.983 B | **12.885 B** (−14,0 %) |
+| `.describe()` de parámetros | 7.920 B | 7.559 B |
+| ~tokens por sesión (b/4) | 9.636 | **9.108** |
+| Herramientas | 26 | 26 (sin consolidar) |
+| Los 8 recorridos: peticiones HTTP | 27 | **22** (−18,5 %) |
+| Recorrido 1 (art. 2.4.1.2.44 del D. 1066) | 6 HTTP · 10.054 ms | **3 HTTP · 6.401 ms** |
+| Recorrido 5 (remisión del numeral 1.16) | no llegaba | **llega** |
+| `npm test` | — | 194 pruebas, 193 pasan, 1 saltada |
+| `npm run test:e2e` | — | 43 pruebas, 42 pasan, 1 saltada |
+| `npm run test:red` | — | 68 pruebas, 68 pasan |
+
+El barrido de fallos de LLM: **familia 1, 27/30**; **familia 2**, la regla 5 (alcance declarado) falla en los 8 recorridos; **familia 3**, el juez acierta la vigencia (`NOSESABE`, la regla que más importa) y la remisión, y **falla la verificación negativa**: ante un decreto y una sentencia inventados contesta `NOSESABE` donde la respuesta correcta es `NO`.
+
+### Pendiente
+
+> **Cuatro de estos seis se resolvieron el mismo día, en la «Segunda pasada» de
+> más abajo, y uno se decidió NO hacer.** Se marcan en vez de borrarlos para que
+> la lista no siga afirmando cosas que ya no son ciertas.
+
+- **`resolver_sentencia` no existe.** — **Resuelto**, y sin herramienta nueva: verificar una sentencia por su número quedó dentro de `resolver_cita`, que ya era quien resolvía las citas de sentencia. Una herramienta más solo para esto habría engordado el catálogo. Lo que faltaba no era la herramienta, era que la relatoría no se estaba consultando con la forma con la que indexa. Ver «Segunda pasada»: el defecto real estaba en `porSentencia`. Verificar una sentencia por su número sigue costando pasar por `buscar_jurisprudencia`, que indexa texto completo: `termino: "SU-371"` devuelve diez providencias —C-034/96, C-278/19…— y **ninguna es la SU-371/21**, todas marcadas «⚠ no menciona el término». La encontró el segundo intento, por materia. Con él viene la verificación negativa, que es lo que hace que el juez conteste `NO` en vez de `NOSESABE`.
+- **Fallo de identidad latente en la vigencia de decretos.** — **Resuelto**: `fichaDirectaDecreto` ya compara número Y año. `fichaDirectaDecreto` (`src/fuentes/suin.ts`) tomaba el primer resultado que empezara por «Decreto» **sin comparar número ni año**: medido contra el índice de Azure, `"Decreto 1235 de 2023"` devuelve `DECRETO 1235 DE 1952`, `DECRETO 1235 DE 1982`, `DECRETO 2023 DE 1952`… y `$filter=titulo eq 'DECRETO 1235 DE 2023'` devuelve `{"value":[]}`. Hoy falla porque **SUIN está caído** (todas las rutas, incluida la portada, responden 301 desde nginx con `Location` idéntica); el día que vuelva, esa ruta ya no devolvería la vigencia de un decreto de 1952 para uno de 2023.
+- **Ninguna respuesta declara qué fuente consultó y cuál no** (regla 5), ni encadena siempre el paso siguiente con la llamada literal, ni devuelve el asa del trozo siguiente ya calculada. — **Resuelto**: la línea `Alcance:` va delante en las 26 herramientas y `resolver_cita` termina con el paso siguiente escrito para copiarlo. El asa del trozo siguiente ya la daba `obtener_documento` desde antes.
+- **Las seis herramientas sectoriales no se consolidaron.** — **Decidido no hacer**, y no por el riesgo: cada fuente tiene un dominio distinto —la SIC reúne fallos contra empresas, la CREG tarifas de energía— y lo que hace que el modelo elija bien es la descripción de cada una, que es justo donde vive el ahorro que se buscaba. Ver «Decidido no hacer» en la segunda pasada, y la vía que lo sustituye. Miden 9.161 B = 25 % del payload; `texto` es el único parámetro común a las seis y la condición era no perder ninguna advertencia por entidad.
+- **La revalidación condicional no se comprobó contra los portales**: `cabecerasCondicionales()` existe, pero qué portal emite `ETag` o `Last-Modified` **no se midió**. — **Resuelto** en la 1.14.0: medido portal por portal, y corregido el orden de los validadores.
+- **El rotulado de procedencia sigue siendo solo de la Corte Constitucional**: la Suprema y el Consejo de Estado devuelven pasajes sin decir de qué parte de la providencia salen. — **Resuelto** en la 1.14.0.
+
+### Estado de la auditoría
+
+Tres subagentes en paralelo sobre ficheros disjuntos (A: `http.ts`/`cache.ts`/`portal-roto.ts`; B: `index.ts`/`herramientas/*`; C: `fuentes/*`/`parse.ts`). Un reinicio del equipo los cortó a media tarea y **ninguno escribió `INFORME-A.md`, `INFORME-B.md` ni `INFORME-C.md`**, así que las cifras de arriba son las que el cierre midió sobre el árbol, no las que ellos reportaron. Tres choques al compilar junto, todos de expectativa y no de comportamiento: dos pruebas de smoke ancladas al contrato viejo de `seccion()`, y cuatro regex de `test:red` que buscaban en minúscula un mensaje que ahora empieza por mayúscula.
+
+---
+
+**Segunda pasada del 2026-09-16: lo que la auditoría dejó pendiente.**
+
+**La SU-371/21 no se encontraba, y no era culpa de la búsqueda por materia.** La relatoría indexa esa sentencia como `SU371/21` —sin guion— y devuelve su número como `SU.371/21` —con punto—, mientras `porSentencia` comparaba quitando solo espacios y puntos: `SU.371/21` nunca casaba con `SU-371/21`. Medido hoy contra la API real, las C y las T sí casan con guion y las SU **solo** sin él, así que ninguna forma sola basta. Con las dos formas y una identidad que quita `-`, `.` y `/`, `resolver_cita("SU-371/21")` devuelve la providencia en dos sondeos.
+
+Ese arreglo era la puerta de todo lo demás: sin poder encontrar una sentencia que existe, convertir el «no está» en un «no existe» habría fabricado el error que más daño hace —un no seguro y falso—. Con él, la negativa ya se puede afirmar.
+
+### Corregido
+
+- **`resolver_cita` da un no duro para una sentencia que la relatoría no tiene**, en vez de caer a la rama del Gestor —que no publica sentencias— y salir por un «No encontré la cita» que obliga a quien pregunta a decidir entre «no existe» y «no supe buscarla». Ahora: «No existe ninguna providencia con el número SU-999/99 en la relatoría de la Corte Constitucional», con los términos sondeados a la vista y el paso siguiente si lo que se buscaba era por materia. Y si la relatoría no responde, dice que no se pudo comprobar en vez de insinuar una ausencia.
+- **`consultar_vigencia` deja de mandar las sentencias a SUIN.** Una cita como «C-377 de 2000» resolvía contra el corpus de vigencia y devolvía «no consta (ficha caída)», que se lee como un fallo de la fuente y no distingue «no existe» de «la fuente falló». Ahora una sentencia se verifica contra la relatoría: existe (cosa juzgada, con la URL), no existe (negativa dura) o no se pudo comprobar.
+- **`fichaDirectaDecreto` compara número Y año.** Tomaba el primer resultado que empezara por «Decreto»: medido contra el índice real, `"Decreto 1235 de 2023"` devuelve `DECRETO 1235 DE 1952`, `DECRETO 1235 DE 1982` y `DECRETO 2023 DE 1952`, así que habría publicado la vigencia de un decreto de 1952 para uno de 2023, con su fecha y su descargo impecables. Hoy el fallo está tapado porque **SUIN responde 301 a todas las rutas, incluida su portada**: el día que vuelva, esa ruta ya no miente. Acepta `Decreto`, `DECRETO LEY`, ceros a la izquierda y coletillas tras el año, y lo que no casa devuelve `no-consta`.
+- **`listar_catalogos` dice cuál parámetro sobra y de qué catálogo es.** `catalogo="tipos"` con `numero="9999"` ignoraba el número y devolvía los 29 tipos con el mismo aire que si el filtro se hubiera aplicado: quien llamaba deducía que no había resultados, no que había pasado el parámetro a otro catálogo.
+- **El bloque de cada artículo lleva su URL pegada al encabezado.** El articulado trae líneas en blanco dentro, así que un `URL:` al pie quedaba en otro párrafo y el fragmento citable se copiaba sin su origen. Lo mismo en `obtener_documento`, donde el origen se pegó a cada bloque citable (`conOrigen`).
+- **`expediente` con un id inexistente ya no crea nada en silencio**, y `crear` con id dice de dónde salen los ids.
+
+### Añadido
+
+- **Toda respuesta declara su alcance, delante**: `Alcance: consulté Gestor Normativo (12 documentos). NO consulté Corte Constitucional, Corte Suprema, Consejo de Estado, DIAN, SUIN-Juriscol, CREG, ANH, UPME, ANLA, reguladores sectoriales.` Es la mitad útil del dato: un vacío en una fuente no es el vacío de las demás, y sin la lista quien lee tiene que adivinar si el hueco es del corpus o de su pregunta. Va en las 26 herramientas, con la verdad de cada rama —incluidas las que no llegaron a consultar nada— y con el detalle de lo que cada una encontró.
+- **La llamada siguiente, escrita para copiarla.** `resolver_cita` termina con `Siguiente paso: el articulado, con obtener_documento con fuente="gestor", id="31431"`. El id ya estaba en la respuesta, pero convertirlo en la llamada siguiente obliga a recordar el nombre de la fuente y del parámetro.
+
+### Verificado
+
+Medido el 2026-09-16 con el bundle compilado.
+
+| Qué | Antes | Después |
+|---|---|---|
+| Familia 1: la llamada verosímil y equivocada | 27/30 | **30/30** |
+| Familia 2: las nueve reglas, 8 respuestas reales | regla 5 fallaba en 8/8 | **todas las reglas aplicables pasan** |
+| Familia 3: el juez | 3 de 5 | 3 concluyentes, todas ✓ (2 no medibles, ver abajo) |
+| Los 8 recorridos: peticiones HTTP | 22 | **21** |
+| Caracteres de los 8 recorridos | 65.001 | 76.443 (más alcance y más paso siguiente) |
+| `npm test` | — | 194 pruebas, 193 pasan, 1 saltada |
+| `npm run test:red` | — | 68 pruebas, 68 pasan |
+| `npm run test:e2e` | — | 43 pruebas, 42 pasan, 1 saltada |
+
+**El juez no es determinista, y eso obligó a cambiar el arnés.** Sobre el MISMO texto, tres llamadas seguidas dieron `NO, NO, NO` en una tanda y `NOSESABE` en otra. Con un solo veredicto, el ruido del juez se reportaba como defecto del servidor: es lo que pasó con «¿existe la SU-999 de 2099?», que dio `NO` y `NOSESABE` con textos casi idénticos. Ahora se pregunta tres veces y se exige **unanimidad**; un caso sin acuerdo se declara y no se juzga.
+
+**Dos casos de la familia 3 quedan como no medidos, y por razones distintas:**
+
+- **El decreto inventado**: la inexistencia de un decreto solo la puede negar SUIN, y SUIN está caído. `NOSESABE` es la respuesta correcta hoy —la respuesta no puede afirmar que no existe, solo que no se encontró—, así que contarlo como fallo sería culpa del portal, no del servidor. El caso sigue armado y se medirá solo cuando SUIN vuelva.
+- **La sentencia inventada**: el servidor da la negativa dura y correcta, pero el juez no sostiene un veredicto sobre ella. No es medible con este juez.
+
+### Decidido no hacer
+
+- **Consolidar las seis herramientas sectoriales en una con parámetro `entidad`.** Y la razón no es el riesgo, que era la mía: es que el plan está mal de fondo. La SIC reúne fallos contra empresas, la CREG tarifas de energía y la ANH actos de hidrocarburos; el contexto de cada una es distinto, y lo que hoy hace que el modelo elija bien es la descripción de cada herramienta. El ahorro de payload que se buscaba vive justamente ahí —3.219 B de los 9.161 B son descripciones—, así que fusionarlas obliga a elegir entre no ahorrar nada o tirar el contexto que distingue una fuente de otra. Se cambia por la vía que sigue, que recupera el ahorro sin tocar la semántica.
+
+### Pendiente
+
+- **Que el operador elija qué fuentes consulta, al instalar.** Que una fuente que no quiera usar no aparezca siquiera en `tools/list`, con lo que su descripción deja de pagarse en cada sesión. **No es una idea nueva en este repositorio**: `EXPEDIENTES=1` ya enciende y apaga una capacidad así, y `describir_fuentes` ya declara el alcance fuente por fuente. Lo que falta es generalizarlo y decidir dónde vive la elección —variable de entorno, opción del paquete `.mcpb` o fichero de ajustes—. El premio está medido: las seis sectoriales son 9.161 B de los 36.647 B del `tools/list`, **un 25 % de cada sesión**, y apagar una fuente sola no encarece nada a las demás. — **Resuelto** en la 1.14.0: variable `FUENTES` y campo «Fuentes» del `.mcpb`.
+- **Qué portales soportan `ETag` o `Last-Modified`: sin medir.** `cabecerasCondicionales()` existe y se usa, pero no se comprobó contra ningún portal. — **Resuelto** en la 1.14.0.
+- **`buscar_normas.tipo_documento` sigue siendo texto libre.** La lista de 29 tipos la sirve el portal en vivo, así que cerrarla en un enum la haría envejecer contra la fuente. — **Resuelto** en la 1.14.0 sin enum: se valida contra el catálogo vivo antes de buscar.
+- **El rotulado de procedencia sigue siendo solo de la Corte Constitucional.** — **Resuelto** en la 1.14.0.
+- **El recorrido 3 («¿está vigente el Decreto 1235 de 2023?») sigue sin llegar**: SUIN caído. — SUIN volvió con otro portal; sigue sin llegar por otra razón: su índice público acaba en 2020 (ver 1.14.0).
+
 ## [1.13.0] — 2026-09-05
 
 **Esta versión es también la primera que llega a npm con los arreglos de la 1.12.1**, que **ni se etiquetó ni se publicó**: no existe una etiqueta `v1.12.1` en el repositorio y `npm view normativa-colombia-mcp version` devolvía `1.12.0`. Por eso una instalación por `npx` seguía fallando contra la relatoría de la Corte Constitucional con "unable to verify the first certificate": el intermedio `GODADDY_G2` estaba en el repo y no en el paquete.

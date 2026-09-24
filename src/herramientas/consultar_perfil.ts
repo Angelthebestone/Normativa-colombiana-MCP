@@ -3,19 +3,29 @@
  * filtros que el perfil trae preconfigurados.
  */
 import { z } from 'zod'
+import { alcance, proyectar } from '../nucleo/alcance.ts'
 import { perfil, perfiles } from '../nucleo/perfiles.ts'
 
 export const TITULO = 'Consultar un perfil sectorial preconfigurado'
 
 export const DESCRIPCION =
-  'Ejecuta una consulta con las fuentes y los filtros preconfigurados de un perfil: laboral, tributario, ' +
-  'ambiental, contratación estatal o energía. Devuelve los resultados del perfil con su sector y su ' +
-  'advertencia, fechados y con descargo. Cada perfil declara su sector y sus límites; para el listado de ' +
-  'perfiles disponibles usa describir_fuentes o pide el listado. NO uses un perfil para lo que no cubre: ' +
-  'si la consulta es de otra materia, usa buscar_normas o resolver_cita.'
+  'Ejecuta la consulta con las fuentes y los filtros preconfigurados de un perfil sectorial (laboral, ' +
+  'tributario, ambiental, contratación estatal o energía) y devuelve los resultados con el sector y la ' +
+  'advertencia del perfil, que es lo que declara sus límites. NO uses un perfil para lo que no cubre: si ' +
+  'la materia es otra, usa buscar_normas o resolver_cita.'
+
+/**
+ * Los ids salen del registro de perfiles: no se escriben a mano, no se
+ * desincronizan. Y solo los de fuentes encendidas (FUENTES): el perfil de
+ * energía con la CREG apagada no se puede ni pedir.
+ */
+const IDS = proyectar(
+  perfiles().map((p) => p.id),
+  (id) => perfil(id)!.fuente,
+)
 
 export const schema = {
-  perfil: z.string().describe('Id del perfil: laboral, tributario, ambiental, contratacion_estatal, energia'),
+  perfil: z.enum(IDS).describe('Id del perfil, de describir_fuentes'),
   texto: z.string().describe('Consulta dentro del perfil, ej. "teletrabajo"'),
   limite: z.coerce
     .number()
@@ -60,6 +70,8 @@ export function formatear(
 
 export async function escribir({ perfil: id, texto, limite }: Parametros): Promise<string> {
   const p = perfil(id)
-  if (!p) return formatear(id, perfiles().map((x) => x.id), null, '', '', '')
-  return formatear(id, perfiles().map((x) => x.id), await p.consultar(texto, limite), p.nombre, p.sector, p.advertencia)
+  if (!p) return `Alcance: sin consultar ninguna fuente (la llamada no llegó a salir).\n\n${formatear(id, IDS, null, '', '', '')}`
+  const resultado = await p.consultar(texto, limite)
+  const n = resultado.split('\n').filter((l) => l.startsWith('- ')).length
+  return `${alcance([{ clave: p.fuente, detalle: `perfil ${p.id}: ${n} resultado(s)` }])}\n\n${formatear(id, IDS, resultado, p.nombre, p.sector, p.advertencia)}`
 }

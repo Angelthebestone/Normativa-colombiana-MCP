@@ -2,7 +2,7 @@
   "manifest_version": "0.2",
   "name": "normativa-colombia",
   "display_name": "Normativa Colombia",
-  "version": "1.13.0",
+  "version": "1.14.0",
   "description": "Consulta la normativa y la jurisprudencia colombiana desde Claude: Gestor Normativo, Corte Constitucional, Corte Suprema, SUIN-Juriscol (estado de vigencia) y normograma de la DIAN.",
   "long_description": "Conecta Claude con seis fuentes oficiales colombianas.\n\n**Gestor Normativo** del Departamento Administrativo de la Función Pública: leyes, decretos, resoluciones, circulares y conceptos aplicables al sector público, con su consulta temática y los restrictores que explican por qué cada norma aplica a un tema.\n\n**Relatoría de la Corte Constitucional**: 49.000 sentencias y autos, actualizados a diario.\n\n**Corte Suprema de Justicia** y **Consejo de Estado**: providencias con texto completo.\n\n**SUIN-Juriscol**: el estado de vigencia, que ninguna otra fuente del país publica.\n\n**Normograma de la DIAN**: normativa tributaria, aduanera y cambiaria.\n\nAdemás, herramientas V2: consulta por nivel de autoridad, validación de citas y enlaces, análisis de posibles conflictos (evidencia, no conclusión), comparación de artículos, cambios desde una fecha, perfiles sectoriales preconfigurados y expedientes temporales de investigación.\n\nIncluye un índice temático empaquetado (12.063 subtemas) que responde al instante y sigue funcionando aunque el portal esté caído. Toda respuesta cita el enlace oficial y la fecha de consulta.\n\nNo sustituye asesoría jurídica: verifica siempre en la fuente antes de tomar una decisión.",
   "author": {
@@ -26,13 +26,25 @@
       "command": "node",
       "args": [
         "${__dirname}/server/index.js"
-      ]
+      ],
+      "env": {
+        "FUENTES": "${user_config.fuentes}"
+      }
+    }
+  },
+  "user_config": {
+    "fuentes": {
+      "type": "string",
+      "title": "Fuentes",
+      "description": "Vacío: todas. Para quitar algunas: \"-creg,-anh,-upme,-anla,-sectorial\". Para quedarse solo con algunas: \"corte,suin\" (el Gestor Normativo va siempre). Claves: corte, suprema, consejo, dian, suin, creg, anh, upme, anla, sectorial. Una fuente quitada no aparece en la lista de herramientas: ahorra contexto en cada conversación.",
+      "required": false,
+      "default": ""
     }
   },
   "tools": [
     {
       "name": "resolver_cita",
-      "description": "Ruta rápida y exacta para citas como \"Ley 909 de 2004\", \"Decreto 1083\", \"C-337/11\", \"T-099/24\" o \"artículo 6 de la Ley 1221 de 2008\"."
+      "description": "Ruta rápida y exacta para citas como \"Ley 909 de 2004\", \"Decreto 1083\", \"C-337/11\" o \"artículo 6 de la Ley 1221 de 2008\"."
     },
     {
       "name": "buscar_normas",
@@ -40,31 +52,31 @@
     },
     {
       "name": "buscar_por_tema",
-      "description": "Consulta temática oficial: devuelve tema, subtema y las normas, sentencias y conceptos asociados."
+      "description": "Consulta temática oficial: devuelve tema, subtema y las normas, sentencias y conceptos asociados, desde un índice empaquetado (instantáneo, funciona aunque el portal esté caído)."
     },
     {
       "name": "listar_catalogos",
-      "description": "Valores válidos para los filtros de buscar_normas: tipos de documento (29), años, entidades (89) y temas (2.509)."
+      "description": "Valores válidos para los filtros de buscar_normas: tipos de documento (29), años, entidades (89) y temas (2.509), más los subtemas de un tema (subtemas con tema_id), los conceptos de Función Pública (conceptos_fp con numero/anio) y el listado curado del DAFP (normas_fp)."
     },
     {
       "name": "buscar_jurisprudencia",
-      "description": "Busca sentencias y autos en la relatoría de la Corte Constitucional (44.839 providencias según su propio índice, con fallos de 2026 publicados el mismo año)."
+      "description": "Sentencias y autos de la relatoría de la Corte Constitucional (44.839 providencias, con fallos de 2026 publicados el mismo año)."
     },
     {
       "name": "buscar_normativa_tributaria",
-      "description": "Busca en el normograma de la DIAN: decretos, resoluciones, conceptos y circulares en materia tributaria, aduanera y cambiaria."
+      "description": "Normograma de la DIAN: decretos, resoluciones, conceptos y circulares en materia tributaria, aduanera y cambiaria, que ninguna otra herramienta cubre."
     },
     {
       "name": "buscar_jurisprudencia_suprema",
-      "description": "Busca providencias de la Corte Suprema por sala: Tutelas, Civil, Laboral o Penal, desde 1991."
+      "description": "Providencias de la Corte Suprema por sala: Tutelas, Civil, Laboral o Penal, desde 1991."
     },
     {
       "name": "buscar_jurisprudencia_consejo_estado",
-      "description": "Busca providencias tituladas del Consejo de Estado, el tribunal supremo de lo contencioso administrativo: nulidad y restablecimiento, contratación estatal, nulidad electoral, reparación directa y conceptos de la Sala de Consulta."
+      "description": "Providencias tituladas del Consejo de Estado, el supremo de lo contencioso administrativo (nulidad y restablecimiento, contratación estatal, nulidad electoral, reparación directa, conceptos de la Sala de Consulta): tribunal DISTINTO de la Corte Constitucional y de la Suprema."
     },
     {
       "name": "buscar_en_suin",
-      "description": "Busca en los 56.832 documentos de SUIN-Juriscol (MinJusticia) por título, epígrafe, materia o entidad emisora."
+      "description": "Busca en los 56.832 documentos de SUIN-Juriscol (MinJusticia) por título, epígrafe, materia o entidad emisora: leyes, decretos y resoluciones desde 1844, incluidos documentos que el Gestor Normativo no tiene."
     },
     {
       "name": "explicar_relacion_tema",
@@ -72,7 +84,7 @@
     },
     {
       "name": "buscar_normativa_anh",
-      "description": "Busca las resoluciones, acuerdos y circulares de la Agencia Nacional de Hidrocarburos: contratos de exploración y producción, regalías, derechos económicos, fiscalización y reservas (785 documentos)."
+      "description": "Resoluciones, acuerdos y circulares de la Agencia Nacional de Hidrocarburos (785 documentos): contratos de exploración y producción, regalías, fiscalización y reservas."
     },
     {
       "name": "buscar_normativa_upme",
@@ -80,7 +92,7 @@
     },
     {
       "name": "buscar_resoluciones_creg",
-      "description": "Busca las resoluciones de la Comisión de Regulación de Energía y Gas, donde vive la regulación operativa del sector: tarifas, conexión, comercialización, plantas solares y gas natural."
+      "description": "Resoluciones de la Comisión de Regulación de Energía y Gas: tarifas, conexión, comercialización, plantas solares y gas natural."
     },
     {
       "name": "listar_normativa_ambiental_anla",
@@ -88,7 +100,7 @@
     },
     {
       "name": "buscar_normativa_sectorial",
-      "description": "Actos administrativos —resoluciones, circulares, acuerdos— de los reguladores y ministerios sectoriales que el Gestor Normativo NO cataloga."
+      "description": "Actos administrativos —resoluciones, circulares, acuerdos— de los reguladores y ministerios sectoriales que el Gestor Normativo NO cataloga; elige cuál en `entidad`."
     },
     {
       "name": "describir_fuentes",
@@ -112,11 +124,11 @@
     },
     {
       "name": "consultar_perfil",
-      "description": "Ejecuta una consulta con las fuentes y los filtros preconfigurados de un perfil: laboral, tributario, ambiental, contratación estatal o energía."
+      "description": "Ejecuta la consulta con las fuentes y los filtros preconfigurados de un perfil sectorial (laboral, tributario, ambiental, contratación estatal o energía) y devuelve los resultados con el sector y la advertencia del perfil, que es lo que declara sus límites."
     },
     {
       "name": "consultar_vigencia",
-      "description": "Devuelve el estado de vigencia de una norma (\"Vigente\", \"Derogado\", \"Vigencia en Estudio\".."
+      "description": "Devuelve el estado de vigencia de una norma (\"Vigente\", \"Derogado\", \"Vigencia en Estudio\", \"Compilado\".."
     },
     {
       "name": "historial_norma",
@@ -124,11 +136,11 @@
     },
     {
       "name": "buscar_unificado",
-      "description": "Busca en paralelo en las fuentes ya existentes (Gestor Normativo, Corte Constitucional, SUIN-Juriscol y DIAN) y agrega los resultados con su fuente y su enlace."
+      "description": "Busca en paralelo en Gestor Normativo, Corte Constitucional, SUIN-Juriscol y DIAN, y agrega los resultados con su fuente y su enlace (con perfil \"salud\" añade INVIMA y Supersalud; con \"mineria\", la ANM)."
     },
     {
       "name": "obtener_documento",
-      "description": "Devuelve el texto (troceado, nunca entero) de un documento de una de las siete fuentes con texto: \"gestor\" (normas del Gestor Normativo por id), \"corte\" (sentencias de la Corte Constitucional por ruta o cita), \"suprema\" (Corte Suprema por ruta + sala), \"consejo\" (Consejo de Estado por token), \"dian\" (normograma de la DIAN por link), \"creg\" (resoluciones CREG por ruta) y \"sectorial\" (actos de un regulador sectorial por entidad + url del acto, PDF o Word)."
+      "description": "Devuelve el texto (troceado, nunca entero) de una de las siete fuentes con texto."
     },
     {
       "name": "expediente",

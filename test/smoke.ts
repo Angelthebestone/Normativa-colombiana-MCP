@@ -12,7 +12,7 @@ import test from 'node:test'
 import { gzipSync } from 'node:zlib'
 
 import { parsearCita, idTipo, rutaDeSentencia } from '../src/nucleo/citas.ts'
-import { claveSuin, fichaSuin } from '../src/fuentes/suin.ts'
+import { claveSuin, ficha, fichasDe } from '../src/fuentes/suin.ts'
 import { mereceAviso } from '../src/nucleo/actualizacion.ts'
 import * as dian from '../src/fuentes/normograma.ts'
 import * as suprema from '../src/fuentes/jurisprudencia/cortesuprema.ts'
@@ -22,7 +22,6 @@ import * as upme from '../src/fuentes/upme.ts'
 import * as creg from '../src/fuentes/creg.ts'
 import * as anla from '../src/fuentes/anla.ts'
 import * as sectorial from '../src/fuentes/sectorial.ts'
-import { pedir as pedirHttp } from '../src/nucleo/http.ts'
 import {
   CanarioError,
   advertenciasVigencia,
@@ -33,10 +32,11 @@ import {
   historial,
   seccion,
   seccionesPresentes,
+  mapaDeSecciones,
+  etiquetaEn,
+  ENCABEZADO_PROVIDENCIA,
   limpiarTermino,
   pdfEsEscaneo,
-  cargar,
-  textoDe,
   parseResultados,
   parseTematica,
   sinTildes,
@@ -92,39 +92,51 @@ test('un PDF escaneado se distingue de uno con texto', () => {
   assert.match(avisoSinTexto(12, 'http://x/y.pdf'), /NO significa que no diga nada/)
 })
 
-test('SUIN: la ficha se lee del bloque de campos, no de la prosa', () => {
-  const html =
-    '<span field="tipo">LEY</span><span field="numero">74</span><span field="anio">1923</span>' +
-    '<span field="epigrafe">sobre provisión de agua</span><span field="estado_documento">DEROGADO</span>'
-  assert.deepEqual(fichaSuin(html), {
-    tipo: 'LEY',
-    numero: '74',
-    anio: '1923',
-    epigrafe: 'sobre provisión de agua',
-    estado: 'DEROGADO',
+test('SUIN: la ficha se lee del índice con el id clásico, y una respuesta sin hits es el canario', () => {
+  const fichas = fichasDe({
+    hits: {
+      hits: [
+        { _source: { id: 30036079, visualizacion: 30036080, tipo: 'LEY', subtipo: 'LEY ORDINARIA', numero: '1945', anio: '2019', epigrafe: ' por  la cual ', estado: 'Vigente' } },
+        // Sin número no es una ficha citable: se descarta, no se inventa.
+        { _source: { id: 1, tipo: 'LEY', numero: null, anio: '1936' } },
+      ],
+    },
   })
-  // Sin estado la ficha sigue valiendo: callar la norma entera diría que no existe.
-  assert.equal(fichaSuin('<span field="tipo">LEY</span><span field="numero">9</span><span field="anio">1990</span>')?.estado, '')
-  assert.equal(fichaSuin('<html>una página cualquiera</html>'), null)
+  assert.deepEqual(fichas, [
+    {
+      id: '30036080',
+      tipo: 'LEY',
+      subtipo: 'LEY ORDINARIA',
+      numero: '1945',
+      anio: '2019',
+      epigrafe: 'por la cual',
+      estado: 'Vigente',
+      url: 'https://www.suin-juriscol.gov.co/viewDocument.asp?id=30036080',
+    },
+  ])
+  assert.throws(() => fichasDe({}), CanarioError)
   assert.equal(claveSuin('LEY', '0909', '2004'), 'ley 909 2004')
 })
 
-test('SUIN publica el estado, y el campo manda sobre la prosa', RED, async (t) => {
-  // La Ley 1541 de 2012 es el caso que obligó a cambiar de fuente de verdad: su
-  // texto visible dice "Vigente" y su campo dice "Vigencia en Estudio".
-  // El portal se cae entero y corta la conexión: es la fuente, no el parser. El
-  // e2e ya lo saltaba y aquí fallaba duro, así que un SUIN caído bloqueaba el
-  // publicar de una versión que no lo tocaba.
-  const r = await pedirHttp('https://www.suin-juriscol.gov.co/viewDocument.asp?id=1683108', 40_000).catch((e: Error) => e)
-  if (r instanceof Error) {
-    t.skip(`SUIN-Juriscol no respondió: ${r.message}`)
+test('SUIN publica el estado, y es el campo de la ficha y no la prosa', RED, async (t) => {
+  // La Ley 1541 de 2012 obligó a cambiar de fuente de verdad: su texto visible
+  // decía "Vigente" y su campo "Vigencia en Estudio". La Ley 74 de 1923 es la
+  // que separa la ficha del índice de Azure: allí figura "Vigencia en Estudio".
+  const ley1541 = await ficha('Ley', '1541', '2012')
+  // Un portal caído es la fuente, no el parser: bloquear por eso el publicar de
+  // una versión que no lo toca es lo que este `skip` evita. Un portal CAMBIADO
+  // no llega aquí como caída silenciosa: `fichasDe` lanza el canario y el
+  // motivo sale en el `skip`, que se ve en la salida.
+  if (!ley1541.ok && ley1541.razon === 'ficha-caida') {
+    t.skip(`El índice de fichas de SUIN no respondió: ${ley1541.detalle}`)
     return
   }
-  assert.equal(r.status, 200)
-  const f = fichaSuin(r.cuerpo)
-  assert.deepEqual({ tipo: f?.tipo, numero: f?.numero, anio: f?.anio }, { tipo: 'LEY', numero: '1541', anio: '2012' })
-  assert.ok(f?.estado, 'sin este campo, la fuente pierde su única razón de estar')
-  assert.notEqual(f?.estado, textoDe(cargar(r.cuerpo), 'body').match(/ESTADO DE VIGENCIA:\s*([^\n[]+)/)?.[1]?.trim())
+  assert.ok(ley1541.ok, 'la Ley 1541 de 2012 tiene que tener ficha')
+  assert.equal(ley1541.ficha.estado, 'Vigencia en Estudio')
+  assert.equal(ley1541.ficha.id, '1683108')
+  const ley74 = await ficha('Ley', '74', '1923')
+  assert.ok(ley74.ok)
+  assert.equal(ley74.ficha.estado, 'Derogado')
 })
 
 test('las stopwords se descartan: son las que inundan el resultado', () => {
@@ -462,13 +474,44 @@ test('las secciones de una providencia se cortan por encabezado, no por prosa', 
   const texto =
     'Preámbulo cualquiera.\nANTECEDENTES\nLos hechos.\nII. CONSIDERACIONES\nEl análisis.\n' +
     'Decisión frente a la cual presentó recurso el actor.\nIII. DECISIÓN\nEn mérito.\nRESUELVE\nPrimero: confirmar.'
-  assert.deepEqual(seccionesPresentes(texto), ['antecedentes', 'consideraciones', 'decision'])
-  // La prosa "Decisión frente a la cual..." no es un encabezado.
+  // `encabezado` encabeza la lista porque es el tramo que va del principio del
+  // documento al primer encabezado reconocido: no nace de un encabezado —lo dice
+  // `ClaveTramo`— pero está siempre, y es lo que permite pedir el tema y la
+  // síntesis de la relatoría, que es donde vive el resumen de la providencia.
+  assert.deepEqual(seccionesPresentes(texto), ['encabezado', 'antecedentes', 'consideraciones', 'decision'])
+  // La prosa "Decisión frente a cual..." no es un encabezado. El rótulo va
+  // pegado al texto a propósito: es lo que impide citar como doctrina de la
+  // Sala un pasaje de una aclaración de voto.
   const d = seccion(texto, 'decision')!
-  assert.match(d, /^III\. DECISIÓN/)
+  assert.match(d, /^--- decisión ---\nIII\. DECISIÓN/)
   // Y RESUELVE es continuación de la decisión, no otra sección: no debe cortar.
   assert.match(d, /Primero: confirmar/)
   assert.equal(seccion('un texto sin estructura', 'decision'), null)
+})
+
+test('las formas de la Suprema: encabezado con dos puntos, firmante bajo el voto, y sin relatoría delante', () => {
+  // Casación penal 22186 de 2004 y SL4068-2022, abreviadas.
+  const texto =
+    'SALA DE CASACIÓN PENAL\nVISTOS:\nEl recurso.\nANTECEDENTES Y CONSIDERACIONES:\nEl análisis de la Sala.\n' +
+    'RESUELVE:\nNo casar.\nACLARACIÓN DE VOTO\n\nFERNANDO CASTILLO CADENA\n\nMagistrado ponente\n\nMi razón.\n' +
+    'SALVAMENTO DE VOTO\n\n(Casación No. 22.186)\n\nHe salvado el voto.'
+  const mapa = mapaDeSecciones(texto, ENCABEZADO_PROVIDENCIA)
+  assert.deepEqual(
+    mapa.map((t) => t.etiqueta),
+    [
+      ENCABEZADO_PROVIDENCIA,
+      'antecedentes',
+      'decisión',
+      'aclaración de voto — FERNANDO CASTILLO CADENA',
+      // Sin "Magistrado" debajo, el renglón no es un nombre: sin firmante, no inventado.
+      'salvamento de voto',
+    ],
+  )
+  assert.equal(etiquetaEn(mapa, texto.indexOf('Mi razón')), 'aclaración de voto — FERNANDO CASTILLO CADENA')
+  // Invariantes del mapa: empieza en 0, termina en el último carácter y no deja huecos.
+  assert.equal(mapa[0]!.desde, 0)
+  assert.equal(mapa.at(-1)!.hasta, texto.length)
+  for (let i = 1; i < mapa.length; i++) assert.equal(mapa[i]!.desde, mapa[i - 1]!.hasta)
 })
 
 test('el aviso de versión no molesta: solo cambios que importan', () => {
