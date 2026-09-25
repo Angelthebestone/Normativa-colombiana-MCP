@@ -28,6 +28,7 @@ La más sencilla si usas Claude Desktop: no requiere Node ni tocar archivos de c
 1. Descarga `normativa-colombia.mcpb` desde [Releases](https://github.com/Angelthebestone/Normativa-colombiana-MCP/releases).
 2. Abre Claude Desktop → **Configuración → Extensiones**.
 3. Arrastra el archivo a esa ventana y confirma.
+4. *(Opcional: instalar sin ciertas fuentes)* En Claude Desktop, abre la configuración de la extensión **Normativa Colombia**. En el campo **Fuentes** puedes indicar qué fuentes desactivar (p. ej. `-creg,-anh,-upme,-anla,-sectorial` para instalar sin fuentes sectoriales y ahorrar contexto) o cuáles conservar (`corte,suin`). Si lo dejas vacío, incluye todas.
 
 Claude Desktop trae su propio Node, así que no hace falta instalar nada más.
 
@@ -59,6 +60,22 @@ Casi todos los clientes comparten este formato:
 }
 ```
 
+Para instalar **sin ciertas fuentes** (por ejemplo, sin los reguladores sectoriales para reducir consumo de contexto), añade la variable `FUENTES` en `env`:
+
+```json
+{
+  "mcpServers": {
+    "normativa-colombia": {
+      "command": "npx",
+      "args": ["-y", "normativa-colombia-mcp"],
+      "env": {
+        "FUENTES": "-creg,-anh,-upme,-anla,-sectorial"
+      }
+    }
+  }
+}
+```
+
 | Cliente | Dónde va esa configuración |
 | --- | --- |
 | **Claude Desktop** (manual) | `claude_desktop_config.json` — en Configuración → Desarrollador → Editar configuración |
@@ -71,7 +88,11 @@ Casi todos los clientes comparten este formato:
 **Claude Code** no usa archivo; se registra por línea de comandos:
 
 ```bash
+# con todas las fuentes
 claude mcp add normativa-colombia -- npx -y normativa-colombia-mcp
+
+# o sin fuentes sectoriales
+claude mcp add normativa-colombia -e FUENTES="-creg,-anh,-upme,-anla,-sectorial" -- npx -y normativa-colombia-mcp
 ```
 
 **VS Code** usa la clave `servers` en vez de `mcpServers`, en `.mcp.json` del proyecto o en la configuración de usuario:
@@ -82,7 +103,10 @@ claude mcp add normativa-colombia -- npx -y normativa-colombia-mcp
     "normativa-colombia": {
       "type": "stdio",
       "command": "npx",
-      "args": ["-y", "normativa-colombia-mcp"]
+      "args": ["-y", "normativa-colombia-mcp"],
+      "env": {
+        "FUENTES": "-creg,-anh,-upme,-anla,-sectorial"
+      }
     }
   }
 }
