@@ -13,7 +13,8 @@ GOAL.md
 
 # Informes de barrido puntuales: notas de trabajo con entradas/salidas literales,
 # no documentación del proyecto (los cambios que piden viven en CHANGELOG.md).
-INFORME-FALLOS-*.md
+INFORME-*.md
+HANDOFF*.md
 
 # Encargos a subagentes: prompts de trabajo, no documentación del proyecto.
 ENCARGO-*.md
