@@ -4,11 +4,10 @@ import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { z } from 'zod'
 
 import { parsearCita, parsearRadicado } from './nucleo/citas.ts'
-import { activa, alcance, apagadas, avisoApagada, herramientaActiva, NOMBRE_FUENTE } from './nucleo/alcance.ts'
+import { activa, alcance, apagadas, avisoApagada, DESCARGO, herramientaActiva, NOMBRE_FUENTE } from './nucleo/alcance.ts'
 import { citaCorteConstitucional } from './nucleo/cita_oficial.ts'
 import { CODIGOS, codigoDe, referencia as refCodigo } from './nucleo/codigos.ts'
-import { cargarIndice, temaDelIndice, frescura } from './nucleo/indice.ts'
-import { normalizarEntidad, NO_EN_GESTOR } from './nucleo/entidades.ts'
+import { cargarIndice, frescura } from './nucleo/indice.ts'
 import { esCompiladora } from './nucleo/compiladas.ts'
 import { validarUrl } from './nucleo/evidencia.ts'
 import { advertenciaSnapshot } from './nucleo/snapshot.ts'
@@ -25,6 +24,10 @@ import * as historialNorma from './herramientas/historial_norma.ts'
 import * as buscarUnificado from './herramientas/buscar_unificado.ts'
 import * as buscarDiarioOficial from './herramientas/buscar_diario_oficial.ts'
 import * as lineaJurisprudencial from './herramientas/linea_jurisprudencial.ts'
+import * as buscarNormas from './herramientas/buscar_normas.ts'
+import * as buscarPorTema from './herramientas/buscar_por_tema.ts'
+import * as listarCatalogos from './herramientas/listar_catalogos.ts'
+import * as explicarRelacionTema from './herramientas/explicar_relacion_tema.ts'
 import * as buscarNormativaAnh from './herramientas/buscar_normativa_anh.ts'
 import * as buscarNormativaUpme from './herramientas/buscar_normativa_upme.ts'
 import * as buscarResolucionesCreg from './herramientas/buscar_resoluciones_creg.ts'
@@ -36,12 +39,7 @@ import * as buscarEnSuin from './herramientas/buscar_en_suin.ts'
 import { resolverCodigo } from './herramientas/codigo_senado.ts'
 import { resolverRadicado } from './herramientas/resolver_radicado.ts'
 import * as obtenerDocumento from './herramientas/obtener_documento.ts'
-import {
-  advertenciasVigencia,
-  articulo as extraerArticulo,
-  normalizarRotulo,
-  sinTildes,
-} from './nucleo/parse.ts'
+import { advertenciasVigencia, articulo as extraerArticulo, sinTildes } from './nucleo/parse.ts'
 import { redResumen, VERSION } from './nucleo/http.ts'
 import { avisoVersion } from './nucleo/actualizacion.ts'
 import * as gestor from './fuentes/gestor.ts'
@@ -51,9 +49,6 @@ import * as consejo from './fuentes/jurisprudencia/consejoestado.ts'
 import * as sectorial from './fuentes/sectorial.ts'
 import './fuentes/sectorial/registro.ts'
 
-
-const DESCARGO =
-  'Fuente oficial; los datos se publican con propósitos informativos. Verifica siempre en el enlace antes de tomar una decisión.'
 
 const hoy = () => new Date().toISOString().slice(0, 10)
 
@@ -365,47 +360,8 @@ async function resolverUnaCita(cita: string, opciones: OpcionesCita = {}): Promi
 
 // --- servidor ------------------------------------------------------------
 
-/**
- * Los tres catálogos temáticos del portal numeran cada uno por su cuenta, así
- * que el mismo entero existe en los tres queriendo decir cosas distintas: el
- * 38968 es «Teletrabajo durante jornada día sin carro» en listar_catalogos
- * (catalogo="subtemas") e «INHABILIDADES E INCOMPATIBILIDADES / Ex Diputados» en el de buscar_por_tema.
- * Advertirlo en las descripciones no bastaba: un id cruzado no fallaba, contestaba
- * por el subtema equivocado con el mismo aire de certeza. Con el prefijo pegado
- * al id, cruzarlos es un error explícito y no una respuesta creíble sobre otra cosa.
- */
-const CATALOGOS = {
-  ts: { de: 'buscar_por_tema', ejemplo: 'ts-38872' },
-  sub: { de: 'listar_catalogos con catalogo="subtemas"', ejemplo: 'sub-38968' },
-  tema: { de: 'listar_catalogos con catalogo="temas"', ejemplo: 'tema-24457' },
-} as const
-type Catalogo = keyof typeof CATALOGOS
-
-const conPrefijo = (c: Catalogo, id: string | number): string => `${c}-${id}`
-
 /** Radicados ya devueltos de la última búsqueda en el Consejo de Estado, con la página en que salieron. */
 const memoriaCE: { clave: string; paginas: Map<string, number> } = { clave: '', paginas: new Map() }
-
-/** Filtros que aceptan el nombre o el id: solo lo que parece un id pasa por la aduana. */
-const idOnombre = (c: Catalogo, valor: string | undefined): string | undefined =>
-  valor && /^([a-z]+-)?\d+$/i.test(valor.trim()) ? sinPrefijo(c, valor) : valor
-
-/** Devuelve el número que entiende el portal, o explica de qué catálogo salió el id equivocado. */
-function sinPrefijo(c: Catalogo, valor: string): string {
-  const v = valor.trim()
-  const propio = v.match(new RegExp(`^${c}-(\\d+)$`, 'i'))
-  if (propio) return propio[1]!
-  const ajeno = (Object.keys(CATALOGOS) as Catalogo[]).find((k) => new RegExp(`^${k}-\\d+$`, 'i').test(v))
-  throw new Error(
-    `"${valor}" no sirve aquí: este parámetro lleva un id de ${CATALOGOS[c].de}, que se escribe como ` +
-      `"${CATALOGOS[c].ejemplo}". ` +
-      (ajeno
-        ? `El prefijo "${ajeno}-" lo emite ${CATALOGOS[ajeno].de}, que es OTRA taxonomía del portal: sus números ` +
-          `coinciden con los de esta y significan otra cosa, así que antes esto respondía por el tema equivocado.`
-        : `Los ids pelados no se aceptan justo para que no se puedan cruzar los tres catálogos temáticos del ` +
-          `portal, que reutilizan los mismos números. Pide el id a ${CATALOGOS[c].de} y pégalo con su prefijo.`),
-  )
-}
 
 // --- servidor ------------------------------------------------------------
 
@@ -636,334 +592,11 @@ server.registerTool(
   },
 )
 
-server.registerTool(
-  'buscar_normas',
-  {
-    title: 'Buscar normas en el Gestor Normativo',
-    description:
-      'Busca leyes, decretos, resoluciones, conceptos y sentencias del sector público colombiano. ' +
-      'IMPORTANTE: el buscador del portal indexa solo los resúmenes temáticos, NO el articulado completo, ' +
-      'y une los términos con OR. Usa pocas palabras y muy distintivas. Para buscar dentro del texto de una ' +
-      'norma concreta, usa obtener_documento con fuente="gestor" y buscar_en_texto. Para una cita exacta, usa resolver_cita.',
-    inputSchema: {
-      palabras: z.string().optional().describe('Términos distintivos; evita frases largas'),
-      tipo_documento: z
-        .string()
-        .optional()
-        .describe('Nombre o id del catálogo de tipos del Gestor: "Ley", "Decreto", "Resolución", "Concepto". Uno que no esté se rechaza con la lista, sin buscar'),
-      numero: z.coerce.string().regex(/^\d+$/).optional().describe('Número de la norma, como texto. Ej.: "909"'),
-      anio: z.coerce.string().regex(/^\d{4}$/).optional().describe('Año de cuatro dígitos, como texto. Ej.: "2004"'),
-      entidad: z.string().optional().describe('Nombre o id: "Corte Constitucional", "Congreso de la República"'),
-      tema: z.string().optional().describe('Nombre del tema, o su id de listar_catalogos con prefijo: "tema-24457"'),
-      subtema: z.coerce
-        .string()
-        .optional()
-        .describe('id de listar_catalogos con catalogo="subtemas" y prefijo ("sub-38968"), o su nombre si además indicas tema. El "ts-" de buscar_por_tema no vale aquí.'),
-      limite: z.coerce.number().int().min(1).max(100).default(20),
-    },
-  },
-  async ({ palabras, tipo_documento, numero, anio, entidad, tema: temaCrudo, subtema: subtemaCrudo, limite }) => {
-    // Nombre o id: el id llega con prefijo, y uno pelado o de otro catálogo se
-    // rechaza en vez de resolverse contra el tema equivocado.
-    const tema = idOnombre('tema', temaCrudo)
-    const subtema = idOnombre('sub', subtemaCrudo)
-    // Idea 6 — normalización de entidades: un alias se resuelve al nombre que
-    // el catálogo del Gestor entiende ("Mintrabajo" → "Ministerio del Trabajo").
-    // Los que el Gestor NO cataloga ("dian") no se resuelven ni se inyectan: el
-    // propio Gestor avisa "No reconocí entidad"; aquí solo se orienta hacia la
-    // herramienta que sí cubre esa entidad.
-    const ent = entidad ? normalizarEntidad(entidad) : null
-    const claveEntidad = entidad ? sinTildes(entidad.trim().toLowerCase()) : ''
-    const fueraDelGestor = NO_EN_GESTOR.has(claveEntidad)
+registrarHerramienta('buscar_normas', buscarNormas)
 
-    /**
-     * El tipo no se cierra en un enum porque la lista la sirve el portal en vivo
-     * (29 tipos, medido el 2026-09-16) y un enum la haría envejecer. Pero un tipo
-     * que no está tampoco se puede ignorar, que era lo que pasaba: el portal
-     * buscaba SIN el filtro y devolvía normas de todos los tipos con el aire de
-     * estar filtradas, y el aviso quedaba en una nota. Se valida contra el mismo
-     * catálogo que usa la búsqueda (cacheado: no cuesta una petición más) y se
-     * rechaza antes de buscar, con la lista viva.
-     */
-    if (tipo_documento?.trim()) {
-      const { tipos } = await gestor.catalogos()
-      const id = await gestor.resolver(tipo_documento, 'tipos')
-      if (!id || !tipos.some((t) => t.id === id)) {
-        return txt(
-          `${alcance([{ clave: 'gestor', detalle: 'solo su catálogo de tipos; no se buscó' }])}\n\n` +
-            `El Gestor Normativo no tiene el tipo de documento "${tipo_documento}", así que no se buscó: ignorar el ` +
-            `filtro devolvería normas de todos los tipos como si estuvieran filtradas. Los ${tipos.length} tipos que ` +
-            `publica hoy: ${tipos.map((t) => t.nombre).join(', ')}.`,
-        )
-      }
-    }
-    const r = await gestor.buscar({ palabras, tipo: tipo_documento, numero, anio, entidad: ent && !fueraDelGestor ? ent.oficial : entidad, tema, subtema })
-    const notas = r.nota ? [r.nota] : []
-    if (ent?.aliasUsado && !fueraDelGestor) {
-      notas.push(`Entidad normalizada: «${ent.aliasUsado}» → «${ent.oficial}».`)
-    } else if (fueraDelGestor) {
-      notas.push(`Para normativa de «${entidad}» usa buscar_normativa_tributaria (no es un filtro del Gestor).`)
-    }
+registrarHerramienta('buscar_por_tema', buscarPorTema)
 
-    // El índice de palabras del portal es pobrísimo: "teletrabajo" solo casa con
-    // 3 documentos en todo el corpus, y con ninguno de los 43 conceptos que sí
-    // están clasificados bajo ese subtema. Cuando la búsqueda por palabras rinde
-    // poco, se reintenta por la vía temática, que es la que de verdad encuentra.
-    // El aviso sale SIEMPRE que se use la vía temática, aunque no añada
-    // documentos nuevos: la lista final mezcla dos catálogos del portal.
-    if (palabras && r.items.length < 5 && !subtema) {
-      const par = temaDelIndice(palabras)
-      if (par) {
-        try {
-          const sub = await gestor.subtemaPorNombre(par.t, par.s)
-          if (sub) {
-            const via = await gestor.buscar({ tipo: tipo_documento, numero, anio, entidad, subtema: sub })
-            const vistos = new Set(r.items.map((i) => i.id))
-            const extra = via.items.filter((i) => !vistos.has(i.id))
-            if (via.items.length) {
-              r.items.push(...extra)
-              notas.push(
-                `La búsqueda por palabras solo halló ${r.total}. Se reconsultó con el subtema "${normalizarRotulo(par.s)}" ` +
-                  `(id ${conPrefijo('sub', sub)}) del catálogo de búsqueda${extra.length ? ` y se añadieron ${extra.length} documentos` : ', que ya estaban entre los de palabras'}. Ese catálogo y el de ` +
-                  `buscar_por_tema son taxonomías distintas del portal, así que allí estos documentos pueden aparecer ` +
-                  `bajo otro tema.`,
-              )
-            }
-          }
-        } catch {
-          /* la vía temática es un refuerzo: si falla, quedan los de palabras */
-        }
-      }
-    }
-
-    if (!r.items.length) {
-      // El filtro de entidad se resuelve bien y aun así devuelve cero, porque el
-      // Gestor no cataloga por emisor: "Ley"+1993+"Congreso de la República"
-      // (id 48) da 0, y el mismo par con "Nivel Nacional" (id 7) da 39, con la
-      // Ley 100 de 1993 entre ellas. Un "no existe esa combinación" a secas
-      // manda a dudar de la norma cuando el equivocado era el filtro.
-      const porEntidad =
-        entidad && !/nivel\s+nacional/i.test(entidad)
-          ? ` AVISO SOBRE LA ENTIDAD: el Gestor clasifica la mayoría de la normativa nacional bajo la entidad` +
-            ` "Nivel Nacional", no bajo quien la expidió; las leyes del Congreso aparecen así. Repite con` +
-            ` entidad="Nivel Nacional" o sin entidad antes de concluir que la norma no existe.`
-          : ''
-      return vacio(
-        'normas con esos filtros',
-        `Filtros aplicados: ${r.aplicados.join(', ') || '(ninguno)'}.` +
-          (r.nota ? ` ${r.nota}` : '') +
-          porEntidad +
-          ' Si los filtros se resolvieron bien, es que no existe esa combinación en el Gestor: prueba quitando el año' +
-          ' o la entidad. Si buscaste por palabras, recuerda que el portal solo indexa los resúmenes temáticos:' +
-          ' usa buscar_por_tema.',
-        alcance([{ clave: 'gestor', detalle: '0 documentos' }]),
-      )
-    }
-    const mostrados = r.items.slice(0, limite)
-    // El portal une los términos con OR: un resultado puede venir por un solo
-    // término y leerse como igual de pertinente que otro que los trae todos.
-    // Se marca por fila qué términos aparecen de verdad en su extracto.
-    const pertinencia = palabras ? gestor.pertinenciaDe(mostrados, palabras) : undefined
-    const lista = mostrados
-      .map((i) => {
-        const p = pertinencia?.get(i.id)
-        const marca =
-          p && p.omite.length && p.menciona.length
-            ? `\n  Pertinencia: menciona ${p.menciona.map((t) => `"${t}"`).join(', ')}; NO menciona ${p.omite.map((t) => `"${t}"`).join(', ')} en su extracto (el portal une con OR).`
-            : ''
-        return `- ${i.titulo} (id ${i.id})\n  Extracto temático: ${i.resumen || '(ninguno)'}${marca}\n  ${i.url}`
-      })
-      .join('\n')
-    const mas = r.items.length > limite ? `\n\nSe muestran ${limite} de ${r.items.length} reunidos.` : ''
-    return txt(
-      `${alcance([{ clave: 'gestor', detalle: `${r.items.length} documento(s)` }])}\n\n` +
-        `${r.items.length} documento(s) reunido(s).${notas.length ? `\n${notas.join(' ')}` : ''}\n\n${lista}${mas}`,
-    )
-  },
-)
-
-server.registerTool(
-  'buscar_por_tema',
-  {
-    title: 'Buscar por tema y subtema',
-    description:
-      'Consulta temática oficial: devuelve tema, subtema y las normas, sentencias y conceptos asociados, desde ' +
-      'un índice empaquetado (instantáneo, funciona aunque el portal esté caído). Cada resultado trae temsubid ' +
-      '("ts-38872") y normid para pedir después explicar_relacion_tema. El prefijo "ts-" es parte del id: ' +
-      'pégalo tal cual y no lo cruces con el "sub-" ni el "tema-" de listar_catalogos, que son otras dos ' +
-      'taxonomías del portal con los mismos números.',
-    inputSchema: {
-      texto: z.string().describe('Tema a buscar, ej. "teletrabajo", "encargo", "prima de servicios"'),
-      limite: z.coerce.number().int().min(1).max(50).default(15),
-    },
-  },
-  async ({ texto, limite }) => {
-    const idx = cargarIndice()
-    const q = sinTildes(texto).toLowerCase().trim()
-
-    if (idx) {
-      const filas = idx.filas.filter(
-        (f) => sinTildes(f.t).toLowerCase().includes(q) || sinTildes(f.s).toLowerCase().includes(q),
-      )
-      if (filas.length) {
-        const salida = filas
-          .slice(0, limite)
-          .map(
-            (f) =>
-              `- ${normalizarRotulo(f.t)} / ${normalizarRotulo(f.s)} (temsubid ${conPrefijo('ts', f.ts)})\n` +
-              f.n.slice(0, 8).map(([id, tit]) => `    · ${tit} (normid ${id})`).join('\n') +
-              (f.n.length > 8 ? `\n    … y ${f.n.length - 8} más` : ''),
-          )
-          .join('\n')
-        return txt(
-          `${alcance([{ clave: 'gestor', detalle: 'índice temático empaquetado, sin red' }])}\n\n` +
-            `${filas.length} tema(s)/subtema(s) coinciden con "${texto}".\n\n${salida}` +
-            (filas.length > limite ? `\n\nSe muestran ${limite} de ${filas.length}.` : '') +
-            frescura(idx.generado) +
-            `\n\nÍndice generado el ${idx.generado}. ${DESCARGO}`,
-        )
-      }
-    }
-
-    const filas = await gestor.tematica(texto)
-    if (!filas.length) return vacio(`temas relacionados con "${texto}"`, 'Prueba un término más general o usa buscar_normas.')
-    const salida = filas
-      .slice(0, limite)
-      .map(
-        (f) =>
-          `- ${normalizarRotulo(f.tema)} / ${normalizarRotulo(f.subtema)} (temsubid ${conPrefijo('ts', f.temsubid)})\n` +
-          f.documentos.slice(0, 8).map((d) => `    · ${d.titulo} (normid ${d.normid})`).join('\n'),
-      )
-      .join('\n')
-    return txt(`${filas.length} resultado(s) para "${texto}".\n\n${salida}`)
-  },
-)
-
-server.registerTool(
-  'listar_catalogos',
-  {
-    title: 'Listar catálogos de búsqueda',
-    description:
-      'Valores válidos para los filtros de buscar_normas: tipos de documento (29), años, entidades (89) y temas ' +
-      '(2.509), más los subtemas de un tema (subtemas con tema_id), los conceptos de Función Pública ' +
-      '(conceptos_fp con numero/anio) y el listado curado del DAFP (normas_fp). En temas el filtro es ' +
-      'obligatorio por volumen, y sus ids llevan prefijo ("tema-24457") porque el portal tiene tres taxonomías ' +
-      'que reutilizan los mismos números. ' +
-      'OJO CON EL ALCANCE: estos catálogos son SOLO del Gestor Normativo de Función Pública y solo sirven en ' +
-      'buscar_normas; no cubren la DIAN (su normograma está en buscar_normativa_tributaria), ni SUIN-Juriscol, ' +
-      'ni las tres altas cortes. Que "DIAN" no aparezca entre las entidades no significa que no haya normativa ' +
-      'suya: significa que el Gestor no la cataloga como entidad emisora.',
-    inputSchema: {
-      catalogo: z.enum(['tipos', 'anios', 'entidades', 'temas', 'subtemas', 'conceptos_fp', 'normas_fp']),
-      filtro: z.string().optional().describe('Texto para filtrar; obligatorio en "temas"'),
-      tema_id: z.string().optional().describe('Id del tema (solo catalogo="subtemas"), con prefijo "tema-…"'),
-      numero: z.string().optional().describe('Número del concepto (solo catalogo="conceptos_fp")'),
-      anio: z.string().optional().describe('Año del concepto (solo catalogo="conceptos_fp")'),
-      desde: z.coerce.number().int().min(0).default(0),
-      limite: z.coerce.number().int().min(1).max(200).default(50),
-    },
-  },
-  async ({ catalogo, filtro, tema_id, numero, anio, desde, limite }) => {
-    /**
-     * Cada catálogo usa unos parámetros. Uno que no le toca se ignora, y callarlo
-     * hace creer que el filtro se aplicó: `catalogo="tipos"` con `numero="9999"`
-     * devolvía los 29 tipos como si 9999 hubiera filtrado algo, y quien llamaba
-     * deducía que no había resultados, no que había pasado el parámetro a otro
-     * catálogo. Se nombra el que sobra y dónde sí vale, como en obtener_documento.
-     */
-    const DE_CADA: Record<string, string[]> = {
-      tipos: ['filtro'],
-      anios: ['filtro'],
-      entidades: ['filtro'],
-      temas: ['filtro'],
-      subtemas: ['tema_id'],
-      conceptos_fp: ['numero', 'anio'],
-      normas_fp: ['filtro'],
-    }
-    const puestos: [string, unknown][] = [
-      ['filtro', filtro],
-      ['tema_id', tema_id],
-      ['numero', numero],
-      ['anio', anio],
-    ]
-    const propios = DE_CADA[catalogo] ?? []
-    const sobran = puestos
-      .filter(([k, v]) => v !== undefined && !propios.includes(k))
-      .map(([k]) => `${k} (es de ${Object.entries(DE_CADA).filter(([, ks]) => ks.includes(k)).map(([c]) => `${c}`).join(', ') || 'otro catálogo'})`)
-    if (sobran.length) {
-      return txt(
-        `Con catalogo="${catalogo}" sobra ${sobran.join(' y ')}.\n\n` +
-          `${catalogo === 'temas' || catalogo === 'normas_fp' ? 'Este catálogo filtra con "filtro".' : 'Este catálogo no filtra por ese parámetro.'} ` +
-          `Cada catálogo usa los suyos: ${Object.entries(DE_CADA)
-            .map(([c, ks]) => (ks.length ? `${c}→${ks.join('+')}` : c))
-            .join(', ')}.`,
-      )
-    }
-    if (catalogo === 'temas' && !filtro) {
-      return txt('El catálogo de temas tiene 2.509 entradas: indica un filtro de texto para acotarlo.')
-    }
-    // Catálogos propios del Gestor (tipos, años, entidades, temas).
-    if (catalogo === 'tipos' || catalogo === 'anios' || catalogo === 'entidades' || catalogo === 'temas') {
-      const c = await gestor.catalogos()
-      const q = filtro ? sinTildes(filtro).toLowerCase() : ''
-      const lista = c[catalogo].filter((o) => !q || sinTildes(o.nombre).toLowerCase().includes(q))
-      if (!lista.length) return vacio(`entradas de "${catalogo}" que coincidan con "${filtro}"`, 'Prueba un filtro más corto.')
-      return txt(
-        `${lista.length} entrada(s) en ${catalogo}:\n` +
-          lista
-            .slice(0, limite)
-            .map((o) => `- ${o.nombre} (id ${catalogo === 'temas' ? conPrefijo('tema', o.id) : o.id})`)
-            .join('\n') +
-          (lista.length > limite ? `\n… y ${lista.length - limite} más.` : ''),
-      )
-    }
-    // Subtemas de un tema del catálogo de búsqueda.
-    if (catalogo === 'subtemas') {
-      if (!tema_id) return txt('Para catalogo="subtemas" hace falta tema_id (con prefijo "tema-…").')
-      const tema = sinPrefijo('tema', tema_id)
-      const s = await gestor.subtemas(tema)
-      if (!s.length) return vacio(`subtemas para el tema ${tema_id}`, 'Verifica el id con catalogo="temas".')
-      return txt(s.map((o) => `- ${o.nombre} (id ${conPrefijo('sub', o.id)})`).join('\n'))
-    }
-    // Conceptos de Función Pública (solo número/año; sin materia).
-    if (catalogo === 'conceptos_fp') {
-      if (!numero && !anio) {
-        throw new Error(
-          'Para catalogo="conceptos_fp" indica al menos numero o anio: el listado solo trae número y año de cada ' +
-            'concepto, sin el asunto. Para conceptos SOBRE UN TEMA usa buscar_normas con tipo_documento "Concepto".',
-        )
-      }
-      const r = await gestor.conceptosFp(numero, anio, limite, desde)
-      if (!r.total) return vacio('conceptos con ese número o año', 'Recuerda que este listado solo filtra por número y año.')
-      if (!r.items.length) {
-        return vacio(`conceptos a partir de la posición ${desde}`, `El filtro reúne ${r.total} concepto(s); pide un "desde" menor.`)
-      }
-      const fin = desde + r.items.length
-      return txt(
-        `${r.total} concepto(s) coinciden; se muestran ${desde + 1}–${fin}.\n\n` +
-          r.items.map((c) => `- ${c.titulo} (id ${c.id})\n  ${c.url}`).join('\n') +
-          (fin < r.total ? `\n\nQuedan ${r.total - fin}: repite con desde=${fin}.` : ''),
-      )
-    }
-    // Listado curado de normas de competencia del DAFP.
-    const todas = await gestor.normasFp()
-    const q = filtro ? sinTildes(filtro).toLowerCase() : ''
-    const items = todas.filter((i) => !q || sinTildes(`${i.titulo} ${i.resumen}`).toLowerCase().includes(q))
-    if (!items.length) return vacio(`normativa de competencia del DAFP que coincida con "${filtro}"`, 'Prueba sin filtro para ver el listado completo.')
-    const tramo = items.slice(desde, desde + limite)
-    if (!tramo.length) {
-      return vacio(`normativa a partir de la posición ${desde}`, `El listado reúne ${items.length} norma(s); pide un "desde" menor.`)
-    }
-    const fin = desde + tramo.length
-    return txt(
-      `${items.length} de ${todas.length} norma(s) del listado; se muestran ${desde + 1}–${fin}.\n\n` +
-        tramo
-          .map((i) => `- ${i.titulo} (id ${i.id})\n  Extracto temático: ${i.resumen || '(ninguno)'}\n  ${i.url}`)
-          .join('\n') +
-        (fin < items.length ? `\n\nQuedan ${items.length - fin}: repite con desde=${fin}.` : ''),
-    )
-  },
-)
+registrarHerramienta('listar_catalogos', listarCatalogos)
 
 registrarHerramienta('buscar_jurisprudencia', buscarJurisprudencia)
 
@@ -1080,47 +713,7 @@ server.registerTool(
 
 registrarHerramienta('buscar_en_suin', buscarEnSuin)
 
-server.registerTool(
-  'explicar_relacion_tema',
-  {
-    title: 'Explicar por qué una norma aplica a un subtema',
-    description:
-      'Devuelve el "restrictor": el extracto que explica por qué esa norma es pertinente para ESE subtema en ' +
-      'concreto. Ambos identificadores deben salir de la MISMA fila de buscar_por_tema, y el temsubid va con su ' +
-      'prefijo ("ts-38872"): un id de listar_catalogos (catalogo="subtemas") o de otros catálogos se rechaza aquí. Para ver todos los ' +
-      'restrictores de una norma de una vez, usa obtener_documento con fuente="gestor" y mira su bloque "Temas asociados".',
-    inputSchema: {
-      temsubid: z.coerce.string().describe('temsubid de buscar_por_tema, con su prefijo: "ts-38872"'),
-      normid: z.coerce.string().regex(/^\d+$/).describe('normid de la misma fila de buscar_por_tema'),
-    },
-  },
-  async ({ temsubid: temsubidCrudo, normid }) => {
-    const temsubid = sinPrefijo('ts', temsubidCrudo)
-    // Se recupera el par del índice para poder decir a qué tema corresponde:
-    // sin eso el usuario no puede verificar que la respuesta sea la que pidió.
-    const fila = cargarIndice()?.filas.find((f) => f.ts === temsubid)
-    const rotulo = fila ? `${normalizarRotulo(fila.t)} / ${normalizarRotulo(fila.s)}` : '(subtema no encontrado en el índice)'
-    const enElIndice = fila?.n.some(([id]) => id === normid) ?? false
-
-    const r = await gestor.restrictor(temsubid, normid)
-    if (!r) {
-      return vacio(
-        `un restrictor para la norma ${normid} bajo "${rotulo}"`,
-        enElIndice
-          ? 'El índice sí relaciona esa norma con ese subtema, pero el portal no publica el extracto. Usa obtener_documento con fuente="gestor" para ver los restrictores que sí tiene.'
-          : 'Esa norma no está clasificada bajo ese subtema. Verifica que temsubid y normid vengan de la misma ' +
-            'fila de buscar_por_tema; si el rótulo de arriba no es el subtema que buscabas, el id es de otra fila.',
-      )
-    }
-    return txt(
-      `${alcance([{ clave: 'gestor', detalle: 'restrictor del subtema' }])}\n\n` +
-        `Tema / subtema: ${rotulo} (temsubid ${conPrefijo('ts', temsubid)})\nNorma: ${normid}\n\n` +
-        `Por qué aplica:\n${r}\n\n` +
-        `Norma completa: https://www.funcionpublica.gov.co/eva/gestornormativo/norma.php?i=${normid}\n` +
-        `Este es el restrictor de ESTE subtema; la norma puede tener otros distintos bajo otros temas (obtener_documento con fuente="gestor" los lista todos).`,
-    )
-  },
-)
+registrarHerramienta('explicar_relacion_tema', explicarRelacionTema)
 
 // Las cuatro de este corte van registradas aquí, en el mismo orden en que
 // estaban en línea: `tools/list` se sirve en orden de registro y cambiarlo

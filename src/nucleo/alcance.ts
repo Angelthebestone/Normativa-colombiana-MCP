@@ -9,6 +9,15 @@
  */
 
 /**
+ * El descargo que cierra toda respuesta. Va aquí porque es lo mismo que la
+ * línea de alcance vista desde el otro lado: qué garantiza esta respuesta y qué
+ * no. Lo usan el pie de `txt` en `index.ts` y la herramienta que fecha su
+ * propio índice en vez de la consulta.
+ */
+export const DESCARGO =
+  'Fuente oficial; los datos se publican con propósitos informativos. Verifica siempre en el enlace antes de tomar una decisión.'
+
+/**
  * Fuentes que una herramienta puede llegar a consultar, por su clave interna.
  *
  * Los nombres son los completos, no abreviaturas: son los que usa
