@@ -213,12 +213,12 @@ async function puras() {
 
 // --- salida ----------------------------------------------------------------
 
-// `server/index.js` es lo que se lee al arrancar; el resto de `server/` (unpdf) se carga solo al leer un PDF.
+// El lanzador `index.js` y `servidor.js` son lo que se lee al arrancar; el resto de `server/` (unpdf) se carga solo al leer un PDF.
 const enServer = readdirSync(`${RAIZ}/server`).map((f) => statSync(`${RAIZ}/server/${f}`).size)
 console.log(
-  'bundle server/index.js:',
-  (statSync(`${RAIZ}/server/index.js`).size / 1024).toFixed(0),
-  'KB (al arrancar) · server/ entero:',
+  'bundle al arrancar (index.js + servidor.js):',
+  ((statSync(`${RAIZ}/server/index.js`).size + statSync(`${RAIZ}/server/servidor.js`).size) / 1024).toFixed(0),
+  'KB · server/ entero:',
   (enServer.reduce((a, b) => a + b, 0) / 1024).toFixed(0),
   'KB',
 )
