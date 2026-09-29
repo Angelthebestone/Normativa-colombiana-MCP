@@ -180,6 +180,9 @@ export const TORCIDAS: Torcida[] = [
   { herramienta: 'buscar_resoluciones_creg', args: { anio: '24' }, porque: 'año de dos dígitos' },
   { herramienta: 'buscar_jurisprudencia_suprema', args: { texto: 'x', anio: '2024-2025' }, porque: 'rango donde va un año' },
   { herramienta: 'explicar_relacion_tema', args: { temsubid: 'ts-38872', normid: 'abc' }, porque: 'id de norma no numérico' },
+  // Añadido tras el barrido disruptivo: `z.coerce.string()` convierte un campo AUSENTE en la
+  // cadena "undefined" ANTES de validar, y el mensaje de regex la repetía como si fuera un valor.
+  { herramienta: 'explicar_relacion_tema', args: { temsubid: 'ts-38872' }, porque: 'falta normid: coerce lo vuelve «undefined»' },
   { herramienta: 'buscar_normativa_sectorial', args: { entidad: 'sic', anio: 'año 2020' }, porque: 'año con texto' },
 
   // --- booleanos como texto ------------------------------------------------
@@ -257,6 +260,20 @@ test('ninguna llamada torcida revienta el validador: siempre hay veredicto', () 
   for (const t of TORCIDAS) {
     const { clase } = clasificar(t)
     assert.ok(clase, `${t.herramienta}: ${t.porque}`)
+  }
+})
+
+/**
+ * Ningún rechazo puede filtrar la mecánica interna. Es la misma guarda que aplica el barrido
+ * disruptivo al texto de las respuestas (`test:disruptivo`, con red), pero aquí sobre lo que
+ * dice la puerta de entrada y sin salir a ninguna parte: fue el barrido el que cazó un
+ * «Valor «undefined» no válido» que esta prueba habría cazado antes.
+ */
+test('ningún mensaje de rechazo contiene undefined, NaN ni [object Object]', () => {
+  for (const t of TORCIDAS) {
+    const { clase, detalle } = clasificar(t)
+    if (!clase.startsWith('rechazo')) continue
+    assert.doesNotMatch(detalle, /undefined|NaN|\[object Object\]/, `${t.herramienta} (${t.porque}): ${detalle}`)
   }
 })
 

@@ -73,6 +73,10 @@ function conAviso(campo: string, v: z.ZodTypeAny): z.ZodTypeAny {
       return { message: `Falta "${campo}", que es obligatorio${sobre}.` }
     }
     if (issue.code === z.ZodIssueCode.invalid_string && issue.validation === 'regex') {
+      // `z.coerce.string()` convierte un campo AUSENTE en la cadena "undefined" antes de
+      // validar: lo que llega aquí no es un valor mal escrito sino un campo que falta, y
+      // decir «Valor «undefined» no válido» afirmaría lo contrario de lo que pasa.
+      if (ctx.data === 'undefined') return { message: `Falta "${campo}", que es obligatorio${sobre}.` }
       return { message: `Valor «${String(ctx.data)}» no válido para "${campo}"${sobre}.` }
     }
     return { message: ctx.defaultError }
