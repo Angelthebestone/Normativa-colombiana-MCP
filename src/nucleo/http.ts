@@ -1,5 +1,6 @@
 import { AsyncLocalStorage } from 'node:async_hooks'
-import { request } from 'node:https'
+import { request as pedirHttp } from 'node:http'
+import { request as pedirHttps } from 'node:https'
 import { pipeline } from 'node:stream'
 import { rootCertificates } from 'node:tls'
 import { createGunzip, createInflate } from 'node:zlib'
@@ -373,6 +374,9 @@ function crudo(
   if (caidaForzada(new URL(url).host)) {
     return Promise.reject(new Error('FUENTE_CAIDA: host marcado como caído por el seam de diagnóstico'))
   }
+  // El Senado solo habla HTTP plano (su puerto 443 no abre, comprobado el 2026-09-28): el mismo
+  // transporte, con su ritmo por dominio, reintentos y decodificación, sirve para las dos.
+  const request = url.startsWith('http:') ? pedirHttp : pedirHttps
   return new Promise((resolve, reject) => {
     const req = request(
       url,
