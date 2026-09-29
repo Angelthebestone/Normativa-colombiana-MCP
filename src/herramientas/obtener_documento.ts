@@ -49,6 +49,8 @@ import * as consejo from '../fuentes/jurisprudencia/consejoestado.ts'
 import * as dian from '../fuentes/normograma.ts'
 import * as creg from '../fuentes/creg.ts'
 import { esCompiladora, avisoCompiladora } from '../nucleo/compiladas.ts'
+import { citaNorma } from '../nucleo/cita_oficial.ts'
+import { analizarVacancia, enVacancia } from '../nucleo/vacancia.ts'
 import { alcance, proyectar } from '../nucleo/alcance.ts'
 
 export const TITULO = 'Obtener el texto de un documento por fuente'
@@ -376,6 +378,29 @@ const conMenciones = (s: string, texto: string): string => s + mencionesDe(texto
 
 // --- fuentes --------------------------------------------------------------
 
+/**
+ * Dos líneas que el modelo no debe componer ni adivinar: la cita oficial de la norma, armada solo con lo que la
+ * ficha trae (lo que no consta se declara), y su vigencia diferida cuando la hay. La vigencia sale del propio
+ * artículo de vigencia y solo se anuncia cuando hay algo que advertir —escalonada, relativa o todavía pendiente—:
+ * repetir «rige desde su publicación» en cada norma sería ruido, y una norma «en vacancia» tratada como exigible
+ * hoy es el error caro.
+ */
+function lineasDeCitaYVigencia(n: Awaited<ReturnType<typeof gestor.obtenerNorma>>): string[] {
+  const lineas: string[] = []
+  const cita = citaNorma({ titulo: n.titulo, fechas: n.fechas })
+  if (cita) {
+    lineas.push(`Cita oficial: ${cita.cita}${cita.faltan.length ? ` (no consta en la ficha: ${cita.faltan.join(', ')})` : ''}`)
+  }
+  const v = analizarVacancia(n.texto)
+  const pendiente = enVacancia(v)
+  if (v.clase !== 'inmediata' && v.clase !== 'no-encontrada' && pendiente !== false) {
+    lineas.push(
+      `${pendiente ? 'AÚN NO RIGE — ' : ''}Vigencia según su propio artículo de vigencia (art. ${v.articulo.numero}): ${v.resumen}`,
+    )
+  }
+  return lineas
+}
+
 async function gestorDocumento(p: Resueltas, tope: number): Promise<string> {
   if (!p.id) throw new Error('Para fuente="gestor" hace falta id.')
   let n: Awaited<ReturnType<typeof gestor.obtenerNorma>>
@@ -403,6 +428,7 @@ async function gestorDocumento(p: Resueltas, tope: number): Promise<string> {
     ...fechas.map(([k, v]) => `  ${k}: ${v || '(vacío en el portal)'}`),
     `URL: ${n.url}`,
     `PDF: ${n.urlPdf}`,
+    ...lineasDeCitaYVigencia(n),
   ].join('\n') + desajuste
 
   if (n.texto.length < 200) {
