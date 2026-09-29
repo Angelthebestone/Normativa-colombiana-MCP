@@ -21,7 +21,7 @@
  * en septiembre del mismo año, así que la actualización es continua.
  */
 import { cargar, limpiarTermino, sinTildes, textoDe } from '../../nucleo/parse.ts'
-import { rutaDeSentencia } from '../../nucleo/citas.ts'
+import { parsearCita, rutaDeSentencia } from '../../nucleo/citas.ts'
 import { pedir as http } from '../../nucleo/http.ts'
 import { esStopword } from '../../nucleo/stopwords.ts'
 
@@ -121,6 +121,29 @@ function aProvidencia(hit: HitES): Providencia {
 
 /** C = constitucionalidad, T = tutela, SU = unificación, A = auto. */
 export type TipoProvidencia = 'C' | 'T' | 'SU' | 'A'
+
+/**
+ * Cómo se llama en la práctica cada tipo de providencia: quien pide «tutela» o «auto»
+ * no está equivocado, y rechazarlo con un error de esquema (o, peor, pasarlo al
+ * portal tal cual) es un fallo evitable. Lo desconocido se deja tal cual para que el
+ * esquema lo rechace listando los valores válidos.
+ */
+const SINONIMOS_TIPO: Record<string, TipoProvidencia> = {
+  c: 'C',
+  constitucionalidad: 'C',
+  't': 'T',
+  tutela: 'T',
+  tutelas: 'T',
+  su: 'SU',
+  unificacion: 'SU',
+  'sentencia de unificacion': 'SU',
+  a: 'A',
+  auto: 'A',
+  autos: 'A',
+}
+
+export const normalizarTipo = (v: unknown): unknown =>
+  typeof v === 'string' ? (SINONIMOS_TIPO[sinTildes(v).toLowerCase().trim()] ?? v) : v
 
 const prefijo = (p: Providencia): string =>
   (p.sentencia.match(/^\s*(SU|C|T|A)\b/i)?.[1] ?? '').toUpperCase()
@@ -266,12 +289,17 @@ const identidad = (s: string): string => s.replace(/[\s.\-/]/g, '').toUpperCase(
 /**
  * Formas del término que la relatoría indexa de manera distinta; el porqué está
  * medido y documentado en `verificar`. La literal primero —es la que resuelve
- * las C y las T— y la que va sin guiones solo si aquella no rindió.
+ * las C y las T—, la que va sin guiones si aquella no rindió, y la «C-331 de 2023»
+ * al final: hay providencias que solo esa forma encuentra (medido el 2026-09-28:
+ * C-331/23 daba «no existe» con las otras dos y 20 aciertos con esta, y el
+ * «no existe» era falso).
  */
 function formasDeSondeo(sentencia: string): string[] {
   const literal = sentencia.trim()
   const sinGuion = literal.replace(/-/g, '')
-  return sinGuion === literal ? [literal] : [literal, sinGuion]
+  const c = parsearCita(literal)
+  const deAnio = c?.sentencia && c.anio ? `${c.sentencia.split('/')[0]} de ${c.anio}` : ''
+  return [...new Set([literal, sinGuion, deAnio].filter(Boolean))]
 }
 
 export type VerificacionSentencia = {
