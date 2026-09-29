@@ -210,8 +210,15 @@ export function fragmentos(
   return { total, trozos, inicios, pasajes: ventanas.length, mostrados: trozos.length }
 }
 
-/** true si lo que precede a un encabezado lo anuncia como texto citado ("…quedará así:"). */
-const abreBloqueCitado = (previo: string): boolean => previo.trimEnd().endsWith(':')
+/**
+ * true si lo que precede a un encabezado lo anuncia como texto citado. El
+ * anuncio puede cerrar en dos puntos ("…quedará así:") o en punto ("…el cual
+ * quedará así."): la Ley 2418 de 2024 anuncia con punto sus seis artículos que
+ * transcriben, y sin aceptarlo `articulo()` devolvía solo el anuncio, sin el
+ * articulado transcrito (medido el 2026-09-28 contra el portal).
+ */
+const abreBloqueCitado = (previo: string): boolean =>
+  previo.trimEnd().endsWith(':') || /quedar[áa]n? as[íi]\.$/.test(previo.trimEnd())
 
 /**
  * Números que un encabezado de sustitución anuncia: "Los artículos 217 y 218
@@ -271,7 +278,15 @@ export function articulo(texto: string, numero: string): string | null {
   const esc = n.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
   // El cierre no puede ser `\b`: con él, pedir el artículo 771 casaba con el
   // encabezado de "Artículo 771-5" y se devolvía otro artículo sin avisar.
-  const re = new RegExp(`\\b(?:ART[IÍ]CULO|Art[ií]culo)\\s+${esc}(?![\\d\\-A-Za-z])`, 'g')
+  //
+  // La coincidencia inicial exige inicio de renglón, la misma regla que
+  // `indiceArticulos`: sin ella, pedir el artículo 28 de la Ley 789 de 2002
+  // devolvía el "Artículo 28 de la Ley 21 de 1982" citado en prosa dentro del
+  // artículo 3, y en el Estatuto Tributario el 246 devolvía la cita al Código
+  // de Comercio. Medido el 2026-09-28 sobre 3.397 artículos de 14 normas:
+  // 3.387 se extraen idénticos y 10 cambian, todos de una cita en prosa al
+  // encabezado real.
+  const re = new RegExp(`(?:^|\\n)\\s*(?:ART[IÍ]CULO|Art[ií]culo)\\s+${esc}(?![\\d\\-A-Za-z])`, 'g')
   const m = re.exec(texto)
   if (!m) return null
   const desde = m.index + m[0].length
@@ -440,8 +455,12 @@ export type Cambio = {
   literal: string
 }
 
+// `Decreto Nacional` es una forma corriente en las notas ("Reglamentado por el
+// Decreto Nacional 1409 de 2008"): sin admitirla, 41 notas de las 14 normas
+// medidas el 2026-09-28 quedaban sin año teniéndolo escrito (20 de ellas en el
+// Estatuto Tributario, 11 en la Ley 789 de 2002).
 const NORMA_CITADA =
-  /\b(Ley|Decreto(?:\s+Ley)?|Resoluci[óo]n|Acuerdo|Circular|Acto\s+Legislativo)\s+(\d[\d.]*)\s+de\s+(\d{4})/i
+  /\b(Ley|Decreto(?:\s+(?:Ley|Nacional))?|Resoluci[óo]n|Acuerdo|Circular|Acto\s+Legislativo)\s+(\d[\d.]*)\s+de\s+(\d{4})/i
 const SENTENCIA_CITADA = /\b((?:C|T|SU|A)-\s?\d{1,4})\b/i
 
 /**
