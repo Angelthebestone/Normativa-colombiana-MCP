@@ -13,6 +13,7 @@ import { esCompiladora } from './nucleo/compiladas.ts'
 import { conAlternativas } from './nucleo/alternativas.ts'
 import { validarUrl } from './nucleo/evidencia.ts'
 import { advertenciaSnapshot } from './nucleo/snapshot.ts'
+import { vacio as vacioTexto } from './nucleo/vacio.ts'
 import * as consultarJerarquia from './herramientas/consultar_jerarquia.ts'
 import * as analizarConflicto from './herramientas/analizar_conflicto.ts'
 import * as cambiosDesde from './herramientas/cambios_desde.ts'
@@ -25,6 +26,10 @@ import * as historialNorma from './herramientas/historial_norma.ts'
 import * as buscarUnificado from './herramientas/buscar_unificado.ts'
 import * as buscarDiarioOficial from './herramientas/buscar_diario_oficial.ts'
 import * as lineaJurisprudencial from './herramientas/linea_jurisprudencial.ts'
+import * as buscarNormativaAnh from './herramientas/buscar_normativa_anh.ts'
+import * as buscarNormativaUpme from './herramientas/buscar_normativa_upme.ts'
+import * as buscarResolucionesCreg from './herramientas/buscar_resoluciones_creg.ts'
+import * as listarNormativaAmbientalAnla from './herramientas/listar_normativa_ambiental_anla.ts'
 import { resolverCodigo } from './herramientas/codigo_senado.ts'
 import { resolverRadicado } from './herramientas/resolver_radicado.ts'
 import * as obtenerDocumento from './herramientas/obtener_documento.ts'
@@ -42,10 +47,6 @@ import * as suin from './fuentes/suin.ts'
 import * as dian from './fuentes/normograma.ts'
 import * as suprema from './fuentes/jurisprudencia/cortesuprema.ts'
 import * as consejo from './fuentes/jurisprudencia/consejoestado.ts'
-import * as anh from './fuentes/anh.ts'
-import * as upme from './fuentes/upme.ts'
-import * as creg from './fuentes/creg.ts'
-import * as anla from './fuentes/anla.ts'
 import * as sectorial from './fuentes/sectorial.ts'
 import './fuentes/sectorial/registro.ts'
 
@@ -66,7 +67,7 @@ const txt = (s: string) => ({
  * lee como "no existe" y son dos cosas distintas.
  */
 const vacio = (que: string, sugerencia: string, lineaAlcance?: string) =>
-  txt(`${lineaAlcance ? `${lineaAlcance}\n\n` : ''}No encontré ${que} en las fuentes consultadas.\n\n${sugerencia}`)
+  txt(vacioTexto(que, sugerencia, lineaAlcance))
 
 type OpcionesCita = {
   /** Artículos de la MISMA norma: se resuelve y se descarga una vez, y se extrae cada uno. */
@@ -1411,234 +1412,15 @@ server.registerTool(
   },
 )
 
+// Las cuatro de este corte van registradas aquí, en el mismo orden en que
+// estaban en línea: `tools/list` se sirve en orden de registro y cambiarlo
+// cambiaría su respuesta byte a byte.
+registrarHerramienta('buscar_normativa_anh', buscarNormativaAnh as never)
+registrarHerramienta('buscar_normativa_upme', buscarNormativaUpme as never)
+registrarHerramienta('buscar_resoluciones_creg', buscarResolucionesCreg as never)
+registrarHerramienta('listar_normativa_ambiental_anla', listarNormativaAmbientalAnla as never)
+
 // --- reguladores sectoriales --------------------------------------------
-
-server.registerTool(
-  'buscar_normativa_anh',
-  {
-    title: 'Buscar normativa de la ANH (hidrocarburos)',
-    description:
-      'Resoluciones, acuerdos y circulares de la Agencia Nacional de Hidrocarburos (785 documentos): contratos ' +
-      'de exploración y producción, regalías, fiscalización y reservas. ÚSALA para hidrocarburos y regalías; NO ' +
-      'devuelve el texto (publica en PDF), solo el epígrafe, el PDF y la ficha. Para leyes o decretos nacionales ' +
-      'de cualquier sector usa resolver_cita. Por defecto OCULTA los actos de personal, que son dos de cada ' +
-      'tres; pídelos con incluir_administrativos=true si de verdad los buscas.',
-    inputSchema: {
-      texto: z.string().optional().describe('Palabra clave, ej. "regalías", "fiscalización"'),
-      tipo: z.enum(Object.keys(anh.TIPOS) as [anh.TipoAnh, ...anh.TipoAnh[]]).optional(),
-      numero: z.coerce.string().regex(/^\d+$/).optional().describe('Número del acto, como texto'),
-      desde: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional().describe('Fecha inicial AAAA-MM-DD'),
-      hasta: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional().describe('Fecha final AAAA-MM-DD'),
-      pagina: z.coerce.number().int().min(1).max(40).default(1).describe('Página de 20; hay 40 en total sin filtros'),
-      incluir_administrativos: z
-        .boolean()
-        .default(false)
-        .describe('Incluir nombramientos, encargos y demás actos de personal. Por defecto se ocultan.'),
-    },
-  },
-  async ({ texto, tipo, numero, desde, hasta, pagina, incluir_administrativos }) => {
-    const r = await anh.buscar({ texto, tipo, numero, desde, hasta, pagina })
-    const ocultos = incluir_administrativos ? [] : r.items.filter((d) => anh.ES_ADMINISTRATIVO(d.categoria))
-    const items = incluir_administrativos ? r.items : r.items.filter((d) => !anh.ES_ADMINISTRATIVO(d.categoria))
-
-    if (!items.length) {
-      return vacio(
-        `normativa de la ANH en la página ${r.pagina}`,
-        ocultos.length
-          ? `Las ${ocultos.length} de esta página son actos de personal y se ocultaron; pide incluir_administrativos=true para verlos, o avanza de página.`
-          : 'Prueba otra página, otro tipo o quita los filtros.',
-      )
-    }
-    return txt(
-      `${alcance([{ clave: 'anh', detalle: `${items.length} acto(s)` }])}\n\n` +
-        `${items.length} documento(s) de la ANH en la página ${r.pagina}` +
-        (ocultos.length ? ` (se ocultaron ${ocultos.length} actos de personal)` : '') +
-        `.\n\n` +
-        items
-          .map(
-            (d) =>
-              `- ${d.tipo} ${d.numero} (${d.fecha})${d.categoria ? ` — ${d.categoria}` : ''}\n` +
-              `  ${d.epigrafe || '(sin epígrafe)'}\n` +
-              (d.urlPdf ? `  PDF: ${d.urlPdf}\n` : '') +
-              `  Ficha: ${d.urlFicha}`,
-          )
-          .join('\n') +
-        `\n\nEl texto completo no se puede leer aquí: la ANH publica en PDF y esta extensión no extrae su texto. ` +
-        `El epígrafe de arriba es el del propio portal, citable tal cual.`,
-    )
-  },
-)
-
-server.registerTool(
-  'buscar_normativa_upme',
-  {
-    title: 'Buscar circulares y resoluciones de la UPME',
-    description:
-      'Circulares y resoluciones de la Unidad de Planeación Minero Energética: convocatorias de transmisión y de ' +
-      'gas, planes de expansión y actos administrativos. NO devuelve el texto: son PDF. ' +
-      'OJO CON LAS FECHAS: la fecha que publica su portal es la de PUBLICACIÓN EN LA WEB, no la de la norma — la ' +
-      '"Resolución 1163 de 2024" figura publicada en 2025. El número y el año reales están en el título.',
-    inputSchema: {
-      texto: z.string().optional().describe('Términos a buscar, ej. "transmisión", "plan de expansión"'),
-      pagina: z.coerce.number().int().min(1).default(1),
-      limite: z.coerce.number().int().min(1).max(50).default(10),
-      incluir_administrativos: z
-        .boolean()
-        .default(false)
-        .describe('Incluir nombramientos y demás actos de personal. Por defecto se ocultan.'),
-    },
-  },
-  async ({ texto, pagina, limite, incluir_administrativos }) => {
-    const r = await upme.buscar({ texto, pagina, limite })
-    const ocultos = incluir_administrativos ? [] : r.items.filter((d) => upme.esActoDePersonal(d.epigrafe))
-    const items = incluir_administrativos ? r.items : r.items.filter((d) => !upme.esActoDePersonal(d.epigrafe))
-
-    if (!items.length) {
-      return vacio(
-        `circulares o resoluciones de la UPME${texto ? ` sobre "${texto}"` : ''}`,
-        ocultos.length
-          ? `Las ${ocultos.length} de esta página son actos de personal y se ocultaron; usa incluir_administrativos=true.`
-          : r.procedencia === 'portal'
-            ? `El buscador del portal no devolvió resultados para "${texto}" en el HTML de ?q= (ni el REST). Prueba un término más general.`
-            : `El buscador de la UPME es el de WordPress y solo indexa el título y el resumen. Prueba un término más general.`,
-      )
-    }
-    return txt(
-      `${alcance([{ clave: 'upme', detalle: `${items.length} documento(s)` }])}\n\n` +
-        `${r.total} documento(s) en la UPME (${r.paginas} página(s)); se muestran ${items.length} de la página ${pagina}` +
-        (ocultos.length ? `, ocultando ${ocultos.length} acto(s) de personal` : '') +
-        (r.procedencia === 'portal'
-          ? '\nResultados del buscador del portal (indexa el contenido de los PDF), no del REST.'
-          : '') +
-        `.\n\n` +
-        items
-          .map(
-            (d) =>
-              `- ${d.titulo}${d.anio ? '' : ' (el título no trae año)'}\n` +
-              `  ${d.epigrafe || '(sin resumen)'}\n` +
-              `  Publicado en el portal: ${d.publicado} — NO es la fecha de la norma\n` +
-              `  PDF: ${d.url}`,
-          )
-          .join('\n') +
-        (pagina < r.paginas ? `\n\nHay más: repite con pagina=${pagina + 1}.` : ''),
-    )
-  },
-)
-
-server.registerTool(
-  'buscar_resoluciones_creg',
-  {
-    title: 'Buscar resoluciones de la CREG (energía y gas)',
-    description:
-      'Resoluciones de la Comisión de Regulación de Energía y Gas: tarifas, conexión, comercialización, plantas ' +
-      'solares y gas natural. Es la ÚNICA fuente sectorial cuyo texto se puede leer aquí (obtener_documento con ' +
-      'fuente="creg") y la única que publica una señal de vigencia, en compilaciones separadas de no derogadas y ' +
-      'derogadas; esa señal se traslada literal, no la conviertas en un sí o un no. Para leyes o decretos ' +
-      'nacionales de otros sectores usa resolver_cita.',
-    inputSchema: {
-      texto: z.string().optional().describe('Filtra por número, año o epígrafe. Ej.: "solar", "gas natural", "101-104"'),
-      compilacion: z
-        .enum(['vigentes', 'derogadas', 'todas'])
-        .default('vigentes')
-        .describe('"vigentes" = las que la CREG lista como no derogadas expresamente ni anuladas'),
-      anio: z
-        .string()
-        .regex(/^\d{4}$/)
-        .optional()
-        .describe('Año de cuatro dígitos, desde 1994. SIN ÉL solo se mira el año en curso, que trae muy pocas.'),
-      limite: z.coerce.number().int().min(1).max(50).default(15).describe('Cuántas resoluciones mostrar (hasta 50)'),
-    },
-  },
-  async ({ texto, compilacion, anio, limite }) => {
-    const r = await creg.buscar(compilacion, texto, limite, anio)
-    if (!r.items.length) {
-      return vacio(
-        `resoluciones de la CREG${texto ? ` que coincidan con "${texto}"` : ''} en la compilación "${compilacion}"` +
-          ` del año ${anio ?? new Date().getFullYear()}`,
-        'La CREG publica una compilación POR AÑO y sin el parámetro anio solo se mira el año en curso, que apenas ' +
-          'trae unas decenas. Repite indicando el año (desde 1994). La búsqueda es sobre número, año y epígrafe: ' +
-          'la CREG no ofrece búsqueda dentro del texto.',
-        alcance([{ clave: 'creg', detalle: '0 resoluciones' }]),
-      )
-    }
-    return txt(
-      `${alcance([{ clave: 'creg', detalle: `${r.items.length} resolución(es)` }])}\n\n` +
-        `${r.total} resolución(es) en la compilación "${compilacion}" de la CREG (${r.pagina}); ` +
-        `se muestran ${r.items.length}.\n\n` +
-        r.items
-          .map(
-            (x) =>
-              `- Resolución CREG ${x.numero} de ${x.anio}\n` +
-              `  ${x.epigrafe || '(sin epígrafe)'}\n` +
-              `  Estado: ${x.estadoSegunCompilacion}\n` +
-              `  Texto completo: obtener_documento con fuente="creg" y ruta="${x.ruta}"`,
-          )
-          .join('\n') +
-        `\n\nEse "Estado" es la clasificación de la propia compilación de la CREG, no un campo de vigencia por norma: ` +
-        `dilo como lo que es y verifica en el texto si el aparte que te interesa sigue rigiendo.` +
-        (anio ? '' : `\nSe consultó solo el año en curso: indica anio para buscar en años anteriores.`),
-    )
-  },
-)
-
-server.registerTool(
-  'listar_normativa_ambiental_anla',
-  {
-    title: 'Normativa ambiental clasificada por la ANLA',
-    description:
-      'La ANLA mantiene en su sistema "Eureka" una CURADURÍA de la normativa nacional que aplica al licenciamiento ' +
-      'ambiental, agrupada por tema. Lo que aporta es la CLASIFICACIÓN, no documentos nuevos: casi todo lo que ' +
-      'lista son leyes y decretos que resolver_cita ya resuelve mejor, con texto completo y con vigencia. ' +
-      'Úsala para descubrir QUÉ normas aplican a un tema ambiental, y resuelve cada una con resolver_cita.',
-    inputSchema: {
-      seccion: z.enum(Object.keys(anla.SECCIONES) as [anla.SeccionAnla, ...anla.SeccionAnla[]]).default('leyes'),
-      texto: z.string().optional().describe('Filtra las entradas de esa sección por título o resumen'),
-      desde: z.coerce
-        .number()
-        .int()
-        .min(0)
-        .default(0)
-        .describe('Eureka pagina sola y con distinto tamaño según la sección: no lo calcules, usa el que dice la respuesta'),
-    },
-  },
-  async ({ seccion, texto, desde }) => {
-    const r = await anla.listar(seccion, desde)
-    const items = texto ? anla.filtrar(r.items, texto) : r.items
-    if (!items.length) {
-      return vacio(
-        `entradas en la sección "${seccion}" de Eureka${texto ? ` que mencionen "${texto}"` : ''}`,
-        r.items.length
-          ? `La página trae ${r.items.length} entradas pero ninguna coincide: Eureka no tiene buscador propio y el filtro se aplica aquí, solo sobre esta página.`
-          : 'Prueba con desde=0 o con otra sección.',
-      )
-    }
-    return txt(
-      `${alcance([{ clave: 'anla', detalle: `${items.length} entrada(s)` }])}\n\n` +
-        `${items.length} entrada(s) en "${seccion}" (Eureka, ANLA), desde la posición ${r.desde}.\n\n` +
-        items
-          .map(
-            (x) =>
-              `- ${x.titulo}\n` +
-              // El número del título es el que escribió Eureka, y a veces no es el
-              // de la norma. Cuando el propio resumen lo desmiente, decirlo aquí
-              // vale más que la cita: es la diferencia entre citar mal una ley de
-              // deforestación y saber que hay que comprobar cuál de las dos es.
-              (x.desmentida
-                ? `  OJO, EL NÚMERO NO CUADRA: el título dice "${x.cita}" y el resumen de la propia ANLA cita ` +
-                  `"${x.desmentida}". Comprueba las dos con resolver_cita antes de citar ninguna.\n`
-                : x.cita
-                  ? `  Cita leída del título, sin comprobar: pásala por resolver_cita — ${x.cita}\n`
-                  : '') +
-              (x.resumen ? `  ${x.resumen.slice(0, 220)}\n` : '') +
-              `  ${x.url}`,
-          )
-          .join('\n') +
-        (r.siguiente !== null ? `\n\nHay más: repite con desde=${r.siguiente}.` : '') +
-        `\n\nEsto es la clasificación temática de la ANLA, no su normativa propia. Para el texto y la vigencia de ` +
-        `cada norma, pásala por resolver_cita.`,
-    )
-  },
-)
 
 server.registerTool(
   'buscar_normativa_sectorial',
@@ -1921,8 +1703,8 @@ type HerramientaV2 = {
   escribir: (p: any) => Promise<string>
 }
 
-const registrarHerramienta = (nombre: string, m: HerramientaV2) =>
-  server.registerTool(
+function registrarHerramienta(nombre: string, m: HerramientaV2) {
+  return server.registerTool(
     nombre,
     { title: m.TITULO, description: m.DESCRIPCION, inputSchema: m.schema },
     // Con `formato: "json"` la respuesta es SOLO el JSON: el pie de fecha y descargo lo rompería, así
@@ -1932,6 +1714,7 @@ const registrarHerramienta = (nombre: string, m: HerramientaV2) =>
         ? { content: [{ type: 'text' as const, text: await m.escribir(p) }] }
         : txt(await m.escribir(p))) as never,
   )
+}
 
 registrarHerramienta('consultar_por_jerarquia', consultarJerarquia as never)
 registrarHerramienta('analizar_conflicto', analizarConflicto as never)
