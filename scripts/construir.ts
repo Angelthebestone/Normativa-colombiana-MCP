@@ -1,5 +1,15 @@
 /**
- * Empaqueta el servidor en un solo archivo.
+ * Empaqueta el servidor: `server/index.js` y un segundo fichero, `unpdf-*.js`.
+ *
+ * `unpdf` (pdf.js) pesa 1,5 MB, dos tercios del bundle, y solo se necesita al
+ * leer un PDF, así que ya se importaba en diferido. Pero en un único fichero ese
+ * peso se lee y se parsea igual al arrancar: medido, quitarlo baja el arranque
+ * hasta `initialize` de 396 a 307 ms (−89 ms, −22,6 %). Con `splitting`, esbuild
+ * lo saca a su propio fichero y solo se carga la primera vez que hace falta.
+ *
+ * ponytail: el servidor deja de ser UN solo fichero. El salto siguiente, si
+ * volviera a importar tenerlo en uno, es deshacer `splitting` y `outdir` aquí:
+ * es todo el cambio, y cuesta esos ~90 ms en cada arranque.
  *
  * Está en un script y no en una línea de package.json porque el banner necesita
  * un salto de línea real —el shebang tiene que quedar solo en la primera línea—
@@ -8,7 +18,7 @@
  * esperando a que alguien tomara ese camino.
  */
 import { spawn } from 'node:child_process'
-import { readFileSync, writeFileSync } from 'node:fs'
+import { readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { build } from 'esbuild'
 
 // La versión se inyecta desde package.json: escrita a mano en el User-Agent se
@@ -35,13 +45,20 @@ const BANNER = [
   "import{createRequire}from'module';const require=createRequire(import.meta.url);",
 ].join('\n')
 
+// El nombre del fichero de `unpdf` lleva un hash: sin esto, cada build dejaría el
+// suyo al lado y el paquete acabaría publicando los viejos.
+for (const f of readdirSync('server')) if (/^unpdf-.*\.js$/.test(f)) rmSync(`server/${f}`)
+
 const r = await build({
   entryPoints: ['src/index.ts'],
   bundle: true,
   platform: 'node',
   format: 'esm',
   target: 'node18',
-  outfile: 'server/index.js',
+  outdir: 'server',
+  entryNames: 'index',
+  splitting: true,
+  chunkNames: 'unpdf-[hash]',
   // Medido: 1099 KB → 583 KB y unos 20 ms menos de arranque. Sin `keepNames`:
   // envolver cada función para conservar su nombre costaba 23 KB y ~40 ms de
   // arranque, y el enrutado de errores usa `instanceof`, que no depende del

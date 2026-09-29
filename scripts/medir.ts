@@ -10,7 +10,7 @@
  * `redResumen()` (src/nucleo/http.ts).
  */
 import { spawn } from 'node:child_process'
-import { readFileSync, statSync } from 'node:fs'
+import { readdirSync, readFileSync, statSync } from 'node:fs'
 import { performance } from 'node:perf_hooks'
 import { fileURLToPath } from 'node:url'
 
@@ -213,7 +213,15 @@ async function puras() {
 
 // --- salida ----------------------------------------------------------------
 
-console.log('bundle server/index.js:', (statSync(`${RAIZ}/server/index.js`).size / 1024).toFixed(0), 'KB')
+// `server/index.js` es lo que se lee al arrancar; el resto de `server/` (unpdf) se carga solo al leer un PDF.
+const enServer = readdirSync(`${RAIZ}/server`).map((f) => statSync(`${RAIZ}/server/${f}`).size)
+console.log(
+  'bundle server/index.js:',
+  (statSync(`${RAIZ}/server/index.js`).size / 1024).toFixed(0),
+  'KB (al arrancar) · server/ entero:',
+  (enServer.reduce((a, b) => a + b, 0) / 1024).toFixed(0),
+  'KB',
+)
 
 const idx = indices()
 for (const [f, v] of Object.entries(idx)) {
