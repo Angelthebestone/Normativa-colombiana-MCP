@@ -4,6 +4,7 @@
  */
 import { z } from 'zod'
 
+import { estricto } from '../nucleo/normalizar.ts'
 import { idTipo, parsearCita, candidatosAmbiguos } from '../nucleo/citas.ts'
 import * as gestor from '../fuentes/gestor.ts'
 import * as suin from '../fuentes/suin.ts'
@@ -17,13 +18,37 @@ export const DESCRIPCION =
   'Reúne para dos normas la EVIDENCIA de un posible conflicto: identificación en el Gestor, vigencia según ' +
   'SUIN cuando consta, nivel en la jerarquía y carácter, reformas anotadas en el texto y pasajes que mencionan ' +
   'un tema. NO detecta contradicciones semánticas: el resultado es un conflicto POTENCIAL, no una conclusión ' +
-  'jurídica; verifica en los enlaces antes de actuar.'
+  'jurídica; verifica en los enlaces antes de actuar. Con formato="json" devuelve un objeto con ' +
+  'fecha_consulta, alcance, sobre (si se pidió), evidencias (una por norma, con los mismos campos del texto) y ' +
+  'avisos.'
 
-export const schema = {
+export const schema = estricto({
   norma_a: z.string().describe('Cita de la primera norma, ej. "Ley 909 de 2004"'),
   norma_b: z.string().describe('Cita de la segunda norma'),
   sobre: z.string().optional().describe('Tema opcional para buscar artículos de ambas que lo mencionen'),
-}
+  formato: z
+    .enum(['markdown', 'json'])
+    .default('markdown')
+    .describe(
+      'Salida: "markdown" (texto legible, por defecto) o "json" (un objeto con fecha_consulta, alcance, ' +
+        'evidencias y avisos, sin cabecera ni pie)',
+    ),
+})
+
+/** Entrada del cliente: `formato` llega opcional (tiene default). */
+type Parametros = z.input<typeof schema>
+
+/** Fecha de la consulta en AAAA-MM-DD: la que el envoltorio ya no añade en modo json. */
+const hoy = () => new Date().toISOString().slice(0, 10)
+
+/**
+ * Las dos advertencias de cierre. En markdown van al pie; en json, dentro de
+ * `avisos`. Se definen una vez para que no se separen.
+ */
+const CIERRE = [
+  'Conflicto POTENCIAL, no conclusión jurídica: esto es evidencia reunida, no un análisis de contradicciones. Verifica en los enlaces antes de actuar.',
+  'Las sentencias citadas en las notas se resuelven con resolver_cita (ej. "C-1230/05").',
+] as const
 
 export type Evidencia = {
   cita: string
@@ -189,16 +214,12 @@ export function formatear(evA: Evidencia, evB: Evidencia, sobre?: string): strin
       )
     }
   }
-  bloques.push(
-    '',
-    'Conflicto POTENCIAL, no conclusión jurídica: esto es evidencia reunida, no un análisis de contradicciones. Verifica en los enlaces antes de actuar.',
-    'Las sentencias citadas en las notas se resuelven con resolver_cita (ej. "C-1230/05").',
-  )
+  bloques.push('', ...CIERRE)
   return bloques.join('\n')
 }
 
-export async function escribir(params: z.infer<ReturnType<typeof z.object<typeof schema>>>): Promise<string> {
-  const { norma_a, norma_b, sobre } = params
+export async function escribir(params: Parametros): Promise<string> {
+  const { norma_a, norma_b, sobre, formato } = params
   const [evA, evB] = await Promise.all([evidenciaDe(norma_a, sobre), evidenciaDe(norma_b, sobre)])
   // El Gestor se consulta por cada cita interpretable; SUIN, solo si alguna
   // llegó a la fase de vigencia. Sin ninguna cita interpretable no se tocó la
@@ -212,5 +233,16 @@ export async function escribir(params: z.infer<ReturnType<typeof z.object<typeof
         ...(evs.some((e) => e.suinConsultado) ? [{ clave: 'suin', detalle: `${detalleSuin} estado(s)` }] : []),
       ])
     : 'Alcance: sin consultar ninguna fuente (la llamada no llegó a salir).'
+  // Modo json: los mismos datos que el markdown, con la línea de alcance dentro
+  // y las advertencias de cierre en `avisos`; sin cabecera ni pie.
+  if (formato === 'json') {
+    return JSON.stringify({
+      fecha_consulta: hoy(),
+      alcance: cabecera,
+      ...(sobre ? { sobre } : {}),
+      evidencias: [evA, evB],
+      avisos: [...CIERRE],
+    })
+  }
   return `${cabecera}\n\n${formatear(evA, evB, sobre)}`
 }

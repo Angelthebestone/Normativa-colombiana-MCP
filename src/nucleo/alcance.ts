@@ -9,6 +9,15 @@
  */
 
 /**
+ * El descargo que cierra toda respuesta. Va aquí porque es lo mismo que la
+ * línea de alcance vista desde el otro lado: qué garantiza esta respuesta y qué
+ * no. Lo usan el pie de `txt` en `index.ts` y la herramienta que fecha su
+ * propio índice en vez de la consulta.
+ */
+export const DESCARGO =
+  'Fuente oficial; los datos se publican con propósitos informativos. Verifica siempre en el enlace antes de tomar una decisión.'
+
+/**
  * Fuentes que una herramienta puede llegar a consultar, por su clave interna.
  *
  * Los nombres son los completos, no abreviaturas: son los que usa
@@ -23,6 +32,8 @@ export const NOMBRE_FUENTE: Record<string, string> = {
   consejo: 'Consejo de Estado',
   dian: 'DIAN',
   suin: 'SUIN-Juriscol',
+  senado: 'Secretaría del Senado',
+  diario: 'Diario Oficial',
   creg: 'CREG',
   anh: 'ANH',
   upme: 'UPME',
@@ -94,6 +105,8 @@ const HERRAMIENTA_DE: Record<string, string> = {
   buscar_jurisprudencia_consejo_estado: 'consejo',
   buscar_normativa_tributaria: 'dian',
   buscar_en_suin: 'suin',
+  buscar_diario_oficial: 'diario',
+  linea_jurisprudencial: 'corte',
   buscar_resoluciones_creg: 'creg',
   buscar_normativa_anh: 'anh',
   buscar_normativa_upme: 'upme',

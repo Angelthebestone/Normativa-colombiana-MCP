@@ -3,6 +3,7 @@
  * filtros que el perfil trae preconfigurados.
  */
 import { z } from 'zod'
+import { estricto } from '../nucleo/normalizar.ts'
 import { alcance, proyectar } from '../nucleo/alcance.ts'
 import { perfil, perfiles } from '../nucleo/perfiles.ts'
 
@@ -24,7 +25,7 @@ const IDS = proyectar(
   (id) => perfil(id)!.fuente,
 )
 
-export const schema = {
+export const schema = estricto({
   perfil: z.enum(IDS).describe('Id del perfil, de describir_fuentes'),
   texto: z.string().describe('Consulta dentro del perfil, ej. "teletrabajo"'),
   limite: z.coerce
@@ -34,11 +35,10 @@ export const schema = {
     .max(20)
     .default(10)
     .describe('Cuántos resultados devolver (máximo 20; por defecto 10)'),
-}
+})
 
 /** El schema como ZodObject: de él se deriva el tipo de los parámetros resueltos. */
-const schemaCompleto = z.object(schema)
-type Parametros = z.infer<typeof schemaCompleto>
+type Parametros = z.infer<typeof schema>
 
 /**
  * Da forma a la respuesta sin tocar la red: `resultado` null es un perfil que

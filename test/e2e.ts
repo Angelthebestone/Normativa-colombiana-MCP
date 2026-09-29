@@ -49,9 +49,9 @@ after(() => c?.cerrar())
 
 // --- contrato que ve el cliente -----------------------------------------
 
-test('las 26 herramientas se declaran con esquemas utilizables', CONTRATO, async () => {
+test('las 28 herramientas se declaran con esquemas utilizables', CONTRATO, async () => {
   const { tools } = await c.peticion('tools/list')
-  assert.equal(tools.length, 26, tools.map((t: any) => t.name).join(', '))
+  assert.equal(tools.length, 28, tools.map((t: any) => t.name).join(', '))
 
   const sinTipo: string[] = []
   for (const t of tools) {
@@ -196,7 +196,9 @@ test('limite_caracteres manda también en modo búsqueda', LENTO, async () => {
   // límite de 1.500 devolvía 18.000 caracteres, justo en las normas grandes.
   const corto = await c.tool('obtener_documento', { fuente: 'gestor', id: '14861', buscar_en_texto: 'empleo', limite_caracteres: 1500 })
   const largo = await c.tool('obtener_documento', { fuente: 'gestor', id: '14861', buscar_en_texto: 'empleo', limite_caracteres: 20000 })
-  assert.ok(corto.texto.length < 5000, `con tope 1500 devolvió ${corto.texto.length} caracteres`)
+  // 6.000 y no 5.000: la cabecera (alcance, ficha, cita oficial y vigencia diferida) pesa ~1.500 caracteres y el pie
+  // otros tantos; lo que se vigila es que el tope de 1.500 no devuelva 18.000, que era el defecto.
+  assert.ok(corto.texto.length < 6000, `con tope 1500 devolvió ${corto.texto.length} caracteres`)
   assert.ok(largo.texto.length > corto.texto.length, 'un tope mayor debe devolver más texto')
   assert.match(corto.texto, /no caben en 1500 caracteres/)
 })

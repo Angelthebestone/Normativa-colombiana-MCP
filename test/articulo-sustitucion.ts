@@ -96,3 +96,79 @@ test('los decretos compilatorios conservan su numeración por niveles', () => {
   assert.doesNotMatch(articulo(dec, '2.2.1.3.1')!, /Dos\./)
   assert.deepEqual(indiceArticulos(dec), ['2.2.1.3.1', '2.2.1.3.2'])
 })
+
+// --- la coincidencia inicial exige inicio de renglón ----------------------
+
+/**
+ * La Ley 789 de 2002 cita «el Artículo 28 de la Ley 21 de 1982» dentro de su
+ * artículo 3, y esa cita aparece ANTES de su propio ARTÍCULO 28: pedir «28»
+ * devolvía el subsidio familiar de otra ley. Recorte real medido el 2026-09-28
+ * en https://www.funcionpublica.gov.co/eva/gestornormativo/norma.php?i=6778.
+ */
+const LEY_789 = [
+  'ARTÍCULO 3°. Régimen del subsidio familiar en dinero. Deroga el Artículo 28 de la Ley 21 de 1982. Tienen derecho al subsidio familiar en dinero los trabajadores cuya remuneración mensual, fija o variable no sobrepase los cuatro (4) salarios minimos legales mensuales vigentes.',
+  '',
+  'ARTÍCULO 28. Terminación unilateral del contrato de trabajo sin justa causa.',
+  '',
+  'El artículo 64 del Código Sustantivo del Trabajo, subrogado por el artículo 6° de la Ley 50 de 1990, quedara asi:',
+  '',
+  '"ARTÍCULO 64. Terminación unilateral del contrato de trabajo sin justa causa. En todo contrato de trabajo va envuelta la condición resolutoria por incumplimiento de lo pactado, con indemnizacion de perjuicios a cargo de la parte responsable.',
+].join('\n')
+
+test('una cita en prosa no se lleva el artículo que la ley sí tiene', () => {
+  const art = articulo(LEY_789, '28')
+  assert.ok(art)
+  assert.match(art!, /^ARTÍCULO 28\. Terminación unilateral/)
+  assert.match(art!, /quedara asi/)
+  assert.doesNotMatch(art!, /subsidio familiar/)
+})
+
+/**
+ * En el Estatuto Tributario el artículo 207 cita «el Artículo 246 del Código de
+ * Comercio»: pedir el 246 devolvía esa cita. Recorte real medido el 2026-09-28
+ * en https://www.funcionpublica.gov.co/eva/gestornormativo/norma.php?i=6533.
+ */
+const ET = [
+  'ARTÍCULO 207. Hecho generador del impuesto sobre la renta… (recorte) …exigirá el plazo de cinco (5) años cuando el Fondo de Pensiones asuma pensiones de jubilación por razón de la disolución de una sociedad, de conformidad con el Artículo 246 del Código de Comercio.',
+  '',
+  '(Ver Art, 246 del Código de Comercio, Decreto 410 de 1971)',
+  '',
+  'ARTÍCULO 246. TARIFA ESPECIAL PARA DIVIDENDOS Y PARTICIPACIONES RECIBIDOS POR ESTABLECIMIENTOS PERMANENTES DE SOCIEDADES EXTRANJERAS. La tarifa del impuesto sobre la renta aplicable a los dividendos… (recorte)',
+].join('\n')
+
+test('la cita al Código de Comercio no suplanta al artículo del Estatuto Tributario', () => {
+  const art = articulo(ET, '246')
+  assert.ok(art)
+  assert.match(art!, /^ARTÍCULO 246\. TARIFA ESPECIAL/)
+  assert.doesNotMatch(art!, /Código de Comercio/)
+})
+
+// --- el anuncio de la transcripción también cierra en punto ----------------
+
+/**
+ * La Ley 2418 de 2024 anuncia la transcripción con punto («el cual quedará
+ * así.»), y sin aceptarlo el extractor devolvía solo el anuncio, sin el
+ * articulado transcrito. Recorte real medido el 2026-09-28 en
+ * https://www.funcionpublica.gov.co/eva/gestornormativo/norma.php?i=249256.
+ */
+const LEY_2418 = [
+  'ARTÍCULO 3. Modifíquese el numeral 1 del artículo 2 de la ley 909 de 2004, el cual quedará así.',
+  '',
+  'ARTÍCULO 2. PRINCIPIOS DE LA FUNCIÓN PÚBLICA.',
+  '',
+  'La función pública se desarrolla teniendo en cuenta los principios constitucionales de iguaidad, mérito, accesibilidad universal, moralidad, eficacia, economía, imparcialidad, transparencia, celeridad y publicidad.',
+  '',
+  'ARTÍCULO 4. Modifíquese el artículo 27 de la ley 909 de 2004, el cual quedará así.',
+].join('\n')
+
+test('el anuncio terminado en punto también viaja con su transcripción', () => {
+  const art = articulo(LEY_2418, '3')!
+  assert.match(art, /el cual quedará así\./)
+  assert.match(art, /ARTÍCULO 2\. PRINCIPIOS DE LA FUNCIÓN PÚBLICA/)
+  assert.match(art, /accesibilidad universal/)
+  assert.doesNotMatch(art, /ARTÍCULO 4\./)
+})
+
+test('el índice no ofrece como propio el artículo transcrito tras un anuncio con punto', () => {
+  assert.deepEqual(indiceArticulos(LEY_2418), ['3', '4'])
+})

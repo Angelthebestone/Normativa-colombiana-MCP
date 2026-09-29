@@ -24,6 +24,10 @@ export type LineaDeUso = {
   /** Peticiones HTTP acumuladas por el proceso hasta terminar esta llamada. */
   peticiones: number
   bytes: number
+  /** URLs repetidas acumuladas por el proceso hasta terminar esta llamada. */
+  repetidas: number
+  /** Respuestas servidas de copia, sin salir a la red, acumuladas hasta esta llamada. */
+  copias: number
   error?: string
 }
 
@@ -75,11 +79,16 @@ export class Cliente {
   peticion(method: string, params?: unknown): Promise<any> {
     const id = this.siguiente++
     return new Promise((ok, fallo) => {
-      this.pendientes.set(id, { ok, fallo })
-      this.proc.stdin.write(`${JSON.stringify({ jsonrpc: '2.0', id, method, params })}\n`)
-      setTimeout(() => {
+      const reloj = setTimeout(() => {
         if (this.pendientes.delete(id)) fallo(new Error(`sin respuesta a ${method} tras 120 s`))
       }, 120_000)
+      // Cancelación explícita (no unref): una respuesta ya no deja el temporizador
+      // vivo 120 s, pero un cuelgue real sigue rechazando la promesa al vencer.
+      this.pendientes.set(id, {
+        ok: (v) => { clearTimeout(reloj); ok(v) },
+        fallo: (e) => { clearTimeout(reloj); fallo(e) },
+      })
+      this.proc.stdin.write(`${JSON.stringify({ jsonrpc: '2.0', id, method, params })}\n`)
     })
   }
 
@@ -108,6 +117,34 @@ export class Cliente {
    */
   peticionesAcumuladas(): number {
     return this.usos[this.usos.length - 1]?.peticiones ?? 0
+  }
+
+  /**
+   * Bytes de cuerpo acumulados por el proceso hasta la última llamada terminada.
+   * Mismo aviso que en `peticionesAcumuladas()`: el contador es del proceso
+   * entero, así que lo que costó UNA llamada es la diferencia contra el valor de
+   * antes, no el valor de `ultimoUso`.
+   */
+  bytesAcumulados(): number {
+    return this.usos[this.usos.length - 1]?.bytes ?? 0
+  }
+
+  /**
+   * URLs repetidas acumuladas por el proceso hasta la última llamada terminada.
+   * Mismo aviso que en `peticionesAcumuladas()`: es un acumulado del proceso, así
+   * que lo que costó UNA llamada es la diferencia contra el valor de antes.
+   */
+  repetidasAcumuladas(): number {
+    return this.usos[this.usos.length - 1]?.repetidas ?? 0
+  }
+
+  /**
+   * Copias servidas sin salir a la red, acumuladas hasta la última llamada
+   * terminada. Mismo aviso que en `peticionesAcumuladas()`: es un acumulado del
+   * proceso, así que lo que costó UNA llamada es la diferencia de antes a después.
+   */
+  copiasAcumuladas(): number {
+    return this.usos[this.usos.length - 1]?.copias ?? 0
   }
 
   cerrar(): void {

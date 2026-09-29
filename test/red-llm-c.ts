@@ -43,7 +43,11 @@ test('un fallo de red es no-medido con motivo, nunca no-existe', LENTO, async ()
   // Seam de diagnóstico del propio MCP: marca el host como caído sin tocar la red.
   process.env['FUENTE_CAIDA'] = 'www.corteconstitucional.gov.co'
   try {
-    const r = await verificar('T-099/24')
+    // Una sentencia que ningún caso anterior de este proceso haya verificado: `verificar` recuerda cinco
+    // minutos sus veredictos firmes, y con T-099/24 (que otro caso acaba de comprobar) devolvería ese
+    // «existe» en vez de preguntar. Lo que se fija es que preguntar con la fuente caída no se lea como
+    // «no existe»; un veredicto ya conocido no es una pregunta.
+    const r = await verificar('T-101/24')
     assert.equal(r.estado, 'no-medido', `una fuente caída no puede leerse como "no existe": ${JSON.stringify(r)}`)
     assert.ok(r.motivo, 'no-medido tiene que declarar el motivo')
   } finally {

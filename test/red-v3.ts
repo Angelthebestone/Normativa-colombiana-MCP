@@ -103,7 +103,8 @@ test('sectorial: un .doc binario (OLE2) avisa sin texto', async () => {
 
 test('sectorial: sin entidad o sin url es un error de validación', async () => {
   await assert.rejects(() => escribir({ fuente: 'sectorial' } as never), /entidad y url/)
-  await assert.rejects(() => escribir({ fuente: 'sectorial', entidad: 'supersalud' } as never), /entidad y url/)
+  // Con la entidad puesta, el error nombra solo lo que falta.
+  await assert.rejects(() => escribir({ fuente: 'sectorial', entidad: 'supersalud' } as never), /Hace falta url\./)
 })
 
 test('sectorial: una entidad inexistente se informa, no se rompe', async () => {

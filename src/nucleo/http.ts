@@ -1,5 +1,4 @@
-import { AsyncLocalStorage } from 'node:async_hooks'
-import { request } from 'node:https'
+import { request as pedirHttps } from 'node:https'
 import { pipeline } from 'node:stream'
 import { rootCertificates } from 'node:tls'
 import { createGunzip, createInflate } from 'node:zlib'
@@ -276,52 +275,6 @@ export function decodificar(datos: Buffer, contentType = ''): string {
   }
 }
 
-// --- presupuesto de tiempo por llamada -----------------------------------
-
-/**
- * Presupuesto de tiempo de UNA llamada a herramienta, propagado por contexto
- * asíncrono para no pasarlo de mano en mano por cuarenta firmas.
- *
- * Justificación medida (2026-09-16, `scripts/medir.ts --recorridos`): el paso
- * más lento de los ocho recorridos fue un `obtener_documento` de 3.845 ms y el
- * p95 de los diez y nueve pasos quedó por debajo de 4 s; lo caro de verdad son
- * la búsqueda de la DIAN (~20 s por el diseño de su endpoint, no admite tope) y
- * el Decreto 1083 (~8 s). Un techo de 45 s deja entrar ambos con holgura y corta
- * el caso que el usuario no tolera: minuto y medio de espera para acabar en
- * error, habiendo podido devolver lo que ya estaba reunido.
- */
-const presupuesto = new AsyncLocalStorage<number>()
-
-export class PresupuestoAgotado extends Error {
-  constructor(ms: number) {
-    super(
-      `Se agotó el presupuesto de ${Math.round(ms / 1000)} s para esta llamada: ` +
-        `se cortó para no hacer esperar más a cambio de nada. ` +
-        `Vuelve a pedirlo con menos pasos o más estrecho (un artículo, una fuente).`,
-    )
-    this.name = 'PresupuestoAgotado'
-  }
-}
-
-/** Corre `fn` con `ms` de presupuesto para todas las peticiones que lance. */
-export function conPresupuesto<T>(ms: number, fn: () => Promise<T>): Promise<T> {
-  return presupuesto.run(Date.now() + ms, fn)
-}
-
-/** Ms que quedan del presupuesto en curso, o null si no hay ninguno puesto. */
-export function presupuestoRestante(): number | null {
-  const hasta = presupuesto.getStore()
-  return hasta === undefined ? null : hasta - Date.now()
-}
-
-/** Recorta el `timeout` de una petición a lo que queda de presupuesto. */
-function timeoutEfectivo(timeout: number): number {
-  const queda = presupuestoRestante()
-  if (queda === null) return timeout
-  if (queda <= 0) throw new PresupuestoAgotado(0)
-  return Math.max(1000, Math.min(timeout, queda))
-}
-
 // --- petición ------------------------------------------------------------
 
 type Cruda = {
@@ -363,7 +316,7 @@ export function cuerpoDe(res: NodeJS.ReadableStream & { headers: Record<string, 
   })
 }
 
-function crudo(
+async function crudo(
   url: string,
   timeout: number,
   accept: string,
@@ -373,6 +326,12 @@ function crudo(
   if (caidaForzada(new URL(url).host)) {
     return Promise.reject(new Error('FUENTE_CAIDA: host marcado como caído por el seam de diagnóstico'))
   }
+  // El Senado solo habla HTTP plano (su puerto 443 no abre, comprobado el 2026-09-28): el mismo
+  // transporte, con su ritmo por dominio, reintentos y decodificación, sirve para las dos.
+  // `node:http` se importa aquí y no arriba: un `import` estático hace que Node lea todos sus
+  // exports al arrancar, y algunos (WebSocket, MessageEvent) cargan `undici` entero, que solo
+  // hace falta para el Senado.
+  const request = url.startsWith('http:') ? (await import('node:http')).request : pedirHttps
   return new Promise((resolve, reject) => {
     const req = request(
       url,
@@ -427,7 +386,7 @@ function esperaSugerida(cabecera: string): number {
 
 const ESPERA_MAXIMA_MS = 30_000
 
-export async function pedir(
+async function pedirUna(
   url: string,
   timeout = 60_000,
   accept = 'text/html,*/*',
@@ -484,7 +443,7 @@ export async function pedir(
     let r: Cruda
     try {
       r = await enCola(host, () =>
-        crudo(url, timeoutEfectivo(timeout), accept, { ...extra, ...condicionales }, cuerpo),
+        crudo(url, timeout, accept, { ...extra, ...condicionales }, cuerpo),
       )
     } catch (e) {
       const d = degradarO()
@@ -567,6 +526,45 @@ export async function pedir(
  * suelto se salta el ritmo por dominio, los reintentos y la cadena de
  * certificados que este módulo aporta.
  */
+/**
+ * Peticiones idénticas en vuelo: una sola sirve a todos los que la esperan.
+ *
+ * Un cliente que lanza dos llamadas a herramientas en paralelo sobre la misma
+ * norma hacía que las dos miraran la copia —vacía, porque la primera aún no ha
+ * vuelto— y se pusieran en cola detrás una de otra: el portal recibía la misma
+ * descarga completa dos veces, la segunda un segundo más tarde por el ritmo del
+ * host. Medido contra un servidor local: dos GET simultáneos a la misma URL = 2
+ * golpes; tres = 3 golpes y 3 s. Con la fusión, 1 golpe.
+ *
+ * La clave es la llamada ENTERA (url, timeout, accept, cabeceras y opciones), no
+ * solo la URL: dos llamadores con timeouts o con `degradarDesdeCopia` distintos
+ * no piden lo mismo. Los POST no se fusionan, porque pueden cambiar algo al otro
+ * lado. La entrada se borra al terminar, con éxito o con error, así que un fallo
+ * no se queda pegado: la siguiente llamada vuelve a intentarlo.
+ *
+ * ponytail: solo GET de `pedir`; `pedirBytes` (los PDF) baja aparte y no se
+ * fusiona. Si algún día se pone un techo de tiempo por llamada, la clave tiene
+ * que incluirlo: no puede heredarse el del llamador que llegó primero.
+ */
+const enVuelo = new Map<string, Promise<Respuesta>>()
+
+export function pedir(
+  url: string,
+  timeout = 60_000,
+  accept = 'text/html,*/*',
+  extra: Record<string, string> = {},
+  cuerpo?: string,
+  opciones: OpcionesPedir = {},
+): Promise<Respuesta> {
+  if (cuerpo !== undefined) return pedirUna(url, timeout, accept, extra, cuerpo, opciones)
+  const clave = JSON.stringify([url, timeout, accept, extra, opciones])
+  const enCurso = enVuelo.get(clave)
+  if (enCurso) return enCurso
+  const p = pedirUna(url, timeout, accept, extra, cuerpo, opciones).finally(() => enVuelo.delete(clave))
+  enVuelo.set(clave, p)
+  return p
+}
+
 export async function pedirBytes(
   url: string,
   timeout = 90_000,
@@ -576,7 +574,7 @@ export async function pedirBytes(
   const est = estadoDe(host)
   if (est.degradado) throw errorDegradado(host, est.reintentaEnMs!)
   try {
-    const r = await enCola(host, () => crudo(url, timeoutEfectivo(timeout), accept, {}))
+    const r = await enCola(host, () => crudo(url, timeout, accept, {}))
     if (r.status >= 500) anotarFallo(host)
     else restablecer(host)
     anotarRed(r.datos.length)

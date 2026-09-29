@@ -131,7 +131,12 @@ export type ResultadoPaso = {
   ms: number
   /** Peticiones HTTP que costó ESTE paso (el contador del server es acumulado). */
   http: number
+  /** Bytes de cuerpo que costó ESTE paso: la diferencia del acumulado, no el total. */
   bytes: number
+  /** URLs repetidas que costó ESTE paso: la diferencia del acumulado. */
+  repetidas: number
+  /** Copias servidas sin salir a la red en ESTE paso: la diferencia del acumulado. */
+  copias: number
   caracteres: number
   esError: boolean
   /** `true` si la respuesta trae la marca de que se llegó. */
@@ -141,9 +146,12 @@ export type ResultadoPaso = {
 export type ResultadoRecorrido = {
   recorrido: Recorrido
   pasos: ResultadoPaso[]
-  /** Suma de llamadas, peticiones HTTP y caracteres devueltos. */
+  /** Suma de llamadas, peticiones HTTP, bytes, repetidas, copias y caracteres. */
   llamadas: number
   http: number
+  bytes: number
+  repetidas: number
+  copias: number
   caracteres: number
   ms: number
   /** `true` si ALGÚN paso devolvió la marca esperada. */
@@ -170,10 +178,18 @@ export async function correrRecorrido(c: Cliente, r: Recorrido): Promise<Resulta
   const pasos: ResultadoPaso[] = []
   let llegoEn: number | null = null
   let httpAcumulado = 0
+  let bytesAcumulado = 0
+  let repetidasAcumulado = 0
+  let copiasAcumulado = 0
 
   for (const [i, paso] of r.pasos.entries()) {
     const args = sustituir(paso.args, ctx)
+    // Los cuatro contadores del server son acumulados del proceso: el valor de
+    // antes se resta del de después, igual que hace `http`.
     const antes = c.peticionesAcumuladas()
+    const bytesAntes = c.bytesAcumulados()
+    const repetidasAntes = c.repetidasAcumuladas()
+    const copiasAntes = c.copiasAcumuladas()
     const t0 = Date.now()
     let texto = ''
     let esError = false
@@ -186,9 +202,14 @@ export async function correrRecorrido(c: Cliente, r: Recorrido): Promise<Resulta
       esError = true
     }
     const ms = Date.now() - t0
-    const uso = c.ultimoUso(paso.tool)
     const http = Math.max(0, c.peticionesAcumuladas() - antes)
+    const bytes = Math.max(0, c.bytesAcumulados() - bytesAntes)
+    const repetidas = Math.max(0, c.repetidasAcumuladas() - repetidasAntes)
+    const copias = Math.max(0, c.copiasAcumuladas() - copiasAntes)
     httpAcumulado += http
+    bytesAcumulado += bytes
+    repetidasAcumulado += repetidas
+    copiasAcumulado += copias
 
     // Lo que un modelo leería de la respuesta para el paso siguiente.
     const id = /\bid:\s*(\d{3,7})/.exec(texto)?.[1]
@@ -205,7 +226,9 @@ export async function correrRecorrido(c: Cliente, r: Recorrido): Promise<Resulta
       texto,
       ms,
       http,
-      bytes: uso?.bytes ?? 0,
+      bytes,
+      repetidas,
+      copias,
       caracteres: texto.length,
       esError,
       acierta,
@@ -217,6 +240,9 @@ export async function correrRecorrido(c: Cliente, r: Recorrido): Promise<Resulta
     pasos,
     llamadas: r.pasos.length,
     http: httpAcumulado,
+    bytes: bytesAcumulado,
+    repetidas: repetidasAcumulado,
+    copias: copiasAcumulado,
     caracteres: pasos.reduce((a, p) => a + p.caracteres, 0),
     ms: pasos.reduce((a, p) => a + p.ms, 0),
     llego: llegoEn !== null,
@@ -240,14 +266,16 @@ export async function correrTodos(c: Cliente, solo?: number[]): Promise<Resultad
 /** Tabla comparable entre ejecuciones, para pegar en el informe. */
 export function tabla(resultados: ResultadoRecorrido[]): string {
   const lineas = [
-    'rec  pregunta (recortada)                            llamadas  http  caracteres  ~tokens       ms  ¿llegó?',
-    '---  ---------------------------------------------  --------  ----  ----------  -------  -------  --------',
+    'rec  pregunta (recortada)                            llamadas  http     bytes   rep   cop  caracteres  ~tokens       ms  ¿llegó?',
+    '---  ---------------------------------------------  --------  ----  --------  ----  ----  ----------  -------  -------  --------',
   ]
   for (const r of resultados) {
     lineas.push(
       `${String(r.recorrido.id).padStart(3)}  ${r.recorrido.pregunta.slice(0, 45).padEnd(45)}  ` +
-        `${String(r.llamadas).padStart(8)}  ${String(r.http).padStart(4)}  ${String(r.caracteres).padStart(10)}  ` +
-        `${String(tokens(r.caracteres)).padStart(7)}  ${String(Math.round(r.ms)).padStart(7)}  ` +
+        `${String(r.llamadas).padStart(8)}  ${String(r.http).padStart(4)}  ` +
+        `${String(Math.round(r.bytes / 1024)).padStart(6)}KB  ${String(r.repetidas).padStart(4)}  ${String(r.copias).padStart(4)}  ` +
+        `${String(r.caracteres).padStart(10)}  ${String(tokens(r.caracteres)).padStart(7)}  ` +
+        `${String(Math.round(r.ms)).padStart(7)}  ` +
         `${r.llego ? `sí (paso ${r.llegoEn})` : 'NO'}`,
     )
   }

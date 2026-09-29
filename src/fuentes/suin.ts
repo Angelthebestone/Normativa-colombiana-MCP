@@ -32,6 +32,7 @@
  *   no está al alcance.
  */
 import { readFileSync } from 'node:fs'
+import { TTL_BUSQUEDA_MS } from '../nucleo/cache.ts'
 import { CanarioError, limpiarTermino, sinTildes } from '../nucleo/parse.ts'
 import { pedir, pedirJson } from '../nucleo/http.ts'
 import { esStopword } from '../nucleo/stopwords.ts'
@@ -268,7 +269,7 @@ export type EstadoFicha =
       detalle?: string
     }
 
-const cacheFichas = new Map<string, { ficha: Ficha; ts: number }>()
+const cacheFichas = new Map<string, { estado: EstadoFicha; ts: number }>()
 const TTL_FICHA = 30 * 60 * 1000
 
 /** Mayúsculas sin tildes y con los espacios colapsados. */
@@ -312,7 +313,7 @@ export async function ficha(
 ): Promise<EstadoFicha> {
   const clave = claveSuin(tipo, numero, anio)
   const cache = cacheFichas.get(clave)
-  if (cache && Date.now() - cache.ts < TTL_FICHA) return { ok: true, ficha: cache.ficha }
+  if (cache && Date.now() - cache.ts < (cache.estado.ok ? TTL_FICHA : TTL_BUSQUEDA_MS)) return cache.estado
 
   let fichas: Ficha[]
   try {
@@ -331,8 +332,11 @@ export async function ficha(
     return { ok: false, razon: 'ficha-caida', detalle: (e as Error).message }
   }
   const f = fichas.find((x) => esLaPedida(x, tipo, numero, anio))
-  if (!f) {
-    return Number(anio) > ULTIMO_ANIO_INDICE
+  // Se recuerda el veredicto firme, la ficha y también el «no consta» (todo lo posterior a 2020 lo es, y
+  // sin esto se volvía a preguntar en cada herramienta); nunca la ficha caída, que se devolvió arriba.
+  const estado: EstadoFicha = f
+    ? { ok: true, ficha: f }
+    : Number(anio) > ULTIMO_ANIO_INDICE
       ? {
           ok: false,
           razon: 'no-consta',
@@ -341,9 +345,8 @@ export async function ficha(
             `de una norma de ${anio} no puede haber ficha ahí: su ausencia no dice nada sobre la norma`,
         }
       : { ok: false, razon: 'no-consta' }
-  }
-  cacheFichas.set(clave, { ficha: f, ts: Date.now() })
-  return { ok: true, ficha: f }
+  cacheFichas.set(clave, { estado, ts: Date.now() })
+  return estado
 }
 
 // --- búsqueda por texto con índice de leyes ----------------------------------

@@ -83,7 +83,8 @@ test('obtener_documento: buscar_en_texto agrupa pasajes y no devuelve el documen
 test('obtener_documento: limite_caracteres manda también en modo búsqueda', LENTO, async () => {
   const r = await c.tool('obtener_documento', { fuente: 'gestor', id: '14861', buscar_en_texto: 'empleo', limite_caracteres: 1500 })
   assert.equal(r.esError, false)
-  assert.ok(r.texto.length < 5000, `devolvió ${r.texto.length} caracteres`)
+  // 6.000: la cabecera (alcance, cita oficial, vigencia diferida) pesa más que antes; el defecto eran 18.000.
+  assert.ok(r.texto.length < 6000, `devolvió ${r.texto.length} caracteres`)
   assert.match(r.texto, /no caben en 1500 caracteres/)
 })
 

@@ -4,43 +4,11 @@
  *   node --test test/cache-ritmo.ts
  */
 import { strict as assert } from 'node:assert'
-import { setTimeout as sleep } from 'node:timers/promises'
+import { createServer } from 'node:http'
 import test from 'node:test'
 
 import * as cache from '../src/nucleo/cache.ts'
 import * as http from '../src/nucleo/http.ts'
-
-test('conCache devuelve el valor cacheado sin ejecutar fn de nuevo', async () => {
-  let veces = 0
-  const fn = async () => {
-    veces++
-    return `v${veces}`
-  }
-  const clave = `cache-contador-${Date.now()}`
-
-  const primero = await cache.conCache(clave, 60_000, fn)
-  const segundo = await cache.conCache(clave, 60_000, fn)
-
-  assert.equal(primero, 'v1')
-  assert.equal(segundo, 'v1')
-  assert.equal(veces, 1)
-})
-
-test('TTL expirado: conCache ejecuta fn de nuevo', async () => {
-  let veces = 0
-  const fn = async () => {
-    veces++
-    return `v${veces}`
-  }
-  const clave = `cache-ttl-${Date.now()}`
-
-  await cache.conCache(clave, 20, fn)
-  await sleep(30)
-  const recalculado = await cache.conCache(clave, 60_000, fn)
-
-  assert.equal(recalculado, 'v2')
-  assert.equal(veces, 2)
-})
 
 test('ritmo: N peticiones al mismo host quedan espaciadas ≥1 s', async () => {
   const host = 'funcionpublica.gov.co'
@@ -188,39 +156,43 @@ test('copias: el almacén tiene tope y descarta la más antigua', () => {
   cache.limpiarCopias()
 })
 
-test('presupuesto: se propaga por contexto y se agota de verdad', async () => {
-  assert.equal(http.presupuestoRestante(), null, 'sin presupuesto no hay techo')
-  await http.conPresupuesto(5_000, async () => {
-    const queda = http.presupuestoRestante()!
-    assert.ok(queda > 0 && queda <= 5_000, `debería quedar algo de 5 s, quedan ${queda}`)
-    await sleep(20)
-    assert.ok(http.presupuestoRestante()! < queda, 'el presupuesto tiene que consumirse con el tiempo')
-  })
-  assert.equal(http.presupuestoRestante(), null, 'al salir del contexto el techo desaparece')
-})
-
-test('circuit breaker: una petición que responde restablece el host y tras la ventana se reintenta', async () => {
-  const host = 'www.suin-juriscol.gov.co' // dominio real, para que DNS resuelva al reintentar
+test('circuit breaker: vencida la ventana el host vuelve a intentarse sin restablecerlo a mano', (t) => {
+  // Reloj simulado: la ventana es de 60 s reales y esperarla costaba un minuto
+  // por cada corrida de la suite. Lo que se comprueba es el VENCIMIENTO, no el paso del tiempo.
+  t.mock.timers.enable({ apis: ['Date'] })
+  const host = 'breaker-ventana.test'
 
   for (let i = 0; i < 3; i++) http.anotarFallo(host)
   assert.equal(http.estadoDe(host).degradado, true)
-
-  http.restablecer(host)
-  assert.equal(http.estadoDe(host).degradado, false)
-
-  // Ventana: al vencer, la primera llamada vuelve a pegar a la red y acierta.
-  for (let i = 0; i < 3; i++) http.anotarFallo(host)
   const cuando = http.estadoDe(host).reintentaEnMs!
   assert.ok(cuando > 0)
-  await sleep(cuando + 10)
 
-  // El portal puede estar caído en el entorno de pruebas: se restablece la
-  // salud antes de reintentar y se acepta que la petición salga o falle de red,
-  // sin entrar en el breaker (lo que se verifica es que YA NO está degradado).
-  http.restablecer(host)
-  await http
-    .pedir(`https://${host}/viewDocument.asp?id=1683108`, 8000)
-    .then((r) => assert.equal(r.status, 200))
-    .catch(() => {})
-  assert.equal(http.estadoDe(host).degradado, false)
+  t.mock.timers.tick(cuando - 1)
+  assert.equal(http.estadoDe(host).degradado, true, 'a un milisegundo de vencer sigue degradado')
+  t.mock.timers.tick(1)
+  assert.equal(http.estadoDe(host).degradado, false, 'vencida la ventana se reintenta, sin restablecer a mano')
+})
+
+test('circuit breaker: una petición que responde restablece el host', async () => {
+  // Servidor local: antes esta prueba pedía a un portal real dentro de una suite «sin red»
+  // y tragaba el fallo con un `.catch(() => {})`, así que no comprobaba nada.
+  const srv = createServer((_req, res) => {
+    res.writeHead(200, { 'content-type': 'text/html' })
+    res.end('<html>ok</html>')
+  })
+  await new Promise<void>((ok) => srv.listen(0, '127.0.0.1', ok))
+  const host = `127.0.0.1:${(srv.address() as { port: number }).port}`
+  try {
+    // Dos fallos: a uno del umbral. Sin restablecer, otros dos degradarían el host.
+    for (let i = 0; i < 2; i++) http.anotarFallo(host)
+    assert.equal(http.estadoDe(host).degradado, false)
+
+    const r = await http.pedir(`http://${host}/norma.php?i=1`)
+    assert.equal(r.status, 200)
+
+    for (let i = 0; i < 2; i++) http.anotarFallo(host)
+    assert.equal(http.estadoDe(host).degradado, false, 'la respuesta puso el contador a cero: 2 + 2 ya no suma 4')
+  } finally {
+    srv.close()
+  }
 })

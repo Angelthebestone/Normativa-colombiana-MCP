@@ -42,6 +42,8 @@ import { parsearCita } from '../nucleo/citas.ts'
 import { extraerTextoWord } from '../fuentes/sectorial/word.ts'
 import { textoDePdfSectorial, avisoEscaneo } from '../fuentes/sectorial/pdf.ts'
 import { adaptador, ids } from '../fuentes/sectorial.ts'
+import { estricto, numeroDeArticulo } from '../nucleo/normalizar.ts'
+
 import * as gestor from '../fuentes/gestor.ts'
 import * as corte from '../fuentes/jurisprudencia/corte.ts'
 import * as suprema from '../fuentes/jurisprudencia/cortesuprema.ts'
@@ -49,6 +51,8 @@ import * as consejo from '../fuentes/jurisprudencia/consejoestado.ts'
 import * as dian from '../fuentes/normograma.ts'
 import * as creg from '../fuentes/creg.ts'
 import { esCompiladora, avisoCompiladora } from '../nucleo/compiladas.ts'
+import { citaNorma } from '../nucleo/cita_oficial.ts'
+import { analizarVacancia, enVacancia } from '../nucleo/vacancia.ts'
 import { alcance, proyectar } from '../nucleo/alcance.ts'
 
 export const TITULO = 'Obtener el texto de un documento por fuente'
@@ -75,7 +79,23 @@ const comun = {
     .describe('Tope del TEXTO devuelto; se ajusta al rango 200–40.000'),
 }
 
-export const schema = {
+/**
+ * Descargar a disco vale con cualquier fuente, así que vive aparte de los extras
+ * por fuente y la unión de abajo (cerrada con `.strict()`) también lo admite: sin
+ * esto, `entero` y `ruta_destino` se anunciaban y se rechazaban siempre.
+ */
+const archivo = {
+  entero: z
+    .boolean()
+    .optional()
+    .describe('En vez de trocear, escribe el documento a disco y devuelve la ruta con un trozo del texto'),
+  ruta_destino: z
+    .string()
+    .optional()
+    .describe('Carpeta donde guardar el archivo (con entero o para descargar el PDF/Word sin devolver texto)'),
+}
+
+export const schema = estricto({
   // Solo las fuentes encendidas (FUENTES): la llamada a una apagada no se puede
   // ni escribir, y la valida el mismo esquema antes de tocar la red.
   fuente: z
@@ -84,7 +104,7 @@ export const schema = {
   ...comun,
   // Extras por fuente (opcionales; el handler valida cuál aplica según fuente).
   id: z.coerce.string().optional().describe('Solo gestor: id numérico de la norma'),
-  articulo: z.string().optional().describe('Solo gestor: número de artículo'),
+  articulo: z.preprocess(numeroDeArticulo, z.string().optional()).describe('Solo gestor: número de artículo'),
   historial: z
     .boolean()
     .optional()
@@ -112,21 +132,13 @@ export const schema = {
     .string()
     .optional()
     .describe('Solo sectorial: enlace del acto a leer, tal como lo devuelve buscar_normativa_sectorial'),
-  entero: z
-    .boolean()
-    .optional()
-    .describe('En vez de trocear, escribe el documento a disco y devuelve la ruta con un trozo del texto'),
-  ruta_destino: z
-    .string()
-    .optional()
-    .describe('Carpeta donde guardar el archivo (con entero o para descargar el PDF/Word sin devolver texto)'),
-}
+  ...archivo,
+})
 
-const schemaCompleto = z.object(schema)
 /** El tipo de entrada (los valores con default se resuelven al validar). */
-type Parametros = z.input<typeof schemaCompleto>
+type Parametros = z.input<typeof schema>
 /** Ya validado y con los defaults aplicados (desde/limite_caracteres resueltos). */
-type Resueltas = z.infer<typeof schemaCompleto>
+type Resueltas = z.infer<typeof schema>
 
 /**
  * El contrato real de `fuente`, en una tabla que el mensaje de error reutiliza.
@@ -202,10 +214,11 @@ const identificador = z.union([z.string(), z.number()]).transform(String)
  * convierte el parámetro de otra fuente en un error en vez de en un descarte
  * silencioso. El SDK no la publica (ver arriba), pero es la que valida.
  */
+const compartidos = { ...comun, ...archivo }
 const union = z.discriminatedUnion('fuente', [
   z
     .object({
-      ...comun,
+      ...compartidos,
       fuente: z.literal('gestor'),
       id: identificador,
       articulo: z.string().optional(),
@@ -213,17 +226,17 @@ const union = z.discriminatedUnion('fuente', [
       sin_temas: z.boolean().optional(),
     })
     .strict(),
-  z.object({ ...comun, fuente: z.literal('corte'), ruta: z.string(), seccion: z.enum(SECCIONES_PROVIDENCIA).optional() }).strict(),
+  z.object({ ...compartidos, fuente: z.literal('corte'), ruta: z.string(), seccion: z.enum(SECCIONES_PROVIDENCIA).optional() }).strict(),
   z
-    .object({ ...comun, fuente: z.literal('suprema'), ruta: z.string(), sala: z.string(), seccion: z.enum(SECCIONES_PROVIDENCIA).optional() })
+    .object({ ...compartidos, fuente: z.literal('suprema'), ruta: z.string(), sala: z.string(), seccion: z.enum(SECCIONES_PROVIDENCIA).optional() })
     .strict(),
-  z.object({ ...comun, fuente: z.literal('consejo'), token: z.string(), seccion: z.enum(SECCIONES_PROVIDENCIA).optional() }).strict(),
-  z.object({ ...comun, fuente: z.literal('dian'), link: z.string() }).strict(),
-  z.object({ ...comun, fuente: z.literal('creg'), ruta: z.string() }).strict(),
+  z.object({ ...compartidos, fuente: z.literal('consejo'), token: z.string(), seccion: z.enum(SECCIONES_PROVIDENCIA).optional() }).strict(),
+  z.object({ ...compartidos, fuente: z.literal('dian'), link: z.string() }).strict(),
+  z.object({ ...compartidos, fuente: z.literal('creg'), ruta: z.string() }).strict(),
   // La entidad se resuelve en el handler (y allí se listan los ids válidos):
   // enumerarla aquí exigiría el registro sectorial ya cargado, y este módulo se
   // evalúa antes de `src/fuentes/sectorial/registro.ts`.
-  z.object({ ...comun, fuente: z.literal('sectorial'), entidad: z.string(), url: z.string() }).strict(),
+  z.object({ ...compartidos, fuente: z.literal('sectorial'), entidad: z.string(), url: z.string() }).strict(),
 ])
 
 /** El error de una combinación imposible: qué se pidió, qué falta o sobra, y qué sí funciona. */
@@ -376,6 +389,29 @@ const conMenciones = (s: string, texto: string): string => s + mencionesDe(texto
 
 // --- fuentes --------------------------------------------------------------
 
+/**
+ * Dos líneas que el modelo no debe componer ni adivinar: la cita oficial de la norma, armada solo con lo que la
+ * ficha trae (lo que no consta se declara), y su vigencia diferida cuando la hay. La vigencia sale del propio
+ * artículo de vigencia y solo se anuncia cuando hay algo que advertir —escalonada, relativa o todavía pendiente—:
+ * repetir «rige desde su publicación» en cada norma sería ruido, y una norma «en vacancia» tratada como exigible
+ * hoy es el error caro.
+ */
+function lineasDeCitaYVigencia(n: Awaited<ReturnType<typeof gestor.obtenerNorma>>): string[] {
+  const lineas: string[] = []
+  const cita = citaNorma({ titulo: n.titulo, fechas: n.fechas })
+  if (cita) {
+    lineas.push(`Cita oficial: ${cita.cita}${cita.faltan.length ? ` (no consta en la ficha: ${cita.faltan.join(', ')})` : ''}`)
+  }
+  const v = analizarVacancia(n.texto)
+  const pendiente = enVacancia(v)
+  if (v.clase !== 'inmediata' && v.clase !== 'no-encontrada' && pendiente !== false) {
+    lineas.push(
+      `${pendiente ? 'AÚN NO RIGE — ' : ''}Vigencia según su propio artículo de vigencia (art. ${v.articulo.numero}): ${v.resumen}`,
+    )
+  }
+  return lineas
+}
+
 async function gestorDocumento(p: Resueltas, tope: number): Promise<string> {
   if (!p.id) throw new Error('Para fuente="gestor" hace falta id.')
   let n: Awaited<ReturnType<typeof gestor.obtenerNorma>>
@@ -403,6 +439,7 @@ async function gestorDocumento(p: Resueltas, tope: number): Promise<string> {
     ...fechas.map(([k, v]) => `  ${k}: ${v || '(vacío en el portal)'}`),
     `URL: ${n.url}`,
     `PDF: ${n.urlPdf}`,
+    ...lineasDeCitaYVigencia(n),
   ].join('\n') + desajuste
 
   if (n.texto.length < 200) {
@@ -791,7 +828,7 @@ export async function escribir(p: Parametros, deps: DepsLectura = {}): Promise<s
   // es lo que el esquema plano no puede decir. Se hace aquí, antes de tocar la
   // red: una llamada imposible no gasta viaje ni devuelve un vacío que se lea
   // como "no hay resultados".
-  const r = schemaCompleto.parse(p) as Resueltas
+  const r = schema.parse(p) as Resueltas
   if (!union.safeParse(r).success) throw new Error(problemaDeFuente(r))
   const tope = topeDe(r.limite_caracteres)
   // Con ruta_destino la orden es descargar, no leer: se obedece antes que el troceo.

@@ -21,7 +21,8 @@
  * en septiembre del mismo año, así que la actualización es continua.
  */
 import { cargar, limpiarTermino, sinTildes, textoDe } from '../../nucleo/parse.ts'
-import { rutaDeSentencia } from '../../nucleo/citas.ts'
+import { parsearCita, rutaDeSentencia } from '../../nucleo/citas.ts'
+import { obtener, poner, TTL_BUSQUEDA_MS } from '../../nucleo/cache.ts'
 import { pedir as http } from '../../nucleo/http.ts'
 import { esStopword } from '../../nucleo/stopwords.ts'
 
@@ -121,6 +122,29 @@ function aProvidencia(hit: HitES): Providencia {
 
 /** C = constitucionalidad, T = tutela, SU = unificación, A = auto. */
 export type TipoProvidencia = 'C' | 'T' | 'SU' | 'A'
+
+/**
+ * Cómo se llama en la práctica cada tipo de providencia: quien pide «tutela» o «auto»
+ * no está equivocado, y rechazarlo con un error de esquema (o, peor, pasarlo al
+ * portal tal cual) es un fallo evitable. Lo desconocido se deja tal cual para que el
+ * esquema lo rechace listando los valores válidos.
+ */
+const SINONIMOS_TIPO: Record<string, TipoProvidencia> = {
+  c: 'C',
+  constitucionalidad: 'C',
+  't': 'T',
+  tutela: 'T',
+  tutelas: 'T',
+  su: 'SU',
+  unificacion: 'SU',
+  'sentencia de unificacion': 'SU',
+  a: 'A',
+  auto: 'A',
+  autos: 'A',
+}
+
+export const normalizarTipo = (v: unknown): unknown =>
+  typeof v === 'string' ? (SINONIMOS_TIPO[sinTildes(v).toLowerCase().trim()] ?? v) : v
 
 const prefijo = (p: Providencia): string =>
   (p.sentencia.match(/^\s*(SU|C|T|A)\b/i)?.[1] ?? '').toUpperCase()
@@ -266,12 +290,31 @@ const identidad = (s: string): string => s.replace(/[\s.\-/]/g, '').toUpperCase(
 /**
  * Formas del término que la relatoría indexa de manera distinta; el porqué está
  * medido y documentado en `verificar`. La literal primero —es la que resuelve
- * las C y las T— y la que va sin guiones solo si aquella no rindió.
+ * las C y las T—, la que va sin guiones si aquella no rindió, y la «C-331 de 2023»
+ * al final: hay providencias que solo esa forma encuentra (medido el 2026-09-28:
+ * C-331/23 daba «no existe» con las otras dos y 20 aciertos con esta, y el
+ * «no existe» era falso).
  */
 function formasDeSondeo(sentencia: string): string[] {
   const literal = sentencia.trim()
   const sinGuion = literal.replace(/-/g, '')
-  return sinGuion === literal ? [literal] : [literal, sinGuion]
+  const c = parsearCita(literal)
+  const deAnio = c?.sentencia && c.anio ? `${c.sentencia.split('/')[0]} de ${c.anio}` : ''
+  return [...new Set([literal, sinGuion, deAnio].filter(Boolean))]
+}
+
+/**
+ * Veredictos firmes de `verificar`, guardados un rato. Una búsqueda no se revalida
+ * como una copia de documento, y sin esto volver a preguntar por la misma sentencia
+ * paga otra vez todos los sondeos: medido el 2026-09-29, C-337/11 costaba +2
+ * peticiones la segunda vez y una sentencia inexistente +5, sin ninguna copia. El
+ * flujo normal (resolver_cita, luego consultar_vigencia, luego linea_jurisprudencial)
+ * la pregunta tres veces seguidas. Nunca se guarda `no-medido`: un fallo de red no
+ * es un dato. El TTL (y su techo) está en `TTL_BUSQUEDA_MS`.
+ */
+const recordar = (clave: string, v: VerificacionSentencia): VerificacionSentencia => {
+  poner(clave, v, TTL_BUSQUEDA_MS)
+  return v
 }
 
 export type VerificacionSentencia = {
@@ -307,17 +350,23 @@ export type VerificacionSentencia = {
  * sola basta, y por eso se prueban las dos en orden, gastando la segunda llamada
  * únicamente cuando la primera no dio el acierto.
  */
-export async function verificar(sentencia: string): Promise<VerificacionSentencia> {
+export async function verificar(
+  sentencia: string,
+  deps: { buscar?: typeof buscar } = {},
+): Promise<VerificacionSentencia> {
   const sondeos: string[] = []
   const objetivo = identidad(sentencia)
+  const clave = `corte:verificar:${objetivo}`
+  const guardado = obtener(clave) as VerificacionSentencia | null
+  if (guardado) return guardado
   try {
     for (const forma of formasDeSondeo(sentencia)) {
       sondeos.push(forma)
-      const { items } = await buscar({ termino: forma, limite: 20 })
+      const { items } = await (deps.buscar ?? buscar)({ termino: forma, limite: 20 })
       const p = items.find((x) => identidad(x.sentencia) === objetivo)
-      if (p) return { estado: 'existe', providencia: p, sondeos }
+      if (p) return recordar(clave, { estado: 'existe', providencia: p, sondeos })
     }
-    return { estado: 'no-existe', sondeos }
+    return recordar(clave, { estado: 'no-existe', sondeos })
   } catch (e) {
     // Fallo de fuente, no negativa: se declara para que nadie lo lea como "no existe".
     return { estado: 'no-medido', sondeos, motivo: (e as Error).message }

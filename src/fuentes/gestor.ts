@@ -16,6 +16,7 @@ import {
   type Resultado,
 } from '../nucleo/parse.ts'
 
+import { obtener, poner, TTL_BUSQUEDA_MS } from '../nucleo/cache.ts'
 import { pedir } from '../nucleo/http.ts'
 import { esStopword } from '../nucleo/stopwords.ts'
 
@@ -163,9 +164,25 @@ export function contienenTodos(items: Resultado[], frase: string): { items: Resu
   return { items: quedan, exigidos, omitidos: items.length - quedan.length }
 }
 
-async function consultar(p: URLSearchParams, termino = ''): Promise<{ total: number; items: Resultado[] }> {
+/**
+ * La búsqueda avanzada del portal, con su respuesta recordada `TTL_BUSQUEDA_MS`: nueve herramientas
+ * pasan por aquí y el flujo de verificar una cita (resolver_cita, consultar_vigencia, analizar_conflicto…)
+ * repetía la misma búsqueda por norma. Solo se recuerda lo que devolvió resultados: un vacío puede ser un
+ * fallo pasajero del portal y se vuelve a preguntar. Se guardan y devuelven copias del arreglo, porque los
+ * llamadores lo ordenan y recortan.
+ */
+async function consultar(
+  p: URLSearchParams,
+  termino = '',
+  leer: (url: string) => Promise<string> = traer,
+): Promise<{ total: number; items: Resultado[] }> {
   p.set('t', 'ejecuta_busqueda_avanzada2')
-  return parseResultados(await traer(`${BASE_GESTOR}/gestion/funphp/funajax.php?${p}`), termino)
+  const clave = `gestor:buscar:${p}|${termino}`
+  const guardado = obtener(clave) as { total: number; items: Resultado[] } | null
+  if (guardado) return { total: guardado.total, items: [...guardado.items] }
+  const r = parseResultados(await leer(`${BASE_GESTOR}/gestion/funphp/funajax.php?${p}`), termino)
+  if (r.items.length) poner(clave, { total: r.total, items: [...r.items] }, TTL_BUSQUEDA_MS)
+  return r
 }
 
 /**
@@ -190,6 +207,7 @@ export async function subtemaPorNombre(tema: string, subtema: string): Promise<s
 
 export async function buscar(
   f: Filtros,
+  deps: { leer?: (url: string) => Promise<string> } = {},
 ): Promise<{ total: number; items: Resultado[]; nota?: string | undefined; aplicados: string[] }> {
   const p = new URLSearchParams()
   const notas: string[] = []
@@ -256,7 +274,7 @@ export async function buscar(
     )
   }
 
-  let { total, items } = await consultar(p, f.palabras ?? '')
+  let { total, items } = await consultar(p, f.palabras ?? '', deps.leer)
 
   // `gestión` (18 resultados) y `gestion` (3) son conjuntos distintos: el portal
   // no normaliza tildes, así que se consultan ambas y se unen.
@@ -264,7 +282,7 @@ export async function buscar(
     const p2 = new URLSearchParams(p)
     p2.set('palabras', sinTildes(p.get('palabras')!))
     try {
-      const otra = await consultar(p2, f.palabras ?? '')
+      const otra = await consultar(p2, f.palabras ?? '', deps.leer)
       const vistos = new Set(items.map((i) => i.id))
       const extra = otra.items.filter((i) => !vistos.has(i.id))
       if (extra.length) {

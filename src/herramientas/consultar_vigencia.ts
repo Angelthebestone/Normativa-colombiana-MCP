@@ -21,6 +21,7 @@
  */
 import { z } from 'zod'
 
+import { estricto } from '../nucleo/normalizar.ts'
 import { activa, alcance, avisoApagada } from '../nucleo/alcance.ts'
 import { idTipo, parsearCita, candidatosAmbiguos } from '../nucleo/citas.ts'
 import * as corte from '../fuentes/jurisprudencia/corte.ts'
@@ -40,7 +41,7 @@ const esquema = z.object({
   cita: z.string().describe('Cita de la norma, ej. "Ley 909 de 2004" o "Decreto 1072 de 2015"'),
 })
 
-export const schema = esquema.shape
+export const schema = estricto(esquema.shape)
 
 type Params = z.infer<typeof esquema>
 

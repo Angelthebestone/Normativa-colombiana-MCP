@@ -5,10 +5,10 @@
  * `citas.ts` solo entiende tipo+número+año, así que la mitad de las consultas
  * reales de un abogado —"art. 191 del Código de Comercio"— no resolvían.
  *
- * Aquí vive la tabla y, con ella, lo que se sabe de la COBERTURA de cada
- * código: el texto del Código Civil no está en ninguna fuente de aquí, y decir
- * "no encontré la cita" ante "art. 946 del Código Civil" se lee como que la
- * norma no existe. Un código ausente se nombra como ausente.
+ * Aquí vive la tabla y, con ella, dónde está el TEXTO de cada código: casi todos
+ * en el Gestor, y el Código Civil, que el Gestor no publica, en la Secretaría del
+ * Senado (`senado`). Decir "no encontré la cita" ante "art. 946 del Código Civil"
+ * se leería como que la norma no existe.
  */
 import { sinTildes } from './parse.ts'
 
@@ -21,8 +21,11 @@ export type Codigo = {
   anio: string
   /** Formas con las que se cita. Se comparan sin tildes y en minúsculas. */
   alias: string[]
-  /** Si la norma NO está en el corpus, por qué. Se dice en vez de "no encontré". */
-  ausente?: string
+  /**
+   * Nombre (sin extensión) del documento en la Secretaría del Senado, cuando la
+   * norma NO está en el Gestor y su texto sale de allí: `codigo_civil`.
+   */
+  senado?: string
 }
 
 /**
@@ -37,13 +40,7 @@ export const CODIGOS: Codigo[] = [
     numero: '84',
     anio: '1873',
     alias: ['codigo civil', 'codigo civil colombiano', 'c. civil'],
-    ausente:
-      'El texto del Código Civil (Ley 84 de 1873) NO está en este corpus: el Gestor Normativo no lo publica (comprobado ' +
-      'el 2026-09-03 por nombre, por "Ley 84 de 1873" y por número+año), y SUIN-Juriscol, que desde septiembre de 2026 ' +
-      'sí tiene su ficha, no sirve el texto de sus documentos fuera de la red del Ministerio. No es que el artículo ' +
-      'no exista: es que esta instalación no puede leerlo. Quedan fuera de lo verificable aquí la acción ' +
-      'reivindicatoria, la responsabilidad civil, la filiación, el divorcio y la prescripción ordinaria: consúltalos ' +
-      'en la edición oficial del Código Civil, no en esta respuesta.',
+    senado: 'codigo_civil',
   },
   {
     nombre: 'Código de Comercio',
@@ -159,6 +156,3 @@ export const codigoDe = (tipo: string, numero: string, anio: string | undefined)
   CODIGOS.find(
     (c) => c.numero === numero && c.anio === anio && sinTildes(tipo).toLowerCase().includes(c.tipo),
   )
-
-/** Los códigos que se sabe que NO están en el corpus, para declararlo sin consultar la red. */
-export const codigosAusentes = (): Codigo[] => CODIGOS.filter((c) => c.ausente)

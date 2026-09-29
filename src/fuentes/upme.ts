@@ -22,7 +22,7 @@
  */
 import * as cheerio from 'cheerio/slim'
 import { CanarioError, colapsarEspacios, sinTildes } from '../nucleo/parse.ts'
-import { pedir } from '../nucleo/http.ts'
+import { pedir, type Respuesta } from '../nucleo/http.ts'
 
 const API = 'https://www.upme.gov.co/wp-json/wp/v2/circular_resolucion'
 
@@ -88,7 +88,11 @@ export async function buscar(
     pagina?: number | undefined
     limite?: number | undefined
   },
-  deps: { pedirPortal?: (url: string) => Promise<{ status: number; cuerpo: string }> } = {},
+  deps: {
+    pedirPortal?: (url: string) => Promise<{ status: number; cuerpo: string }>
+    /** Solo para las pruebas: sin ella el REST sale a la red real y el resultado depende del servicio en vivo. */
+    pedirRest?: (url: string) => Promise<Pick<Respuesta, 'status' | 'cuerpo' | 'cabeceras'>>
+  } = {},
 ): Promise<{ total: number; paginas: number; items: DocumentoUpme[]; procedencia?: 'rest' | 'portal' }> {
   const p = new URLSearchParams({
     per_page: String(Math.min(Math.max(opts.limite ?? 10, 1), 50)),
@@ -96,7 +100,7 @@ export async function buscar(
   })
   if (opts.texto?.trim()) p.set('search', opts.texto.trim())
 
-  const r = await pedir(`${API}?${p}`, 40_000, 'application/json')
+  const r = deps.pedirRest ? await deps.pedirRest(`${API}?${p}`) : await pedir(`${API}?${p}`, 40_000, 'application/json')
   // Pedir una página más allá del final devuelve 400: es un fin de lista, no un fallo.
   if (r.status === 400) return { total: 0, paginas: 0, items: [] }
   if (r.status !== 200) throw new Error(`El portal de la UPME respondió ${r.status}.`)

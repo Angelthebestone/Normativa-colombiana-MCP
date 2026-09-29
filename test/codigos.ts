@@ -8,7 +8,7 @@ import { strict as assert } from 'node:assert'
 import test from 'node:test'
 
 import { parsearCita } from '../src/nucleo/citas.ts'
-import { CODIGOS, codigoDe, codigosAusentes, referencia } from '../src/nucleo/codigos.ts'
+import { CODIGOS, codigoDe, referencia } from '../src/nucleo/codigos.ts'
 
 test('el nombre del código resuelve a su norma contenedora', () => {
   const c = parsearCita('art. 191 del Código de Comercio')
@@ -66,13 +66,11 @@ test('una cita normal sigue sin tocarse y un texto sin cita sigue devolviendo nu
   assert.equal(parsearCita('la codificación penal del país'), null)
 })
 
-test('el Código Civil se declara ausente del corpus, no inexistente', () => {
-  const ausentes = codigosAusentes()
-  assert.equal(ausentes.length, 1)
-  assert.equal(ausentes[0]!.nombre, 'Código Civil')
-  const texto = ausentes[0]!.ausente!
-  assert.match(texto, /NO está en este corpus/)
-  assert.match(texto, /no es que el artículo no exista/i)
+test('el Código Civil se lee de la Secretaría del Senado y es el único que no sale del Gestor', () => {
+  const delSenado = CODIGOS.filter((c) => c.senado)
+  assert.equal(delSenado.length, 1)
+  assert.equal(delSenado[0]!.nombre, 'Código Civil')
+  assert.equal(delSenado[0]!.senado, 'codigo_civil')
 })
 
 test('codigoDe encuentra el código por tipo, número y año, y referencia lo escribe como se cita', () => {
