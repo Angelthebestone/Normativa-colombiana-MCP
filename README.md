@@ -143,16 +143,18 @@ Después se apunta el cliente a `node /ruta/absoluta/a/Normativa-colombiana-MCP/
 
 ### Qué recibe el cliente
 
-Al conectarse, el servidor entrega **26 herramientas**, **5 prompts** y sus **propias instrucciones de uso**: a qué tipo de pregunta corresponde cada herramienta, que debe citarse siempre la fuente y que nunca debe afirmarse por cuenta propia que una norma está vigente. Los clientes que respetan el campo `instructions` del protocolo lo aprovechan sin configurar nada.
+Al conectarse, el servidor entrega **28 herramientas**, **5 prompts** y sus **propias instrucciones de uso**: a qué tipo de pregunta corresponde cada herramienta, que debe citarse siempre la fuente y que nunca debe afirmarse por cuenta propia que una norma está vigente. Los clientes que respetan el campo `instructions` del protocolo lo aprovechan sin configurar nada.
 
 | Fuente | Herramientas |
 | --- | --- |
-| Cualquiera (punto de entrada) | `resolver_cita` — cita exacta → norma o sentencia, con su vigencia si consta; acepta lote con `citas` y validación con `validar: true`. `consultar_vigencia` — el estado de vigencia con un nivel de confianza (alta/media/baja). `historial_norma` — la cadena de reformas que el Gestor anota sobre una norma (qué la modificó, adicionó o derogó y qué artículo afectó cada cambio), filtrable por `articulo` y paginable con `desde`/`limite` |
+| Cualquiera (punto de entrada) | `resolver_cita` — cita exacta → norma o sentencia, con su vigencia si consta; acepta lote con `citas` y validación con `validar: true`. `consultar_vigencia` — el estado de vigencia con un nivel de confianza (alta/media/baja). `historial_norma` — la cadena de reformas que el Gestor anota sobre una norma (qué la modificó, adicionó o derogó y qué artículo afectó cada cambio), ordenada por el año de la norma que la hizo y con la última reforma anotada señalada; filtrable por `articulo` y paginable con `desde`/`limite`. `buscar_unificado`, `analizar_conflicto`, `historial_norma` y `resolver_cita` (con `validar: true`) aceptan `formato: "json"` para devolver el objeto de datos sin pie de texto |
 | Gestor Normativo | `buscar_normas` (con marca de pertinencia por fila: qué términos menciona cada extracto), `buscar_por_tema`, `obtener_documento` (fuente `gestor`, con `sin_temas` para omitir el bloque de temas), `listar_catalogos`, `explicar_relacion_tema` |
-| Corte Constitucional | `buscar_jurisprudencia`, `obtener_documento` (fuente `corte`) |
+| Corte Constitucional | `buscar_jurisprudencia` (`tipos` acepta «tutela», «auto»…), `linea_jurisprudencial` (qué providencias citan una sentencia), `obtener_documento` (fuente `corte`) |
 | Corte Suprema | `buscar_jurisprudencia_suprema`, `obtener_documento` (fuente `suprema`) |
 | Consejo de Estado | `buscar_jurisprudencia_consejo_estado`, `obtener_documento` (fuente `consejo`) |
 | SUIN-Juriscol | `buscar_en_suin` (y vigencia vía `resolver_cita`) |
+| Secretaría del Senado | el Código Civil, artículo por artículo, vía `resolver_cita` (solo HTTP sin cifrar) |
+| Diario Oficial | `buscar_diario_oficial` — en qué diario salió una norma (tipo + número) o qué diarios salieron en unas fechas |
 | DIAN | `buscar_normativa_tributaria`, `obtener_documento` (fuente `dian`) |
 | CREG | `buscar_resoluciones_creg`, `obtener_documento` (fuente `creg`) |
 | ANH / UPME / ANLA | `buscar_normativa_anh`, `buscar_normativa_upme`, `listar_normativa_ambiental_anla` |
@@ -167,11 +169,11 @@ Cada herramienta se paga en contexto en cada conversación, se use o no. Si no n
 
 | `FUENTES` | Efecto | Herramientas | `tools/list` |
 | --- | --- | --- | --- |
-| vacía (por defecto) | todas | 26 | 36.803 B |
-| `-creg,-anh,-upme,-anla,-sectorial` | todas menos la regulación sectorial | 21 | 29.434 B |
-| `corte` | Gestor Normativo y Corte Constitucional | 17 | 23.282 B |
+| vacía (por defecto) | todas | 28 | 41.862 B |
+| `-creg,-anh,-upme,-anla,-sectorial` | todas menos la regulación sectorial | 23 | 34.493 B |
+| `corte` | Gestor Normativo y Corte Constitucional | 18 | 26.590 B |
 
-Dos formas, sin mezclar: la lista de las que quieres (`corte,suin`) o la de las que quitas (`-creg,-anh`). Claves: `corte`, `suprema`, `consejo`, `dian`, `suin`, `creg`, `anh`, `upme`, `anla`, `sectorial`. El Gestor Normativo va siempre: es el corpus de `resolver_cita` y de las herramientas V2. Una clave mal escrita **impide arrancar** con el motivo en el log, en vez de dejarte sin una fuente sin avisar. Las respuestas declaran lo apagado aparte de lo no consultado (`Desactivadas en esta instalación, no consultadas: CREG, ANH…`), y `describir_fuentes` sigue describiendo las fuentes apagadas, marcadas como tales.
+Dos formas, sin mezclar: la lista de las que quieres (`corte,suin`) o la de las que quitas (`-creg,-anh`). Claves: `corte`, `suprema`, `consejo`, `dian`, `suin`, `senado`, `diario`, `creg`, `anh`, `upme`, `anla`, `sectorial`. El Gestor Normativo va siempre: es el corpus de `resolver_cita` y de las herramientas V2. Una clave mal escrita **impide arrancar** con el motivo en el log, en vez de dejarte sin una fuente sin avisar. Las respuestas declaran lo apagado aparte de lo no consultado (`Desactivadas en esta instalación, no consultadas: CREG, ANH…`), y `describir_fuentes` sigue describiendo las fuentes apagadas, marcadas como tales.
 
 ## Qué puedes preguntar
 
@@ -221,11 +223,27 @@ Y la regla de fondo no cambia: **verifica en el enlace antes de actuar.**
 
 **El buscador del Gestor no busca en el texto completo**, solo en los resúmenes temáticos, y une los términos con OR. Su índice de palabras además es muy pobre: «teletrabajo» casa con 3 documentos en todo el portal, y con ninguno de los 43 conceptos que sí están clasificados bajo ese subtema. El servidor compensa de tres formas: quita las palabras vacías antes de consultar, reintenta por el subtema oficial cuando la búsqueda por palabras rinde poco, y busca dentro del articulado en tu computador cuando pides una norma concreta. Además, cada resultado de `buscar_normas` marca qué términos menciona su extracto y cuáles no, para que un resultado parcial no se lea como totalmente pertinente.
 
-**Los códigos se citan por su nombre, y falta el Civil.** `resolver_cita` entiende "art. 191 del Código de Comercio" además de "art. 191 del Decreto 410 de 1971", y dice contra qué norma resolvió: Comercio (Decreto 410 de 1971), Sustantivo del Trabajo (Decreto 2663 de 1950), Procesal del Trabajo (Decreto 2158 de 1948), Penal (Ley 599 de 2000), Procedimiento Penal (Ley 906 de 2004), General del Proceso (Ley 1564 de 2012), CPACA (Ley 1437 de 2011), Infancia y Adolescencia (Ley 1098 de 2006) y Estatuto Tributario (Decreto 624 de 1989). **El CÓDIGO CIVIL (Ley 84 de 1873) no está en el corpus**: ni el Gestor lo publica ni el índice de SUIN lo trae, así que la acción reivindicatoria, la responsabilidad civil, la filiación, el divorcio y la prescripción ordinaria quedan fuera de lo que aquí se puede verificar. El servidor lo dice con esas palabras en vez de responder "no encontré la cita", que se lee como que la norma no existe.
+**Los códigos se citan por su nombre.** `resolver_cita` entiende "art. 191 del Código de Comercio" además de "art. 191 del Decreto 410 de 1971", y dice contra qué norma resolvió: Comercio (Decreto 410 de 1971), Sustantivo del Trabajo (Decreto 2663 de 1950), Procesal del Trabajo (Decreto 2158 de 1948), Penal (Ley 599 de 2000), Procedimiento Penal (Ley 906 de 2004), General del Proceso (Ley 1564 de 2012), CPACA (Ley 1437 de 2011), Infancia y Adolescencia (Ley 1098 de 2006) y Estatuto Tributario (Decreto 624 de 1989) salen del Gestor.
 
-**Las leyes modificatorias traen el artículo que sustituyen.** Cuando una ley está redactada como "El artículo 217 del Código Civil quedará así:", el texto nuevo va debajo con su propia numeración; el extractor lo devuelve junto al artículo pedido en lugar de cortar en los dos puntos. El cuerpo normativo modificado sigue siendo otro documento: si es el Código Civil, no está aquí.
+**El Código Civil (Ley 84 de 1873) sale de la Secretaría del Senado, con tres salvedades.** El Gestor no lo publica y SUIN no sirve su texto, así que `resolver_cita` con "art. 946 del Código Civil" lee el artículo de la página de la Secretaría del Senado (medido el 2026-09-28: 48 de 50 artículos de una muestra leídos bien; los otros dos, un «socket hang up» del portal, se declaran como «no respondió», nunca como «no existe»). (1) **Solo sirve HTTP sin cifrar** —su puerto 443 no abre—: el texto no se puede autenticar en tránsito, y cada respuesta lo dice; quien no lo quiera la apaga con `FUENTES=-senado`. (2) **Los apartes tachados** que el portal marca como inexequibles o derogados salen entre `~~ ~~` y la respuesta avisa: no se citan como vigentes. (3) **No se reproducen las notas de vigencia, concordancias ni jurisprudencia de cada artículo**: son del editor del portal (Avance Jurídico Casa Editorial), que reserva su copia; la respuesta remite al enlace, donde están, y hay que mirarlas antes de citar. El portal es lento e intermitente (una parte tardó 40 s en responder).
+
+**Las leyes modificatorias traen el artículo que sustituyen.** Cuando una ley está redactada como "El artículo 217 del Código Civil quedará así:", el texto nuevo va debajo con su propia numeración; el extractor lo devuelve junto al artículo pedido en lugar de cortar en los dos puntos. El cuerpo del código modificado es otro documento, y se pide con su propia cita ("art. 217 del Código Civil").
+
+**El texto que publica el Gestor es el consolidado.** Al comparar un artículo con su reforma (`comparar_articulos` con `con_reforma: true`) el «antes» no existe en esas páginas: se contrasta lo que dispuso la reforma con lo que el portal publica hoy, y la respuesta lo declara. Si la ley modificadora solo transcribe una parte, o el extractor no aísla su artículo, el modo lo dice y no calcula un diff que sería engañoso. El portal tampoco anota todas las reformas (medido: la Ley 2466 de 2025 modifica el art. 23 del Código Sustantivo del Trabajo y esa reforma no aparece anotada).
+
+**La cita judicial sale compuesta, y lo que no consta se dice.** `resolver_cita` (sentencias de la Corte Constitucional) y `obtener_documento` (normas del Gestor) traen una línea «Cita oficial: …» armada solo con campos de la fuente. En la relatoría de la Corte, `prov_magistrados` es el **ponente** (238 de 240 aciertos medidos traen un solo nombre y el texto de la providencia lo declara). En SAMAI la fecha es la **del proceso**, no la del fallo, y la Corte Suprema publica la fecha de **carga**: por eso esas fechas no entran en la cita y se listan como «no consta». Tampoco se inventa la entidad expedidora de una norma: el Gestor no la publica de forma fiable.
+
+**Vigencia diferida.** Cuando una norma no rige de inmediato —«regirá seis meses después de su promulgación», o por tramos, como la Ley 2277 de 2022—, la cabecera de `obtener_documento` lo dice a partir de su propio artículo de vigencia (medido sobre 20 normas reales). Solo calcula la fecha cuando el texto lo permite; si falta la fecha de publicación o hay varios tramos, lo declara en vez de suponer.
+
+**Un radicado de 23 dígitos** (`11001-03-28-000-2022-00132-00`) se descompone en `resolver_cita` y se busca en las providencias tituladas del Consejo de Estado (SAMAI). Los dígitos identifican la corporación solo para el Consejo de Estado (`03xx`) y la Sala Civil de la Corte Suprema (`0203`); los de un juzgado o un tribunal (`31xx`, `23xx`…) no son de una alta corte y no se rotulan como tales. SAMAI solo titula una parte de sus providencias: no encontrar un radicado no dice nada sobre el proceso, y **el estado procesal no está en este servidor**. La Corte Suprema no permite buscar por radicado.
+
+**El Diario Oficial** (`buscar_diario_oficial`) dice en qué diario salió una norma (tipo + número) o qué diarios salieron en unas fechas. No da el texto: el PDF del diario es de sesión (sin la cookie responde 404) y pesa hasta 15 MB. No sabe qué normas trae cada diario ni filtra por entidad.
+
+**Línea jurisprudencial.** `linea_jurisprudencial` lista las providencias que, según la relatoría de la Corte Constitucional, citan una sentencia (su bloque «citaciones»; la premisa de que la relatoría publica «sentencias que reiteran» era falsa: sí publica quién cita a quién). Que una sentencia cite a otra **no** es que la reitere ni que la respete, la lista puede estar incompleta (medido: T-233/24 menciona la C-337/11 y no consta) y topa en 100. Que una SU posterior la haya superado no se deduce: hay que leer la providencia.
 
 **Ritmo de consulta.** El servidor hace como máximo una petición por segundo sostenida a cada portal, con ráfagas de hasta cinco, y nunca dos a la vez al mismo sitio. Si un portal responde que está limitando las consultas, espera lo que él indique en vez de insistir. Son servicios públicos y conviene que un asistente automático les pese menos que una persona navegando.
+
+**Caché en disco (opcional).** Con la variable de entorno `CACHE_DIR` apuntando a un directorio, las copias de documentos sobreviven a los reinicios del cliente: una providencia de 3,4 MB pasó de 2.278 ms a 26 ms en un proceso nuevo (medido el 2026-09-28) y, cuando la copia vence, se revalida con `If-Modified-Since` (304, cero bytes). Solo se guardan documentos, nunca buscadores ni APIs; el directorio se poda a 500 ficheros o 256 MB, lo más antiguo primero. Sin la variable no se toca el disco.
 
 **Privacidad.** Cada consulta viaja a servidores del Estado colombiano, que registran las peticiones y tu dirección IP, igual que si navegaras el sitio. No se envía nada a ningún otro servidor, no hay analítica y no se recoge información tuya. Tenlo en cuenta si vas a consultar sobre un asunto propio.
 
@@ -234,7 +252,7 @@ Y la regla de fondo no cambia: **verifica en el enlace antes de actuar.**
 - El **temático** (12.063 pares tema/subtema, 56.458 asociaciones norma–subtema, 2026-08-01) responde al instante y sigue sirviendo si el portal se cae. Si supera los tres meses, el servidor te lo advierte.
 - El de **SUIN** (11.613 leyes, 2026-09-24) traduce una cita escrita como texto a su documento sin salir a la red. La vigencia **no** depende de él: se pide en vivo a la ficha de SUIN por tipo, número y año, para leyes y decretos.
 
-**SUIN-Juriscol cambió de portal (septiembre de 2026).** La ficha con el estado de vigencia sale ahora del índice público de su buscador nuevo, que trae leyes y decretos y **llega hasta 2020**: de una norma posterior no hay ficha, y la respuesta lo dice en vez de callarlo. El **texto** de los documentos ya no se puede leer desde fuera: el visor del portal lo pide a una dirección privada del Ministerio y se queda en blanco (medido con un navegador el 2026-09-24). Se entrega la ficha, el estado y el enlace clásico `viewDocument.asp?id=`.
+**SUIN-Juriscol cambió de portal (septiembre de 2026).** La ficha con el estado de vigencia sale ahora del índice público de su buscador nuevo, que trae leyes y decretos y **llega hasta 2020**: de una norma posterior no hay ficha, y la respuesta lo dice en vez de callarlo. El **texto** de los documentos ya no se puede leer desde fuera: el visor del portal lo pide a una dirección privada del Ministerio y se queda en blanco (medido con un navegador el 2026-09-24). Se entrega la ficha, el estado y el enlace clásico `viewDocument.asp?id=`. Comprobado de nuevo el 2026-09-28, cuando el portal anunció su vuelta: el buscador nuevo (`lexis.minjusticia.gov.co/buscador/Detallado/1`, `/2` y `/3`) consulta el mismo índice, que sigue llegando a 2020, y su visor sigue apuntando a direcciones privadas; la página `suin-juriscol.gov.co/suin/normativahistorica` es una página del gestor de contenidos del Ministerio y su API responde 404 para ese identificador, así que no hay datos que leer.
 
 **Cobertura de la búsqueda tributaria.** La primera consulta de cada término a la DIAN tarda unos 20 segundos: su portal devuelve el resultado completo y no admite límite. Las páginas siguientes del mismo término son instantáneas, así que conviene paginar en lugar de repetir búsquedas.
 
@@ -253,6 +271,7 @@ npm run medir              # métricas: bundle, arranque, índices y una fila po
 npm run generar-indice     # regenera datos/indice-tematico.json (~20 MB de descarga)
 npm run generar-indice-suin # regenera datos/indice-suin.json (unos segundos: pagina el índice del portal de SUIN)
 npm run pack               # produce normativa-colombia.mcpb
+npm run salud              # healthcheck interno: sondea en paralelo los portales que consulta el servidor (OK / LENTO / CAÍDO, con latencia)
 ```
 
 `datos/` **sí está versionado**: sin él un clon limpio no pasa las pruebas. Regenéralo solo cuando quieras actualizarlo.

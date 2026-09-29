@@ -3,6 +3,50 @@
 Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/).
 Este proyecto sigue [versionado semántico](https://semver.org/lang/es/).
 
+## [Sin publicar] — 2026-09-29
+
+**El Código Civil se lee, el radicado de 23 dígitos se entiende, y las herramientas devuelven la cita judicial ya compuesta y datos encadenables.** Implementa el banco de ideas (`ideas.md`): 1.1, 1.2, 1.3, 2.2, 4.1, 4.2, 5.1, 5.2, 6.4, 6.5, 6.6 y 6.7; quedan sin hacer 2.1 (empaquetar el Civil y el CGP: se resolvió leyendo el Civil del Senado en vivo; el CGP ya está en el Gestor), 3.x, 6.1, 6.2 y 6.3. Dos de las premisas del banco eran falsas y se midieron antes de construir (ver **Hallazgos**).
+
+### Añadido
+
+- **El Código Civil (Ley 84 de 1873), artículo por artículo, desde la Secretaría del Senado.** `resolver_cita` con «art. 946 del Código Civil» devuelve el texto (muestra de 50 artículos: 48 correctos; 2 fallos del portal declarados como «no respondió», no como «no existe»). Tres salvedades que viajan en cada respuesta: el portal **solo sirve HTTP sin cifrar** (su 443 no abre) y el texto no se puede autenticar; los **apartes tachados** (inexequibles o derogados) salen entre `~~ ~~` y se avisa; las **notas de vigencia, concordancias y jurisprudencia** de cada artículo son del editor del portal y **no se reproducen**, se remite al enlace. `pedir` acepta ahora URLs `http:`. Fuente apagable: `FUENTES=-senado`. El índice del portal omite 14 artículos: 11 sí están publicados (se deduce su parte del vecino más cercano, comprobado) y 3 no están por ningún lado (264, 637, 642).
+- **Radicado Judicial Único de 23 dígitos** en `resolver_cita`: se descompone (DANE, departamento, especialidad, sala, despacho, año, consecutivo, instancia) y se busca en las providencias tituladas del Consejo de Estado por SAMAI (con guiones y como frase; `porRadicado`). La corporación solo se rotula cuando los dígitos la identifican por sí mismos (`03xx` Consejo de Estado; `0203` Sala Civil de la Corte Suprema); un juzgado o tribunal (`31xx`, `23xx`…) no se llama alta corte. La Corte Suprema no permite buscar por radicado. **No da el estado del proceso.**
+- **`linea_jurisprudencial`**: qué providencias citan una sentencia de la Corte Constitucional, con las SU y las C en cabeza. Sale del bloque «citaciones» de la ficha de la relatoría (`ver_modal_detalle_providencia`), no del buscador de texto completo (medido: SU-371/21 daba 1 de 10 aciertos reales por texto y 17 por ficha). Advierte que citar no es reiterar, que la lista puede estar incompleta y que topa en 100.
+- **`buscar_diario_oficial`**: en qué diario salió una norma (tipo + número) o qué diarios salieron en unas fechas, por la consulta pública de la Imprenta Nacional (JSF). Medido: LEY + 2466 → diario 53.160 (25/06/2025). No da el texto (el PDF es de sesión: sin cookie, 404; hasta 15 MB), no sabe qué normas trae cada diario y `entidad` no filtra. Fuente apagable: `FUENTES=-diario`.
+- **`Cita oficial:`** ya compuesta, en `resolver_cita` (sentencias de la Corte Constitucional: `Corte Constitucional, Sentencia C-337 de 2011 (M.P. Jorge Ignacio Pretelt Chaljub; 4 de mayo de 2011)`) y en la cabecera de `obtener_documento` (normas: `Ley 909 de 2004 (septiembre 23), Diario Oficial No. 45.680`). Nada se inventa: lo que la fuente no da se lista como «no consta». `src/nucleo/cita_oficial.ts` también compone las del Consejo de Estado y la Corte Suprema (sin conectar aún a sus herramientas).
+- **Vigencia diferida** en la cabecera de `obtener_documento` (gestor): a partir del artículo de vigencia de la propia norma —medido sobre 20 normas reales— avisa cuando la norma rige por tramos, con plazo relativo o «AÚN NO RIGE». Solo calcula la fecha cuando el texto lo permite.
+- **«Para leer»** en cada resultado de `buscar_unificado` de las fuentes cuyo texto se puede pedir (gestor, corte, DIAN, INVIMA, Supersalud): la llamada ya armada a `obtener_documento`, comprobada una por una. SUIN no lo trae (su visor está en una red privada) y la ANM tampoco (sus PDF están en un blob de Azure que `obtener_documento` rechaza por dominio).
+- **`formato: "json"`** en `buscar_unificado`, `analizar_conflicto`, `historial_norma` y `resolver_cita` (con `validar: true`): el objeto de datos con `fecha_consulta`, `alcance` y `avisos`, sin cabecera ni pie.
+- **`historial_norma` ordena por el año de la norma modificadora** y señala la última reforma **anotada** («no es la que rige»); los cambios sin año en la nota van aparte.
+- **`comparar_articulos` con `con_reforma: true`**: contrasta lo que dispuso la última reforma anotada de un artículo con lo que el portal publica hoy. El Gestor **consolida** el texto: el «antes» no existe en sus páginas, y la respuesta lo declara. Si la modificadora solo transcribe parte (`parcial`), solo anuncia (`solo-anuncio`), no transcribe o la extracción no corresponde, no calcula un diff engañoso.
+- **`CACHE_DIR`**: las copias de documentos se guardan además en disco y sobreviven a los reinicios (C-355/06, 3,4 MB: 2.278 ms → 26 ms en un proceso nuevo; con la copia vencida, 304 sin bytes). Solo documentos, tope de 500 ficheros o 256 MB, escritura atómica. Sin la variable no se toca el disco.
+- **`buscar_jurisprudencia.tipos`** acepta «tutela», «constitucionalidad», «unificación» y «auto», además de las siglas.
+- **`npm run salud`**: healthcheck interno (no es una herramienta MCP) que sondea en paralelo los 26 portales que consulta el servidor: OK / LENTO / MANTENIMIENTO / CAÍDO con latencia, y sale con 1 si hay alguno caído. Corrida real: 18 OK, 8 LENTO, 0 caídos.
+
+### Corregido
+
+- **`corte.verificar` daba «no existe» para providencias que sí existen** (`C-331/23`, `C-033/26`): la relatoría solo las encuentra con la forma «C-331 de 2023». Se sondea también esa forma. Era el peor tipo de fallo de `resolver_cita`: una negativa falsa. `C-999/23` sigue dando «no existe», con razón.
+- **`articulo()` devolvía una cita en prosa en vez del artículo pedido** cuando su número aparecía citado antes de su encabezado (Ley 789 de 2002 art. 28 devolvía la cita cruzada «Artículo 28 de la Ley 21 de 1982» del artículo 3). Ahora exige inicio de renglón. Medido sobre 14 normas y 3.397 artículos: 14 extracciones cambian, todas de «cita en prosa» a «encabezado real». Además, el anuncio de sustitución cerrado en punto («…quedará así.») se reconoce, y `Decreto Nacional 1409 de 2008` en una nota gana su año (+41 notas con año).
+- **La línea de la relatoría llamaba «Magistrados» a lo que es el ponente** (238 de 240 aciertos medidos traen un solo nombre y el texto de la providencia lo declara): ahora dice «Ponente(s) (según la relatoría)».
+
+### Hallazgos
+
+- **La relatoría de la Corte Constitucional sí publica «citada por»**: no en el índice de búsqueda, sino en la ficha (`accion=ver_modal_detalle_providencia`, bloque `citaciones`), y sus citas salientes en `ver_providencias_relacionadas`. La premisa del banco («la relatoría publica sentencias que reiteran») era falsa, y también lo era que se pudiera armar con el buscador de texto completo.
+- **`buscar_normativa_sectorial.categoria` no admite un enum**: solo la Unidad para las Víctimas la filtra, y la herramienta ya avisa cuando no se aplica. `buscar_jurisprudencia.tipos` ya era un enum cerrado: lo que faltaba eran los sinónimos.
+- **SUIN-Juriscol «volviendo» (2026-09-28)**: el buscador nuevo (`lexis.minjusticia.gov.co/buscador/Detallado/1|2|3`) consulta el mismo índice de Elasticsearch que ya se usa, que **sigue llegando a 2020**; el visor de texto sigue apuntando a `192.168.x.x`. `suin-juriscol.gov.co/suin/normativahistorica` es una página de su gestor de contenidos y la API responde 404 para ese identificador. Aparte: ese Elasticsearch tiene otro índice, `documents` (76.198 documentos), con **jurisprudencia** (`CC-SENTENCIA` 7.515, `SENTENCIA` 2.689, `AUTO` 765) y campos como `normademandada` y `nombrecomun`; no se ha integrado.
+- **En SAMAI la fecha es la del proceso, no la del fallo; en la Corte Suprema, la de carga**: por eso no entran en la cita oficial (5 de 5 casos con las dos fechas legibles eran distintas).
+- **El radicado que aparece en un fallo de una alta corte suele ser el del juzgado o tribunal de origen**: una tabla de corporaciones medida «por dónde aparece» rotulaba como Corte Suprema al Juzgado 38 Civil del Circuito de Bogotá. Se corrigió antes de integrarla.
+
+### Verificado
+
+Medido el 2026-09-29. `npm run typecheck` y `npm run lint` limpios. `SIN_RED=1 npm test`: 374 pruebas, 324 pasan, 50 saltadas (red), 0 fallos (el recuento de `FUENTES` pasó a 13 fuentes). `npm run test:e2e` con red: 43/43; la cota de `limite_caracteres` sube de 5.000 a 6.000 porque la cabecera (cita oficial, vigencia diferida, alcance con dos fuentes más) pesa más. `test:red`: 68/68 (la primera corrida dio 14 fallos: 1 era la misma cota y 13 fueron transitorios de red; repetida, 68/68). `tools/list`: 28 herramientas, 41.862 B (eran 26 y 36.803 B: +5.059 B, casi todo `linea_jurisprudencial`, `buscar_diario_oficial` y el parámetro `formato`); con `-creg,-anh,-upme,-anla,-sectorial` 23 y 34.493 B; con `corte` 18 y 26.590 B.
+
+### Pendiente
+
+- Sin publicar: no hay commit, etiqueta, release ni `npm publish` de estos cambios (ver `publicar-cada-version`).
+- `cita_oficial` del Consejo de Estado y de la Corte Suprema, y la vigencia diferida en `consultar_vigencia`, están escritas y sin conectar.
+- Índice `documents` de SUIN (jurisprudencia) sin integrar.
+
 ## [1.14.0] — 2026-09-24
 
 **Cierre del 2026-09-24: los pendientes que dejó la auditoría, y SUIN-Juriscol, que volvió con otro portal.** El operador elige qué fuentes consulta al instalar; la Corte Suprema y el Consejo de Estado rotulan cada pasaje con su parte de la providencia; la vigencia sale de la ficha nueva de SUIN, decretos incluidos; la revalidación condicional está medida portal por portal y corregida; un `tipo_documento` que no existe se rechaza antes de buscar. Las tres entradas del 2026-09-16 que siguen debajo se publican con esta versión.
