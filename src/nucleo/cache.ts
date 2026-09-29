@@ -76,6 +76,18 @@ export async function conCache<T>(clave: string, ttlMs: number, fn: () => Promis
   return valor
 }
 
+/**
+ * Cuánto se recuerda la respuesta de una búsqueda o de una consulta por número: no es
+ * una copia de documento, así que no se revalida y el TTL es lo único que acota su
+ * antigüedad. Medido el 2026-09-29: consultar_vigencia y luego resolver_cita sobre la
+ * misma norma repetían las dos mismas búsquedas (Gestor y SUIN), y lo mismo hace todo el
+ * flujo de verificar una cita.
+ *
+ * ponytail: 5 minutos fijos y en memoria. El techo es que algo publicado dentro de esa
+ * ventana se siga declarando ausente; el salto siguiente, un TTL menor solo para lo negativo.
+ */
+export const TTL_BUSQUEDA_MS = 5 * 60_000
+
 // --- TTL por clase de norma ----------------------------------------------
 
 const HORA_MS = 3600 * 1000

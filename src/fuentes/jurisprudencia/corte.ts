@@ -22,7 +22,7 @@
  */
 import { cargar, limpiarTermino, sinTildes, textoDe } from '../../nucleo/parse.ts'
 import { parsearCita, rutaDeSentencia } from '../../nucleo/citas.ts'
-import { obtener, poner } from '../../nucleo/cache.ts'
+import { obtener, poner, TTL_BUSQUEDA_MS } from '../../nucleo/cache.ts'
 import { pedir as http } from '../../nucleo/http.ts'
 import { esStopword } from '../../nucleo/stopwords.ts'
 
@@ -310,15 +310,10 @@ function formasDeSondeo(sentencia: string): string[] {
  * peticiones la segunda vez y una sentencia inexistente +5, sin ninguna copia. El
  * flujo normal (resolver_cita, luego consultar_vigencia, luego linea_jurisprudencial)
  * la pregunta tres veces seguidas. Nunca se guarda `no-medido`: un fallo de red no
- * es un dato.
- *
- * ponytail: 5 minutos fijos y solo en memoria. El techo es que una sentencia
- * publicada dentro de esa ventana se siga declarando inexistente; el salto
- * siguiente sería un TTL más corto solo para `no-existe`.
+ * es un dato. El TTL (y su techo) está en `TTL_BUSQUEDA_MS`.
  */
-const TTL_VERIFICACION_MS = 5 * 60_000
 const recordar = (clave: string, v: VerificacionSentencia): VerificacionSentencia => {
-  poner(clave, v, TTL_VERIFICACION_MS)
+  poner(clave, v, TTL_BUSQUEDA_MS)
   return v
 }
 
