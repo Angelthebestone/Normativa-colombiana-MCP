@@ -185,7 +185,10 @@ function mensajeEnseña(error: z.ZodError, args: Record<string, unknown>): boole
   // Nombrar el campo que sobra también enseña: es la mitad del arreglo.
   const campo = Object.keys(args).some((k) => m.includes(k))
   const opciones = /options|expected|Expected|received|campos de esta herramienta/.test(m)
-  return valor || campo || opciones
+  // «Falta "x", que es obligatorio: <qué es>» enseña el nombre Y el sentido; el
+  // «Required» a secas de zod no dice ni lo segundo.
+  const falta = /Falta "[^"]+", que es obligatorio/.test(m)
+  return valor || campo || opciones || falta
 }
 
 export function clasificar(t: Torcida): { clase: Clase; detalle: string } {

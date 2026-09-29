@@ -48,11 +48,35 @@ export function numeroDeArticulo(v: unknown): unknown {
  * El `errorMap` conserva el mensaje de zod —que nombra la clave sobrante— y le
  * añade la lista de campos válidos. Con `.strict()` a secas solo se tiene lo
  * primero; con un mensaje propio, solo lo segundo.
+ *
+ * Arregla también el otro mensaje inútil de zod: cuando falta un campo
+ * obligatorio dice «Required» a secas, teniendo la explicación del campo en su
+ * propio `.describe()` a un palmo. Se saca de ahí.
+ *
+ * Eso NO se puede hacer desde el `errorMap` del objeto, y está medido: un
+ * `invalid_type` por valor ausente lo levanta el esquema del CAMPO, no el del
+ * objeto, así que el mapa del padre nunca lo ve y el mensaje sigue siendo
+ * «Required». La vía que funciona es poner el `required_error` en cada campo, y
+ * es lo que hace `conAviso` clonando el `_def` —el mismo truco que usa
+ * internamente `.describe()` de zod— para no tener que repetirlo a mano en cada
+ * uno de los campos obligatorios de las 28 herramientas.
  */
+function conAviso(campo: string, v: z.ZodTypeAny): z.ZodTypeAny {
+  if (v.isOptional()) return v
+  const aviso = `Falta "${campo}", que es obligatorio${v.description ? `: ${v.description.replace(/\.$/, '')}` : ''}.`
+  const mapa: z.ZodErrorMap = (issue, ctx) =>
+    issue.code === z.ZodIssueCode.invalid_type && issue.received === z.ZodParsedType.undefined
+      ? { message: aviso }
+      : { message: ctx.defaultError }
+  const Tipo = v.constructor as new (def: unknown) => z.ZodTypeAny
+  return new Tipo({ ...v._def, errorMap: mapa })
+}
+
 export function estricto<S extends z.ZodRawShape>(shape: S): z.ZodObject<S, 'strict'> {
   const claves = Object.keys(shape).join(', ')
+  const avisado = Object.fromEntries(Object.entries(shape).map(([k, v]) => [k, conAviso(k, v)])) as S
   return z
-    .object(shape, {
+    .object(avisado, {
       errorMap: (issue, ctx) =>
         issue.code === z.ZodIssueCode.unrecognized_keys
           ? { message: `${ctx.defaultError}. Los campos de esta herramienta son: ${claves}.` }
