@@ -79,11 +79,16 @@ export class Cliente {
   peticion(method: string, params?: unknown): Promise<any> {
     const id = this.siguiente++
     return new Promise((ok, fallo) => {
-      this.pendientes.set(id, { ok, fallo })
-      this.proc.stdin.write(`${JSON.stringify({ jsonrpc: '2.0', id, method, params })}\n`)
-      setTimeout(() => {
+      const reloj = setTimeout(() => {
         if (this.pendientes.delete(id)) fallo(new Error(`sin respuesta a ${method} tras 120 s`))
       }, 120_000)
+      // Cancelación explícita (no unref): una respuesta ya no deja el temporizador
+      // vivo 120 s, pero un cuelgue real sigue rechazando la promesa al vencer.
+      this.pendientes.set(id, {
+        ok: (v) => { clearTimeout(reloj); ok(v) },
+        fallo: (e) => { clearTimeout(reloj); fallo(e) },
+      })
+      this.proc.stdin.write(`${JSON.stringify({ jsonrpc: '2.0', id, method, params })}\n`)
     })
   }
 
