@@ -36,7 +36,7 @@
     "fuentes": {
       "type": "string",
       "title": "Fuentes",
-      "description": "Vacío: todas. Para quitar algunas: \"-creg,-anh,-upme,-anla,-sectorial\". Para quedarse solo con algunas: \"corte,suin\" (el Gestor Normativo va siempre). Claves: corte, suprema, consejo, dian, suin, creg, anh, upme, anla, sectorial. Una fuente quitada no aparece en la lista de herramientas: ahorra contexto en cada conversación.",
+      "description": "Vacío: todas. Para quitar algunas: \"-creg,-anh,-upme,-anla,-sectorial\". Para quedarse solo con algunas: \"corte,suin\" (el Gestor Normativo va siempre). Claves: corte, suprema, consejo, dian, suin, senado, diario, creg, anh, upme, anla, sectorial. Una fuente quitada no aparece en la lista de herramientas: ahorra contexto en cada conversación.",
       "required": false,
       "default": ""
     }
@@ -137,6 +137,14 @@
     {
       "name": "buscar_unificado",
       "description": "Busca en paralelo en Gestor Normativo, Corte Constitucional, SUIN-Juriscol y DIAN, y agrega los resultados con su fuente y su enlace (con perfil \"salud\" añade INVIMA y Supersalud; con \"mineria\", la ANM)."
+    },
+    {
+      "name": "linea_jurisprudencial",
+      "description": "Devuelve las providencias que la relatoría registra como CITANTES de una sentencia de la Corte Constitucional (el bloque \"citaciones\" de su ficha oficial), con tipo, fecha, tema, la ruta para obtener_documento y el enlace, en cabeza las SU y las C."
+    },
+    {
+      "name": "buscar_diario_oficial",
+      "description": "Diarios Oficiales publicados: número, tipo de edición (Ordinaria, Extraordinaria, Especial, Oficio o Tributario) y fecha de publicación."
     },
     {
       "name": "obtener_documento",

@@ -3,9 +3,10 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { z } from 'zod'
 
-import { parsearCita } from './nucleo/citas.ts'
+import { parsearCita, parsearRadicado } from './nucleo/citas.ts'
 import { activa, alcance, apagadas, avisoApagada, herramientaActiva, NOMBRE_FUENTE } from './nucleo/alcance.ts'
-import { codigoDe, codigosAusentes, referencia as refCodigo } from './nucleo/codigos.ts'
+import { citaCorteConstitucional } from './nucleo/cita_oficial.ts'
+import { CODIGOS, codigoDe, referencia as refCodigo } from './nucleo/codigos.ts'
 import { cargarIndice, temaDelIndice, frescura } from './nucleo/indice.ts'
 import { normalizarEntidad, NO_EN_GESTOR } from './nucleo/entidades.ts'
 import { esCompiladora } from './nucleo/compiladas.ts'
@@ -22,6 +23,10 @@ import * as consultarPerfil from './herramientas/consultar_perfil.ts'
 import * as consultarVigencia from './herramientas/consultar_vigencia.ts'
 import * as historialNorma from './herramientas/historial_norma.ts'
 import * as buscarUnificado from './herramientas/buscar_unificado.ts'
+import * as buscarDiarioOficial from './herramientas/buscar_diario_oficial.ts'
+import * as lineaJurisprudencial from './herramientas/linea_jurisprudencial.ts'
+import { resolverCodigo } from './herramientas/codigo_senado.ts'
+import { resolverRadicado } from './herramientas/resolver_radicado.ts'
 import * as obtenerDocumento from './herramientas/obtener_documento.ts'
 import {
   advertenciasVigencia,
@@ -88,6 +93,12 @@ type OpcionesCita = {
  * blanco dentro, así que un `URL:` al pie queda en otro párrafo y el fragmento
  * citable se copia sin su origen. Aquí se lee antes del texto y viaja con él.
  */
+/** La línea de cita judicial ya compuesta, con lo que la relatoría no da declarado (nada se inventa). */
+function citaOficial(p: Parameters<typeof citaCorteConstitucional>[0]): string {
+  const c = citaCorteConstitucional(p)
+  return c ? `Cita oficial: ${c.cita}${c.faltan.length ? ` (no consta: ${c.faltan.join(', ')})` : ''}` : ''
+}
+
 function bloqueArticulo(texto: string, numero: string, url: string): string {
   const art = extraerArticulo(texto, numero)
   return art
@@ -101,6 +112,9 @@ function bloqueArticulo(texto: string, numero: string, url: string): string {
  * lote itera sobre esta misma función, así que ambas vías resuelven igual.
  */
 async function resolverUnaCita(cita: string, opciones: OpcionesCita = {}): Promise<string> {
+  // Un radicado judicial de 23 dígitos no es una cita normativa: se identifica y se enruta a la corte.
+  const radicado = parsearRadicado(cita)
+  if (radicado) return resolverRadicado(cita, radicado)
   const c = parsearCita(cita)
   if (!c) return `### ${cita}\nNo encontré una cita normativa en "${cita}". Escríbela como "Ley 909 de 2004", "art. 191 del Código de Comercio" o "C-337/11", o usa buscar_normas.`
 
@@ -124,8 +138,8 @@ async function resolverUnaCita(cita: string, opciones: OpcionesCita = {}): Promi
     c.codigo && cod
       ? `\n«${cod.nombre}» se cita aquí como ${refCodigo(cod)}, que es su norma contenedora y lo que hay que escribir en un escrito.`
       : ''
-  /** Un código que se sabe fuera del corpus se nombra como ausente, no como inexistente. */
-  const ausente = cod?.ausente
+  // El Código Civil no está en el Gestor: su texto sale de la Secretaría del Senado.
+  if (cod?.senado) return resolverCodigo({ cita, c, codigo: cod, pedidos, articuloIgnorado })
 
   // Las sentencias de la Corte se resuelven contra su relatoría, que está al día.
   // Con la Corte apagada no se cae al Gestor —que no publica sentencias— para
@@ -142,7 +156,9 @@ async function resolverUnaCita(cita: string, opciones: OpcionesCita = {}): Promi
         alcance([{ clave: 'corte', detalle: 'providencia verificada por su número' }]),
         `${p.sentencia} (${p.tipo}) — Corte Constitucional`,
         `Fecha: ${p.fecha} · Publicación: ${p.publicacion} · Expediente: ${p.expediente}`,
-        p.magistrados.length ? `Magistrados: ${p.magistrados.join(', ')}` : '',
+        // El campo de la relatoría es el PONENTE, no la Sala (medido: 238 de 240 aciertos traen un solo nombre).
+        p.magistrados.length ? `Ponente${p.magistrados.length > 1 ? 's' : ''} (según la relatoría): ${p.magistrados.join(', ')}` : '',
+        citaOficial(p),
         p.tema ? `Tema: ${p.tema}` : '',
         p.sintesis ? `Síntesis: ${p.sintesis}` : '',
         `Texto completo: usa obtener_documento con fuente="corte" y ruta="${p.ruta}"`,
@@ -209,9 +225,6 @@ async function resolverUnaCita(cita: string, opciones: OpcionesCita = {}): Promi
         (pedidos.length ? ` Por eso no se puede devolver el artículo ${pedidos.join(', ')}: búscalo en el Diario Oficial.` : '')
       )
     }
-    // Sin la línea de equivalencia: el propio texto de la ausencia ya nombra la
-    // norma, y repetirla dos veces distrae de lo único que importa aquí.
-    if (ausente) return `### ${cita}\n${ausente}`
     const suinCayo = f?.ok === false && f.razon === 'ficha-caida'
     return (
       `### ${cita}${equivalencia}\n` +
@@ -404,7 +417,7 @@ function sinPrefijo(c: Catalogo, valor: string): string {
 const INSTRUCCIONES = `Fuentes oficiales de normativa colombiana: Gestor Normativo de Función Pública, Corte Constitucional, Corte Suprema, Consejo de Estado, SUIN-Juriscol (MinJusticia) y normograma de la DIAN.
 
 Qué herramienta usar:
-- La pregunta menciona una norma concreta ("Ley 909 de 2004", "Decreto 1083", "C-337/11", "el art. 6 de la Ley 1221") o un CÓDIGO por su nombre ("el art. 191 del Código de Comercio", "el 83 del Código Penal") → resolver_cita. Es exacta; el buscador por palabras no. El único código que NO está en el corpus es el CIVIL: ante una consulta civil, dilo en vez de dar por buena una búsqueda vacía.
+- La pregunta menciona una norma concreta ("Ley 909 de 2004", "Decreto 1083", "C-337/11", "el art. 6 de la Ley 1221") o un CÓDIGO por su nombre ("el art. 191 del Código de Comercio", "el 83 del Código Penal") → resolver_cita. Es exacta; el buscador por palabras no. El CÓDIGO CIVIL no está en el Gestor: resolver_cita lo lee, artículo por artículo, de la Secretaría del Senado (HTTP sin cifrar; sin sus notas de vigencia, que remite al enlace).
 - Saber si una norma sigue vigente (estado con nivel de confianza) → consultar_vigencia. No lo afirmes por tu cuenta: si no consta, la herramienta lo dice y orienta.
 - La pregunta es por materia ("¿qué normas hay sobre teletrabajo?") → buscar_por_tema. El buscador por palabras del portal solo indexa resúmenes y encuentra poquísimo: "teletrabajo" casa con 3 documentos cuando el subtema oficial tiene 55.
 - Hay que saber qué dice una norma sobre algo → obtener_documento con fuente="gestor" y buscar_en_texto. Esa es la verdadera búsqueda de texto completo; el portal no la ofrece.
@@ -412,7 +425,10 @@ Qué herramienta usar:
 - Normativa que el Gestor no tiene, o exploración por materia/sector del corpus histórico (desde 1844) → buscar_en_suin. NUNCA la uses para saber si algo está vigente: su campo de vigencia es del índice de búsqueda y contradice la ficha. La vigencia sale de resolver_cita.
 - Impuestos, aduanas o cambios (retención, IVA, renta, importación) → buscar_normativa_tributaria y obtener_documento con fuente="dian". Ninguna otra herramienta cubre esa materia.
 - Jurisprudencia de la Corte SUPREMA (casación civil, laboral, penal y sus tutelas) → buscar_jurisprudencia_suprema, y obtener_documento con fuente="suprema" para el texto completo con la ruta y la sala de esa misma búsqueda. Es un tribunal DISTINTO de la Corte Constitucional: no las mezcles. Exige indicar sala, y cada resultado trae las normas que cita, que puedes resolver con resolver_cita.
-- Qué le pasó a una norma o a un artículo (quién lo modificó, adicionó o derogó) → historial_norma (cadena navegable de reformas) u obtener_documento con fuente="gestor" e historial=true. Devuelve las notas literales del portal, sin ordenarlas ni deducir cuál rige hoy.
+- Qué le pasó a una norma o a un artículo (quién lo modificó, adicionó o derogó) → historial_norma (cadena de reformas ordenada por el año de la norma que las hizo, con la última reforma ANOTADA señalada: no es «la que rige») u obtener_documento con fuente="gestor" e historial=true (las mismas notas en el orden del documento). Son notas literales del portal; no se deduce cuál rige hoy. Para ver qué cambió en un artículo, comparar_articulos con con_reforma=true contrasta lo que dispuso su última reforma con lo que el portal publica hoy (el portal consolida el texto: el «antes» no está).
+- Qué providencias citan una sentencia de la Corte Constitucional (y si hay SU o C posteriores que la mencionen) → linea_jurisprudencial. Que una la cite NO es que la reitere ni que la respete, y la lista es la de la relatoría (puede estar incompleta): hay que leer la providencia.
+- Un RADICADO judicial de 23 dígitos ("11001-03-28-000-2022-00132-00") → resolver_cita: lo descompone y lo busca en las providencias tituladas del Consejo de Estado (SAMAI); la Corte Suprema no permite buscar por radicado. No da el estado del proceso.
+- En qué Diario Oficial se publicó una norma (tipo + número), o qué diarios salieron en unas fechas → buscar_diario_oficial. Da el número y la fecha del diario, no el texto ni las normas que trae.
 - El fallo de una sentencia, sin leerla entera → obtener_documento con fuente="corte" y seccion="decision": trae el RESUELVE. La T-099/24 pasa de 140.162 a 39.906 caracteres.
 - Jurisprudencia del CONSEJO DE ESTADO (contencioso administrativo: nulidad y restablecimiento, contratación estatal, nulidad electoral, reparación directa) → buscar_jurisprudencia_consejo_estado, y obtener_documento con fuente="consejo" y el token de esa búsqueda para el texto completo. Tercer tribunal distinto de los otros dos; cada resultado trae el problema jurídico y su respuesta. El token caduca en una hora: para CITAR usa el radicado, nunca el enlace con token.
 - Por qué una norma aplica a un tema → explicar_relacion_tema con el temsubid ("ts-…") y el normid de la MISMA fila de buscar_por_tema.
@@ -433,6 +449,8 @@ Reglas al responder:
 - Si una herramienta devuelve vacío, es que no se encontró; no completes con conocimiento propio.
 - Si resolver_cita responde que la cita es AMBIGUA, no escojas tú: el mismo número existe en varios años ("Decreto 1072" son cuatro decretos distintos). Pregunta el año o presenta los candidatos.
 - Un documento sin texto NO es un documento que no diga nada. Si la respuesta avisa de que es un escaneo o de que el portal no publicó el texto, dilo así y remite al enlace; no concluyas nada sobre su contenido.
+- La cita judicial viene ya compuesta ("Cita oficial: …") en sentencias (resolver_cita) y normas (obtener_documento con fuente="gestor"): úsala tal cual. Lo que dice "no consta" (entidad expedidora, Diario Oficial, día del fallo) NO lo completes por tu cuenta.
+- Una norma puede haberse sancionado sin regir todavía o regir por tramos: si la cabecera dice "AÚN NO RIGE" o "Vigencia según su propio artículo de vigencia", dilo antes de aplicarla.
 - Nunca inventes números de norma, artículos ni sentencias. Si no aparecen en una respuesta, no existen para efectos de esta conversación.
 - Los ids temáticos vienen con prefijo y no son intercambiables: "ts-" de buscar_por_tema (va en explicar_relacion_tema), "sub-" de listar_catalogos con catalogo="subtemas" (va en buscar_normas) y "tema-" de listar_catalogos. Pégalos tal cual, con el prefijo: son tres numeraciones distintas del portal que reutilizan los mismos números.
 
@@ -442,6 +460,7 @@ Herramientas V2:
 - Comparar dos normas o dos artículos → analizar_conflicto (reúne EVIDENCIA; no concluye) y comparar_articulos (diferencia por patrones; lo no clasificado se revisa a mano).
 - Resumir qué le pasó a normas listadas desde una fecha → cambios_desde. NO descubre normas nuevas: solo lee lo que el Gestor anota.
 - Consultar por sector preconfigurado → consultar_perfil (laboral, tributario, ambiental, contratación, energía); cada perfil declara su advertencia.
+- Encadenar resultados sin releer texto → formato="json" en buscar_unificado, analizar_conflicto, historial_norma y resolver_cita (con validar=true): devuelve el objeto de datos, sin pie. Los resultados de buscar_unificado traen "Para leer", la llamada ya armada a obtener_documento.
 - Expedientes temporales (EXPEDIENTES=1): expediente con accion="crear|agregar|leer". Son memoria de sesión con expiración, no almacenamiento.
 - Una consulta ambigua → el prompt aclarar-consulta hace las preguntas precisas antes de buscar.
 
@@ -548,17 +567,24 @@ server.registerTool(
             'validada" o "no fue posible validar". NUNCA afirma vigencia.',
         ),
       url: z.string().optional().describe('Enlace a comprobar (solo con validar=true)'),
+      formato: z
+        .enum(['markdown', 'json'])
+        .optional()
+        .describe(
+          'Solo con validar=true: "json" devuelve el resultado como objeto (fecha_consulta, y por cita: resultado, ' +
+            'comprobaciones, titulo, url, nota), sin cabecera ni pie, para encadenarlo sin releer texto.',
+        ),
     },
   },
-  async ({ cita, citas, articulos, contexto, validar, url }) => {
+  async ({ cita, citas, articulos, contexto, validar, url, formato }) => {
     if (validar) {
-      return txt(
-        await validarCita.escribir({
-          ...(cita !== undefined ? { cita } : {}),
-          ...(citas !== undefined ? { citas } : {}),
-          ...(url !== undefined ? { url } : {}),
-        }),
-      )
+      const datos = await validarCita.escribir({
+        ...(cita !== undefined ? { cita } : {}),
+        ...(citas !== undefined ? { citas } : {}),
+        ...(url !== undefined ? { url } : {}),
+        ...(formato !== undefined ? { formato } : {}),
+      })
+      return formato === 'json' ? { content: [{ type: 'text' as const, text: datos }] } : txt(datos)
     }
     // Lote sin validación: cada cita se resuelve por la misma vía que una
     // cita individual, con su bloque propio. Un fallo de red de una cita se
@@ -946,11 +972,14 @@ server.registerTool(
       desde: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional().describe('Fecha inicial AAAA-MM-DD (por defecto 1992-01-01)'),
       hasta: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional().describe('Fecha final AAAA-MM-DD'),
       tipos: z
-        .array(z.enum(['C', 'T', 'SU', 'A']))
+        .preprocess(
+          (v) => (Array.isArray(v) ? v.map(corte.normalizarTipo) : v),
+          z.array(z.enum(['C', 'T', 'SU', 'A'])),
+        )
         .optional()
         .describe(
           'Tipos a incluir; por defecto C, T y SU (doctrina). Los autos (A) son mayoría por volumen y suelen ser ' +
-            'trámite: pídelos explícitamente.',
+            'trámite: pídelos explícitamente. Se aceptan sus nombres: "tutela", "constitucionalidad", "unificacion", "auto".',
         ),
       limite: z.coerce.number().int().min(1).max(100).default(10).describe('Cuántas providencias mostrar (hasta 100)'),
     },
@@ -1733,6 +1762,8 @@ const CLAVES_FUENTES = [
   'consejo-de-estado',
   'dian',
   'suin',
+  'senado',
+  'diario',
   'creg',
   'anh',
   'upme',
@@ -1777,6 +1808,14 @@ server.registerTool(
       ['dian', `- DIAN — normograma tributario, aduanero y cambiario. Ninguna otra herramienta cubre esa materia.`],
       ['suin', `- SUIN-Juriscol (MinJusticia) — corpus histórico desde 1844 y, sobre todo, la ÚNICA fuente que publica el ` +
         `estado de vigencia como dato.`],
+      ['senado', `- Secretaría del Senado — solo el CÓDIGO CIVIL (Ley 84 de 1873), artículo por artículo, porque el Gestor no lo ` +
+        `publica y SUIN no sirve su texto. Solo HTTP sin cifrar: el texto no se puede autenticar en tránsito. Trae los ` +
+        `apartes tachados (inexequibles o derogados) marcados con ~~ ~~, y NO reproduce las notas de vigencia y ` +
+        `jurisprudencia del portal (son de su editor): remite al enlace.`],
+      ['diario', `- Diario Oficial (Imprenta Nacional) — la consulta pública de diarios publicados: en qué diario (número, edición, ` +
+        `fecha) salió una norma, dado su tipo y número, o qué diarios salieron en unas fechas. Cubre normas de la misma ` +
+        `semana que el Gestor aún no cataloga. NO da el texto (el PDF del diario es de sesión, pesa hasta 15 MB y no es ` +
+        `citable), NO sabe qué normas trae cada diario y NO filtra por entidad. Un vacío no prueba que no se haya publicado.`],
       ['creg', `- CREG — resoluciones de energía y gas. La única fuente sectorial cuyo TEXTO se puede leer aquí, y la única ` +
         `que separa las no derogadas de las derogadas en compilaciones distintas.`],
       ['anh', `- ANH — 785 actos de hidrocarburos (contratos, regalías, fiscalización). Solo PDF: epígrafe y enlace.`],
@@ -1841,15 +1880,14 @@ server.registerTool(
         `una norma de 2021 en adelante no traiga estado NO significa que esté derogada ni vigente: no consta.\n` +
         `- El TEXTO de los documentos de SUIN: su visor lo pide a una dirección privada del Ministerio y se queda en ` +
         `blanco. Se da la ficha y el estado; el articulado, del Gestor o del Diario Oficial.\n` +
-        `- El TEXTO del ${codigosAusentes().map((c) => `${c.nombre.toUpperCase()} (${refCodigo(c)})`).join(' y ')}: el ` +
-        `Gestor no lo publica (por nombre, por su norma y por número+año salen vacías) y de SUIN solo se lee su ficha. ` +
-        `Con él quedan fuera la acción reivindicatoria, la responsabilidad civil contractual y extracontractual, la ` +
-        `filiación, el divorcio y la prescripción ordinaria. ` +
-        `El resto de códigos SÍ están y se citan por su nombre: Comercio, Sustantivo del Trabajo, Procesal del ` +
-        `Trabajo, Penal, Procedimiento Penal, General del Proceso, CPACA, Infancia y Adolescencia y Estatuto Tributario.\n` +
+        `- Los códigos se citan por su nombre (Comercio, Sustantivo del Trabajo, Procesal del Trabajo, Penal, ` +
+        `Procedimiento Penal, General del Proceso, CPACA, Infancia y Adolescencia, Estatuto Tributario) y salen del ` +
+        `Gestor. El CÓDIGO CIVIL (${refCodigo(CODIGOS.find((c) => c.senado)!)}) no está allí: se lee artículo por artículo de la ` +
+        `Secretaría del Senado, que solo sirve HTTP sin cifrar y cuyas notas de vigencia y jurisprudencia de cada ` +
+        `artículo NO se reproducen (están en el enlace). Con esa fuente apagada (FUENTES) o caída, el Civil no se puede leer.\n` +
         `- Las leyes que MODIFICAN un código se leen a través de la ley modificatoria: el artículo devuelve su ` +
-        `encabezado y el texto que sustituye, pero el cuerpo normativo modificado hay que leerlo aparte (y si es el ` +
-        `Código Civil, no está aquí).\n` +
+        `encabezado y el texto que sustituye; el cuerpo del código modificado, con su propia cita ("art. N del Código ` +
+        `Civil", "art. N del Código de Comercio").\n` +
         `- La normativa departamental y municipal, salvo la que el Gestor recoja por su cuenta.\n` +
         `- Los tribunales y juzgados distintos de las tres altas cortes.\n` +
         `- EL RESTO DE LA REGULACIÓN SECTORIAL. Con herramienta propia hay cuatro reguladores —CREG, ANH, UPME y ` +
@@ -1887,7 +1925,12 @@ const registrarHerramienta = (nombre: string, m: HerramientaV2) =>
   server.registerTool(
     nombre,
     { title: m.TITULO, description: m.DESCRIPCION, inputSchema: m.schema },
-    (async (p: never) => txt(await m.escribir(p))) as never,
+    // Con `formato: "json"` la respuesta es SOLO el JSON: el pie de fecha y descargo lo rompería, así
+    // que ese modo lleva dentro `fecha_consulta`, `alcance` y `avisos` (lo escribe cada herramienta).
+    (async (p: { formato?: string }) =>
+      p?.formato === 'json'
+        ? { content: [{ type: 'text' as const, text: await m.escribir(p) }] }
+        : txt(await m.escribir(p))) as never,
   )
 
 registrarHerramienta('consultar_por_jerarquia', consultarJerarquia as never)
@@ -1898,6 +1941,8 @@ registrarHerramienta('consultar_perfil', consultarPerfil as never)
 registrarHerramienta('consultar_vigencia', consultarVigencia as never)
 registrarHerramienta('historial_norma', historialNorma as never)
 registrarHerramienta('buscar_unificado', buscarUnificado as never)
+registrarHerramienta('linea_jurisprudencial', lineaJurisprudencial as never)
+registrarHerramienta('buscar_diario_oficial', buscarDiarioOficial as never)
 registrarHerramienta('obtener_documento', obtenerDocumento as never)
 registrarHerramienta('expediente', expedientes as never)
 

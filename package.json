@@ -8,7 +8,7 @@
     "build": "node scripts/construir.ts",
     "generar-indice": "node scripts/generar-indice.ts",
     "generar-indice-suin": "node scripts/generar-indice-suin.ts",
-    "test": "node --test test/smoke.ts test/indice-alternativas.ts test/entidades.ts test/jerarquia.ts test/compiladas.ts test/evidencia.ts test/sectorial-sdk.ts test/diff.ts test/expediente.ts test/perfiles.ts test/consultar_jerarquia.ts test/analizar_conflicto.ts test/cambios_desde.ts test/validar_cita.ts test/comparar_articulos.ts test/expedientes-herramientas.ts test/consultar_perfil.ts test/buscar_unificado.ts test/historial_norma.ts test/busqueda-por-palabras.ts test/lote-citas.ts test/sic-sede.ts test/codigos.ts test/articulo-sustitucion.ts test/fuentes.ts test/suin-vigencia-decretos.ts",
+    "test": "node --test test/smoke.ts test/indice-alternativas.ts test/entidades.ts test/jerarquia.ts test/compiladas.ts test/evidencia.ts test/sectorial-sdk.ts test/diff.ts test/expediente.ts test/perfiles.ts test/consultar_jerarquia.ts test/analizar_conflicto.ts test/cambios_desde.ts test/validar_cita.ts test/comparar_articulos.ts test/expedientes-herramientas.ts test/consultar_perfil.ts test/buscar_unificado.ts test/historial_norma.ts test/busqueda-por-palabras.ts test/lote-citas.ts test/sic-sede.ts test/codigos.ts test/articulo-sustitucion.ts test/fuentes.ts test/suin-vigencia-decretos.ts test/senado.ts test/radicado.ts test/resolver_radicado.ts test/cita_oficial.ts test/vacancia.ts test/cache-disco.ts test/linea_jurisprudencial.ts test/diario_oficial.ts test/salud.ts test/tipos-corte.ts",
     "pack": "npm run build && npx @anthropic-ai/mcpb pack . normativa-colombia.mcpb",
     "medir": "npm run build && node scripts/medir.ts",
     "typecheck": "tsc --noEmit",
@@ -20,7 +20,8 @@
     "test:llm": "npm run build && node --test --test-force-exit \"test/red-llm*.ts\"",
     "verificar": "node scripts/verificar.ts",
     "barrido-terminos": "npm run build && node scripts/barrido-terminos.ts",
-    "prepublishOnly": "npm run check && npm run build"
+    "prepublishOnly": "npm run check && npm run build",
+    "salud": "node scripts/salud.ts"
   },
   "devDependencies": {
     "@modelcontextprotocol/sdk": "^1.12.0",
