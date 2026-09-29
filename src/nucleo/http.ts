@@ -431,7 +431,7 @@ function esperaSugerida(cabecera: string): number {
 
 const ESPERA_MAXIMA_MS = 30_000
 
-export async function pedir(
+async function pedirUna(
   url: string,
   timeout = 60_000,
   accept = 'text/html,*/*',
@@ -571,6 +571,45 @@ export async function pedir(
  * suelto se salta el ritmo por dominio, los reintentos y la cadena de
  * certificados que este módulo aporta.
  */
+/**
+ * Peticiones idénticas en vuelo: una sola sirve a todos los que la esperan.
+ *
+ * Un cliente que lanza dos llamadas a herramientas en paralelo sobre la misma
+ * norma hacía que las dos miraran la copia —vacía, porque la primera aún no ha
+ * vuelto— y se pusieran en cola detrás una de otra: el portal recibía la misma
+ * descarga completa dos veces, la segunda un segundo más tarde por el ritmo del
+ * host. Medido contra un servidor local: dos GET simultáneos a la misma URL = 2
+ * golpes; tres = 3 golpes y 3 s. Con la fusión, 1 golpe.
+ *
+ * La clave es la llamada ENTERA (url, timeout, accept, cabeceras y opciones), no
+ * solo la URL: dos llamadores con timeouts o con `degradarDesdeCopia` distintos
+ * no piden lo mismo. Los POST no se fusionan, porque pueden cambiar algo al otro
+ * lado. La entrada se borra al terminar, con éxito o con error, así que un fallo
+ * no se queda pegado: la siguiente llamada vuelve a intentarlo.
+ *
+ * ponytail: solo GET de `pedir`; `pedirBytes` (los PDF) baja aparte y no se
+ * fusiona. Si algún día se conecta `conPresupuesto`, la clave tiene que incluir
+ * el techo del llamador: hoy nadie lo establece y no puede heredarse el de otro.
+ */
+const enVuelo = new Map<string, Promise<Respuesta>>()
+
+export function pedir(
+  url: string,
+  timeout = 60_000,
+  accept = 'text/html,*/*',
+  extra: Record<string, string> = {},
+  cuerpo?: string,
+  opciones: OpcionesPedir = {},
+): Promise<Respuesta> {
+  if (cuerpo !== undefined) return pedirUna(url, timeout, accept, extra, cuerpo, opciones)
+  const clave = JSON.stringify([url, timeout, accept, extra, opciones])
+  const enCurso = enVuelo.get(clave)
+  if (enCurso) return enCurso
+  const p = pedirUna(url, timeout, accept, extra, cuerpo, opciones).finally(() => enVuelo.delete(clave))
+  enVuelo.set(clave, p)
+  return p
+}
+
 export async function pedirBytes(
   url: string,
   timeout = 90_000,
