@@ -10,7 +10,6 @@ import { CODIGOS, codigoDe, referencia as refCodigo } from './nucleo/codigos.ts'
 import { cargarIndice, temaDelIndice, frescura } from './nucleo/indice.ts'
 import { normalizarEntidad, NO_EN_GESTOR } from './nucleo/entidades.ts'
 import { esCompiladora } from './nucleo/compiladas.ts'
-import { conAlternativas } from './nucleo/alternativas.ts'
 import { validarUrl } from './nucleo/evidencia.ts'
 import { advertenciaSnapshot } from './nucleo/snapshot.ts'
 import { vacio as vacioTexto } from './nucleo/vacio.ts'
@@ -30,6 +29,10 @@ import * as buscarNormativaAnh from './herramientas/buscar_normativa_anh.ts'
 import * as buscarNormativaUpme from './herramientas/buscar_normativa_upme.ts'
 import * as buscarResolucionesCreg from './herramientas/buscar_resoluciones_creg.ts'
 import * as listarNormativaAmbientalAnla from './herramientas/listar_normativa_ambiental_anla.ts'
+import * as buscarJurisprudencia from './herramientas/buscar_jurisprudencia.ts'
+import * as buscarNormativaTributaria from './herramientas/buscar_normativa_tributaria.ts'
+import * as buscarJurisprudenciaSuprema from './herramientas/buscar_jurisprudencia_suprema.ts'
+import * as buscarEnSuin from './herramientas/buscar_en_suin.ts'
 import { resolverCodigo } from './herramientas/codigo_senado.ts'
 import { resolverRadicado } from './herramientas/resolver_radicado.ts'
 import * as obtenerDocumento from './herramientas/obtener_documento.ts'
@@ -44,8 +47,6 @@ import { avisoVersion } from './nucleo/actualizacion.ts'
 import * as gestor from './fuentes/gestor.ts'
 import * as corte from './fuentes/jurisprudencia/corte.ts'
 import * as suin from './fuentes/suin.ts'
-import * as dian from './fuentes/normograma.ts'
-import * as suprema from './fuentes/jurisprudencia/cortesuprema.ts'
 import * as consejo from './fuentes/jurisprudencia/consejoestado.ts'
 import * as sectorial from './fuentes/sectorial.ts'
 import './fuentes/sectorial/registro.ts'
@@ -964,241 +965,11 @@ server.registerTool(
   },
 )
 
-server.registerTool(
-  'buscar_jurisprudencia',
-  {
-    title: 'Buscar jurisprudencia de la Corte Constitucional',
-    description:
-      'Sentencias y autos de la relatoría de la Corte Constitucional (44.839 providencias, con fallos de 2026 ' +
-      'publicados el mismo año). Es la vía para jurisprudencia constitucional: el Gestor tiene muy poca. ' +
-      'Devuelve sentencia, tipo, fecha, síntesis y la ruta para obtener_documento con fuente="corte". La ' +
-      'relatoría no indexa frases largas: con varias palabras se reintenta con la más distintiva y la respuesta ' +
-      'lo anuncia ("se buscó con el núcleo «X»"). Es la CORTE CONSTITUCIONAL, no la Suprema ni el Consejo de ' +
-      'Estado: para esos, usa su buscador propio.',
-    inputSchema: {
-      termino: z.string().describe('Obligatorio. Términos a buscar en la relatoría, ej. "teletrabajo"'),
-      desde: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional().describe('Fecha inicial AAAA-MM-DD (por defecto 1992-01-01)'),
-      hasta: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional().describe('Fecha final AAAA-MM-DD'),
-      tipos: z
-        .preprocess(
-          (v) => (Array.isArray(v) ? v.map(corte.normalizarTipo) : v),
-          z.array(z.enum(['C', 'T', 'SU', 'A'])),
-        )
-        .optional()
-        .describe(
-          'Tipos a incluir; por defecto C, T y SU (doctrina). Los autos (A) son mayoría por volumen y suelen ser ' +
-            'trámite: pídelos explícitamente. Se aceptan sus nombres: "tutela", "constitucionalidad", "unificacion", "auto".',
-        ),
-      limite: z.coerce.number().int().min(1).max(100).default(10).describe('Cuántas providencias mostrar (hasta 100)'),
-    },
-  },
-  async ({ termino, desde, hasta, tipos, limite }) => {
-    const porDefecto: ('C' | 'T' | 'SU')[] = ['C', 'T', 'SU']
-    // Idea 5 — si el término rinde poco, se prueba sin tildes y con sinónimo,
-    // y la variante usada se anuncia en la respuesta.
-    const { items, variantesUsadas, resultado } = await conAlternativas(
-      (t) => corte.buscar({ termino: t, desde, hasta, tipos: tipos ?? porDefecto, limite }),
-      termino,
-      1,
-      (r) => r.items,
-    )
-    // La relatoría no indexa frases largas: si la consulta extensa no rindió,
-    // el núcleo devuelve resultados reales. Se anuncia como el resto de variantes.
-    const nucleo = resultado?.nucleo
-    const r = { items, total: items.length, nota: undefined }
-    const avisoAlternativa = variantesUsadas.length
-      ? `La búsqueda exacta de "${termino}" no rindió resultados; se usó «${variantesUsadas[0]}». ` +
-        `Verifica que sea lo que buscabas.\n\n`
-      : nucleo && nucleo !== termino
-        ? `La relatoría no indexa la frase completa; se buscó con el núcleo «${nucleo}». Verifica que sea lo que buscabas.\n\n`
-        : ''
-    if (!r.items.length) {
-      return vacio(
-        `providencias sobre "${termino}"`,
-        'Prueba un término más general o revisa el rango de fechas.',
-        alcance([{ clave: 'corte', detalle: '0 providencias' }]),
-      )
-    }
-    // La pertinencia se mide contra lo que REALMENTE se buscó: si la relatoría
-    // no indexó la frase y se usó el núcleo, es el núcleo el que debe aparecer
-    // en tema/síntesis, no la frase completa (que nadie buscó como tal).
-    const aguja = sinTildes(nucleo ?? termino).toLowerCase()
-    const menciona = (p: (typeof r.items)[number]) =>
-      sinTildes(`${p.tema} ${p.sintesis} ${p.sentencia}`).toLowerCase().includes(aguja)
-    const flojas = r.items.filter((p) => !menciona(p)).map((p) => p.sentencia)
-    const lista = r.items
-      .map(
-        (p) =>
-          `- ${p.sentencia} (${p.tipo}, ${p.fecha})${menciona(p) ? '' : '  ⚠ no menciona el término'}\n  ${p.tema || '(sin tema)'}\n` +
-          (p.sintesis ? `  Síntesis: ${p.sintesis.slice(0, 300)}${p.sintesis.length > 300 ? '…' : ''}\n` : '') +
-          `  ruta: ${p.ruta}\n  ${p.url}`,
-      )
-      .join('\n')
-    // La causa que se sugiere tiene que corresponder a lo que realmente se pidió:
-    // culpar al filtro de fechas cuando no se envió ninguno manda a quien
-    // consulta a quitar algo que no puso.
-    const porFechas = Boolean(desde || hasta)
-    const aviso = flojas.length
-      ? `\n\nAtención: ${flojas.join(', ')} no mencionan "${nucleo ?? termino}" en su tema ni en su síntesis. ` +
-        (porFechas
-          ? `El buscador de la relatoría pierde precisión al acotar por fechas: prueba sin desde/hasta.`
-          : `El buscador de la relatoría indexa el texto completo, así que devuelve providencias donde el término ` +
-            `aparece de pasada. Prueba un término más específico${tipos?.length === 1 && tipos[0] === 'A' ? ', o sin restringir a autos, que suelen ser de trámite' : ''}.`)
-      : ''
-    return txt(
-      `${alcance([{ clave: 'corte', detalle: `${r.items.length} providencia(s)` }])}\n\n` +
-        `${avisoAlternativa}${r.total} providencia(s) coinciden; se muestran ${r.items.length}.\n\n${lista}${aviso}\n\n` +
-        `Para el texto completo usa obtener_documento con fuente="corte" y la ruta.`,
-    )
-  },
-)
+registrarHerramienta('buscar_jurisprudencia', buscarJurisprudencia)
 
-server.registerTool(
-  'buscar_normativa_tributaria',
-  {
-    title: 'Buscar normativa tributaria, aduanera y cambiaria (DIAN)',
-    description:
-      'Normograma de la DIAN: decretos, resoluciones, conceptos y circulares en materia tributaria, aduanera y ' +
-      'cambiaria, que ninguna otra herramienta cubre. Devuelve el extracto y el enlace; para leer el documento ' +
-      'usa obtener_documento con fuente="dian". ' +
-      'AVISO: la primera búsqueda de cada término tarda ~20 s (el portal devuelve el resultado completo y no ' +
-      'admite tope), pero las páginas siguientes del MISMO término son instantáneas: pagina con desde en vez de ' +
-      'lanzar búsquedas nuevas.',
-    inputSchema: {
-      texto: z.string().describe('Términos a buscar, ej. "retención en la fuente", "declaración de importación"'),
-      desde: z.coerce.number().int().min(0).default(0).describe('Cuántos saltarse antes de empezar'),
-      limite: z.coerce.number().int().min(1).max(50).default(15),
-    },
-  },
-  async ({ texto, desde, limite }) => {
-    const r = await dian.buscar(texto, limite, desde)
-    if (!r.total) {
-      return vacio(`normativa de la DIAN sobre "${texto}"`, 'Prueba con menos palabras o con el término técnico exacto.')
-    }
-    const items = r.items
-    if (!items.length) return vacio(`resultados a partir de la posición ${desde}`, `La búsqueda reúne ${r.total}; pide un "desde" menor.`)
-    const fin = desde + items.length
-    const cacheNota = r.obsoleta
-      ? '\n(red caída: se sirvió la caché vencida de esta búsqueda, rotulada como obsoleta)'
-      : r.caducada
-        ? '\n(la caché de este término había vencido y se refrescó)'
-        : r.deCache
-          ? '\n(de caché, dentro de los últimos 30 minutos)'
-          : ''
-    return txt(
-      `${alcance([{ clave: 'dian', detalle: `${r.total} documento(s)` }])}\n\n` +
-        `${r.total} documento(s) en el normograma de la DIAN; se muestran ${desde + 1}–${fin}.${cacheNota}\n\n` +
-        items
-          .map(
-            (d) =>
-              `- ${d.nombre}${d.tipo ? ` (${d.tipo}${d.anio ? `, ${d.anio}` : ''})` : ''}\n` +
-              `  ${d.epigrafe || '(sin epígrafe)'}\n` +
-              (d.entidad ? `  Entidad: ${d.entidad}\n` : '') +
-              (d.extracto ? `  «…${d.extracto.slice(0, 240)}…»\n` : '') +
-              `  link para obtener_documento con fuente="dian": ${d.link}`,
-          )
-          .join('\n') +
-        (fin < r.total ? `\n\nQuedan ${r.total - fin}: repite con desde=${fin}.` : ''),
-    )
-  },
-)
+registrarHerramienta('buscar_normativa_tributaria', buscarNormativaTributaria)
 
-server.registerTool(
-  'buscar_jurisprudencia_suprema',
-  {
-    title: 'Buscar jurisprudencia de la Corte Suprema de Justicia',
-    description:
-      'Providencias de la Corte Suprema por sala: Tutelas, Civil, Laboral o Penal, desde 1991. Complementa a ' +
-      'buscar_jurisprudencia, que es de la Corte CONSTITUCIONAL: son tribunales distintos. Cada resultado trae ' +
-      'las NORMAS QUE CITA (resolubles con resolver_cita) y una RUTA con la que obtener_documento con ' +
-      'fuente="suprema" devuelve el texto. ' +
-      'CÓMO BUSCA: sobre el texto completo y sin descartar palabras comunes, así que "de" devuelve 69.454 ' +
-      'resultados; por eso busca la FRASE EXACTA por defecto. Usa términos distintivos.',
-    inputSchema: {
-      texto: z.string().describe('Términos a buscar, ej. "despido sin justa causa"'),
-      sala: z.enum(suprema.SALAS).default('Tutelas').describe('Sala de la Corte. Obligatoria: sin ella el buscador no responde.'),
-      anio: z.string().regex(/^\d{4}$/).optional().describe('Año de cuatro dígitos'),
-      magistrado: z.string().optional().describe('Nombre del magistrado ponente'),
-      exacto: z
-        .boolean()
-        .default(true)
-        .describe(
-          'Frase exacta (activado). Con false el buscador une con OR: "despido sin justa causa" pasa de 20.233 a ' +
-            '176.012 providencias y en la sala Penal es inservible. Ponlo en false solo para ampliar a propósito.',
-        ),
-      desde: z.coerce.number().int().min(0).default(0).describe('Cuántas saltarse antes de empezar'),
-      limite: z.coerce
-        .number()
-        .int()
-        .min(1)
-        .max(10)
-        .default(10)
-        .describe('Cuántas mostrar. El buscador entrega páginas de 10 como máximo; para ver más, usa desde.'),
-    },
-  },
-  async ({ texto, sala, anio, magistrado, exacto, desde, limite }) => {
-    let r = await suprema.buscar({ texto, sala, anio, magistrado, exacto, desde, limite })
-
-    // Escalera de precisión: la frase exacta primero y, solo si no devuelve
-    // nada, se amplía a OR — y se dice que se amplió. Sin esto, poner exacto
-    // por defecto convierte "no existe esa frase" en "no hay nada sobre esto",
-    // que son cosas distintas y la segunda es falsa.
-    let ampliada = false
-    if (!r.items.length && exacto && texto.trim().split(/\s+/).length > 1) {
-      r = await suprema.buscar({ texto, sala, anio, magistrado, exacto: false, desde, limite })
-      ampliada = r.items.length > 0
-    }
-
-    if (!r.items.length) {
-      return vacio(
-        `providencias de la sala ${sala} sobre "${texto}"`,
-        (exacto ? 'Se buscó la frase exacta y también, al no haber nada, uniendo las palabras con OR. ' : '') +
-          'Prueba otra sala (Tutelas, Civil, Laboral, Penal), un término más general o quita el año.',
-      )
-    }
-    const fin = desde + r.items.length
-    // El backend cuenta con OR entre las palabras sueltas, así que su total se
-    // acerca al tamaño del corpus de la sala, no a los resultados pertinentes.
-    // Darlo como "coinciden" hace creer que hay una precisión que no existe.
-    const recuento = r.exacto
-      ? `${r.total} providencia(s) contienen la frase exacta`
-      : `~${r.total} providencia(s) con alguna de las palabras (el buscador las une con OR, así que este número ` +
-        `NO mide pertinencia; repite con exacto=true para contar la frase)`
-    // El índice repite el mismo fallo por cada archivo (.docx, .pdf, grafías
-    // distintas del ponente). Callarlo haría creer que "quedan N" son N
-    // documentos nuevos, cuando buena parte son copias.
-    const repetidas =
-      r.brutos > r.items.length
-        ? `\n\nEsta página del buscador traía ${r.brutos} entradas y solo ${r.items.length} providencia(s) distintas: ` +
-          `su índice guarda una entrada por ARCHIVO (.docx y .pdf, y a veces el ponente escrito de dos formas). ` +
-          `Por eso avanzar con desde rinde menos documentos nuevos de lo que sugiere el total.`
-        : ''
-    // Una búsqueda ampliada no puede presentarse como si fuera la que se pidió.
-    const aviso = ampliada
-      ? `AVISO: la frase exacta "${texto}" no aparece en ninguna providencia de esta sala. Lo que sigue es una ` +
-        `búsqueda AMPLIADA, con las palabras unidas por OR, así que puede incluir providencias que solo comparten ` +
-        `alguna palabra suelta. Verifica la pertinencia de cada una antes de citarla.\n\n`
-      : ''
-    return txt(
-      `${alcance([{ clave: 'suprema', detalle: `${r.items.length} providencia(s)` }])}\n\n` +
-        `${aviso}${recuento}, sala ${sala}; se muestran ${desde + 1}–${fin}.${repetidas}\n\n` +
-        r.items
-          .map(
-            (p) =>
-              `- ${p.titulo} (${p.clase || 'providencia'}, ${p.fecha})\n` +
-              (p.magistrado ? `  Ponente: ${p.magistrado}\n` : '') +
-              (p.normasCitadas.length
-                ? `  Normas citadas (resolubles con resolver_cita): ${p.normasCitadas.slice(0, 8).join(' · ')}` +
-                  (p.normasCitadas.length > 8 ? ` … y ${p.normasCitadas.length - 8} más` : '') +
-                  '\n'
-                : '  (no declara normas citadas)\n') +
-              `  Texto completo: obtener_documento con fuente="suprema" y sala="${sala}" y ruta="${p.ruta}"`,
-          )
-          .join('\n') +
-        (fin < r.total ? `\n\nQuedan ${r.total - fin}: repite con desde=${fin}.` : ''),
-    )
-  },
-)
+registrarHerramienta('buscar_jurisprudencia_suprema', buscarJurisprudenciaSuprema)
 
 server.registerTool(
   'buscar_jurisprudencia_consejo_estado',
@@ -1307,75 +1078,7 @@ server.registerTool(
   },
 )
 
-server.registerTool(
-  'buscar_en_suin',
-  {
-    title: 'Buscar en SUIN-Juriscol',
-    description:
-      'Busca en los 56.832 documentos de SUIN-Juriscol (MinJusticia) por título, epígrafe, materia o entidad ' +
-      'emisora: leyes, decretos y resoluciones desde 1844, incluidos documentos que el Gestor Normativo no tiene. ' +
-      'NO busca dentro del articulado ni sirve para citas exactas ("LEY 909 DE 2004" no devuelve nada): para una ' +
-      'cita usa resolver_cita. El campo de vigencia que devuelve es el del BUSCADOR y NO es fiable: contradice la ' +
-      'ficha del propio documento; para el estado real usa resolver_cita. ' +
-      'SU ÍNDICE TIENE HUECOS: "Teletrabajo" devuelve cero pese a estar en el título de la Ley 1221 de 2008, y ' +
-      'una frase larga empareja por palabras comunes. Ante un vacío, NO concluyas que no existe: prueba ' +
-      'buscar_por_tema.',
-    inputSchema: {
-      texto: z.string().describe('Palabras del título, epígrafe o materia. Ej.: "servicio militar", "Buenaventura"'),
-      vigencia: z
-        .enum(['Vigente', 'Vigencia en Estudio', 'Compilado', 'Derogado', 'No vigente', 'Declarado Inexequible', 'Sustituido'])
-        .optional()
-        .describe('Filtra por el estado que declara el BUSCADOR, que no siempre coincide con la ficha'),
-      sector: z.string().optional().describe('Sector administrativo, ej. "Hacienda y Crédito Público"'),
-      desde: z.coerce.number().int().min(0).default(0).describe('Cuántos saltarse antes de empezar'),
-      limite: z.coerce.number().int().min(1).max(50).default(15),
-    },
-  },
-  async ({ texto, vigencia, sector, desde, limite }) => {
-    // Idea 5 — si la búsqueda rinde cero, se prueba el sinónimo del tesauro y
-    // se anuncia: el índice de SUIN tiene huecos conocidos ("Teletrabajo" da 0
-    // pese a existir la Ley 1221 de 2008), así que el vacío no es palabra final.
-    const { items, variantesUsadas } = await conAlternativas(
-      (t) => suin.buscar({ texto: t, vigencia, sector, desde, limite }).then((r) => r.items),
-      texto,
-      1,
-    )
-    const r = { items, total: items.length }
-    const avisoAlternativa = variantesUsadas.length
-      ? `La búsqueda de "${texto}" no rindió resultados; se usó «${variantesUsadas[0]}». Si no es lo que buscabas, ` +
-        `no concluyas que el documento no existe: el índice de SUIN tiene huecos.\n\n`
-      : ''
-    if (!r.total) {
-      return vacio(
-        `documentos en SUIN para "${texto}"`,
-        'El buscador de SUIN solo indexa título, epígrafe, materia y entidad: no busca dentro del articulado, y las ' +
-          'citas exactas no funcionan ahí. Para una norma concreta usa resolver_cita.',
-      )
-    }
-    if (!r.items.length) {
-      return vacio(`documentos a partir de la posición ${desde}`, `La búsqueda reúne ${r.total}; pide un "desde" menor.`)
-    }
-    const fin = desde + r.items.length
-    return txt(
-      `${alcance([{ clave: 'suin', detalle: `${r.total} documento(s)` }])}\n\n` +
-        `${avisoAlternativa}${r.total} documento(s) en SUIN-Juriscol; se muestran ${desde + 1}–${fin}.\n\n` +
-        r.items
-          .map(
-            (d) =>
-              `- ${d.titulo} (${d.subtipo})\n  ${d.epigrafe || '(sin epígrafe)'}\n` +
-              `  Vigencia SEGÚN EL BUSCADOR: ${d.vigencia || '(sin dato)'}\n  ${d.url}`,
-          )
-          .join('\n') +
-        (fin < r.total ? `\n\nQuedan ${r.total - fin}: repite con desde=${fin}.` : '') +
-        `\n\nATENCIÓN: la vigencia de esta lista es la del índice de búsqueda y contradice la ficha del documento ` +
-        `(la Ley 74 de 1923 figura aquí como "Vigencia en Estudio" y su ficha dice DEROGADO). Para el estado real ` +
-        `de una norma, pídela por su cita con resolver_cita. Ese camino tiene un tope, y este ejemplo lo enseña: ` +
-        `resolver_cita solo alcanza lo que estén el Gestor Normativo o el índice de leyes de SUIN, y la Ley 74 de ` +
-        `1923 no está en ninguno, así que responderá que no la encuentra. Cuando pase eso, el único estado fiable ` +
-        `es el de la ficha del documento, en el enlace de arriba.`,
-    )
-  },
-)
+registrarHerramienta('buscar_en_suin', buscarEnSuin)
 
 server.registerTool(
   'explicar_relacion_tema',
