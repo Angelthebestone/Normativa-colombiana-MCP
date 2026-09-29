@@ -60,16 +60,38 @@ export function numeroDeArticulo(v: unknown): unknown {
  * es lo que hace `conAviso` clonando el `_def` —el mismo truco que usa
  * internamente `.describe()` de zod— para no tener que repetirlo a mano en cada
  * uno de los campos obligatorios de las 28 herramientas.
+ *
+ * Lo mismo vale para el otro «Invalid» sin explicación: un valor que viola un
+ * `.regex()` —«04» donde va un año, «01/01/2020» donde va AAAA-MM-DD— se rechaza
+ * sin decir el valor ni qué se esperaba. Son 12 campos, y el mensaje sale igual
+ * de la descripción del campo.
  */
 function conAviso(campo: string, v: z.ZodTypeAny): z.ZodTypeAny {
-  if (v.isOptional()) return v
-  const aviso = `Falta "${campo}", que es obligatorio${v.description ? `: ${v.description.replace(/\.$/, '')}` : ''}.`
-  const mapa: z.ZodErrorMap = (issue, ctx) =>
-    issue.code === z.ZodIssueCode.invalid_type && issue.received === z.ZodParsedType.undefined
-      ? { message: aviso }
-      : { message: ctx.defaultError }
+  const sobre = v.description ? `: ${v.description.replace(/\.$/, '')}` : ''
+  const mapa: z.ZodErrorMap = (issue, ctx) => {
+    if (issue.code === z.ZodIssueCode.invalid_type && issue.received === z.ZodParsedType.undefined) {
+      return { message: `Falta "${campo}", que es obligatorio${sobre}.` }
+    }
+    if (issue.code === z.ZodIssueCode.invalid_string && issue.validation === 'regex') {
+      return { message: `Valor «${String(ctx.data)}» no válido para "${campo}"${sobre}.` }
+    }
+    return { message: ctx.defaultError }
+  }
+  return conMapa(v, mapa)
+}
+
+/**
+ * Pone el `errorMap` en el tipo que de verdad levanta el error: la HOJA. Un
+ * `.optional()`, un `.default()` o un `z.preprocess` solo envuelven al tipo
+ * real, y el mapa de un envoltorio no llega al esquema que valida por dentro
+ * (medido: el `required_error` puesto en el `ZodOptional` no se veía nunca).
+ */
+function conMapa(v: z.ZodTypeAny, mapa: z.ZodErrorMap): z.ZodTypeAny {
+  const def = v._def as { innerType?: z.ZodTypeAny; schema?: z.ZodTypeAny }
   const Tipo = v.constructor as new (def: unknown) => z.ZodTypeAny
-  return new Tipo({ ...v._def, errorMap: mapa })
+  if (def.innerType) return new Tipo({ ...def, innerType: conMapa(def.innerType, mapa) })
+  if (def.schema) return new Tipo({ ...def, schema: conMapa(def.schema, mapa) })
+  return new Tipo({ ...def, errorMap: mapa })
 }
 
 export function estricto<S extends z.ZodRawShape>(shape: S): z.ZodObject<S, 'strict'> {

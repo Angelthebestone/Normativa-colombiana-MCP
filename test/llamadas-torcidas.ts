@@ -165,6 +165,23 @@ export const TORCIDAS: Torcida[] = [
   { herramienta: 'linea_jurisprudencial', args: {}, porque: 'falta el obligatorio "sentencia"' },
   { herramienta: 'buscar_normativa_sectorial', args: { texto: 'x' }, porque: 'falta el obligatorio "entidad"' },
 
+  // --- formato que un `.regex()` rechaza ----------------------------------
+  // Añadidos en la iteración 12: el corpus original no ejercía ninguno de los 12
+  // campos con `.regex()`, y el mensaje de zod para todos ellos es «Invalid».
+  { herramienta: 'buscar_normas', args: { palabras: 'x', anio: '04' }, porque: 'año de dos dígitos' },
+  { herramienta: 'buscar_normas', args: { palabras: 'x', anio: 'dos mil cuatro' }, porque: 'año en letras' },
+  { herramienta: 'buscar_normas', args: { palabras: 'x', numero: 'N° 909' }, porque: 'número con rótulo' },
+  { herramienta: 'buscar_normas', args: { palabras: 'x', numero: '909-2004' }, porque: 'número y año juntos' },
+  { herramienta: 'buscar_normativa_anh', args: { desde: '01/01/2020' }, porque: 'fecha día/mes/año, ambigua' },
+  { herramienta: 'buscar_normativa_anh', args: { hasta: '2020-1-1' }, porque: 'fecha sin ceros' },
+  { herramienta: 'buscar_jurisprudencia', args: { termino: 'x', desde: 'enero de 2020' }, porque: 'fecha en letras' },
+  { herramienta: 'buscar_jurisprudencia', args: { termino: 'x', hasta: '2024' }, porque: 'fecha con solo el año' },
+  { herramienta: 'cambios_desde', args: { normas: ['Ley 909 de 2004'], desde: '2020' }, porque: 'obligatorio con solo el año' },
+  { herramienta: 'buscar_resoluciones_creg', args: { anio: '24' }, porque: 'año de dos dígitos' },
+  { herramienta: 'buscar_jurisprudencia_suprema', args: { texto: 'x', anio: '2024-2025' }, porque: 'rango donde va un año' },
+  { herramienta: 'explicar_relacion_tema', args: { temsubid: 'ts-38872', normid: 'abc' }, porque: 'id de norma no numérico' },
+  { herramienta: 'buscar_normativa_sectorial', args: { entidad: 'sic', anio: 'año 2020' }, porque: 'año con texto' },
+
   // --- booleanos como texto ------------------------------------------------
   { herramienta: 'resolver_cita', args: { cita: 'Ley 909 de 2004', contexto: 'false' }, porque: 'booleano como texto', correcta: { contexto: false } },
   { herramienta: 'buscar_jurisprudencia_suprema', args: { texto: 'x', exacto: 'true' }, porque: 'booleano como texto', correcta: { exacto: true } },
@@ -180,11 +197,16 @@ export type Clase = 'normaliza' | 'acepta-mal' | 'rechazo-util' | 'rechazo-tardi
  * llegó, o los valores que se aceptan. Un «Required» a secas no lo es.
  */
 function mensajeEnseña(error: z.ZodError, args: Record<string, unknown>): boolean {
-  const m = error.issues.map((i) => `${i.path.join('.')}: ${i.message}`).join(' | ')
+  // Solo el TEXTO del mensaje, sin la ruta del campo: la ruta siempre nombra el
+  // campo que falla, así que contarla hacía que un «Invalid» a secas pasara por
+  // mensaje que enseña con solo llamarse `anio: Invalid`.
+  const m = error.issues.map((i) => i.message).join(' | ')
   const valor = Object.values(args).some((v) => typeof v !== 'object' && m.includes(String(v)))
   // Nombrar el campo que sobra también enseña: es la mitad del arreglo.
   const campo = Object.keys(args).some((k) => m.includes(k))
-  const opciones = /options|expected|Expected|received|campos de esta herramienta/.test(m)
+  // Un rango («must be less than or equal to 50») enseña qué es válido aunque no
+  // repita el valor recibido; el «Invalid» de un regex no enseña nada.
+  const opciones = /options|expected|Expected|received|campos de esta herramienta|must be (greater|less) than/.test(m)
   // «Falta "x", que es obligatorio: <qué es>» enseña el nombre Y el sentido; el
   // «Required» a secas de zod no dice ni lo segundo.
   const falta = /Falta "[^"]+", que es obligatorio/.test(m)
