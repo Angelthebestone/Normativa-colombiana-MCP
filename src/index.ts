@@ -498,6 +498,13 @@ const server = new McpServer(
  * ponytail: sin muestreo ni niveles; una línea por llamada es despreciable
  * cuando cada llamada cuesta una petición de red. Si algún día molesta, se
  * apaga por variable de entorno, no se filtra por nivel.
+ *
+ * ponytail: los tres `as never` de aquí abajo se quedan y son deliberados.
+ * `registerTool` del SDK es genérico sobre el `inputSchema` e infiere de él el
+ * tipo del handler; este envoltorio es justamente el sitio donde el esquema aún
+ * no se conoce, así que la inferencia no tiene de dónde tirar. Son tres, en un
+ * único punto, y no crecen al añadir herramientas. El salto siguiente, si
+ * alguna vez compensa, es hacer genérica esta función sobre el shape de zod.
  */
 type Registrar = typeof server.registerTool
 const registrarOriginal = server.registerTool.bind(server) as Registrar
@@ -1415,10 +1422,10 @@ server.registerTool(
 // Las cuatro de este corte van registradas aquí, en el mismo orden en que
 // estaban en línea: `tools/list` se sirve en orden de registro y cambiarlo
 // cambiaría su respuesta byte a byte.
-registrarHerramienta('buscar_normativa_anh', buscarNormativaAnh as never)
-registrarHerramienta('buscar_normativa_upme', buscarNormativaUpme as never)
-registrarHerramienta('buscar_resoluciones_creg', buscarResolucionesCreg as never)
-registrarHerramienta('listar_normativa_ambiental_anla', listarNormativaAmbientalAnla as never)
+registrarHerramienta('buscar_normativa_anh', buscarNormativaAnh)
+registrarHerramienta('buscar_normativa_upme', buscarNormativaUpme)
+registrarHerramienta('buscar_resoluciones_creg', buscarResolucionesCreg)
+registrarHerramienta('listar_normativa_ambiental_anla', listarNormativaAmbientalAnla)
 
 // --- reguladores sectoriales --------------------------------------------
 
@@ -1709,6 +1716,10 @@ function registrarHerramienta(nombre: string, m: HerramientaV2) {
     { title: m.TITULO, description: m.DESCRIPCION, inputSchema: m.schema },
     // Con `formato: "json"` la respuesta es SOLO el JSON: el pie de fecha y descargo lo rompería, así
     // que ese modo lleva dentro `fecha_consulta`, `alcance` y `avisos` (lo escribe cada herramienta).
+    //
+    // ponytail: el `as never` del final es el mismo caso que en el gancho de arriba —`registerTool`
+    // infiere el handler del `inputSchema`, y aquí el shape llega en una variable—. Es UNO, no uno
+    // por herramienta: las 16 llamadas de abajo ya no llevan ninguno.
     (async (p: { formato?: string }) =>
       p?.formato === 'json'
         ? { content: [{ type: 'text' as const, text: await m.escribir(p) }] }
@@ -1716,18 +1727,18 @@ function registrarHerramienta(nombre: string, m: HerramientaV2) {
   )
 }
 
-registrarHerramienta('consultar_por_jerarquia', consultarJerarquia as never)
-registrarHerramienta('analizar_conflicto', analizarConflicto as never)
-registrarHerramienta('cambios_desde', cambiosDesde as never)
-registrarHerramienta('comparar_articulos', compararArticulos as never)
-registrarHerramienta('consultar_perfil', consultarPerfil as never)
-registrarHerramienta('consultar_vigencia', consultarVigencia as never)
-registrarHerramienta('historial_norma', historialNorma as never)
-registrarHerramienta('buscar_unificado', buscarUnificado as never)
-registrarHerramienta('linea_jurisprudencial', lineaJurisprudencial as never)
-registrarHerramienta('buscar_diario_oficial', buscarDiarioOficial as never)
-registrarHerramienta('obtener_documento', obtenerDocumento as never)
-registrarHerramienta('expediente', expedientes as never)
+registrarHerramienta('consultar_por_jerarquia', consultarJerarquia)
+registrarHerramienta('analizar_conflicto', analizarConflicto)
+registrarHerramienta('cambios_desde', cambiosDesde)
+registrarHerramienta('comparar_articulos', compararArticulos)
+registrarHerramienta('consultar_perfil', consultarPerfil)
+registrarHerramienta('consultar_vigencia', consultarVigencia)
+registrarHerramienta('historial_norma', historialNorma)
+registrarHerramienta('buscar_unificado', buscarUnificado)
+registrarHerramienta('linea_jurisprudencial', lineaJurisprudencial)
+registrarHerramienta('buscar_diario_oficial', buscarDiarioOficial)
+registrarHerramienta('obtener_documento', obtenerDocumento)
+registrarHerramienta('expediente', expedientes)
 
 // --- prompts (aparecen como comandos en Claude Desktop) ------------------
 
