@@ -134,7 +134,7 @@ git clone https://github.com/Angelthebestone/Normativa-colombiana-MCP.git
 cd Normativa-colombiana-MCP
 npm install
 npm run generar-indice   # índice temático, ~20 MB de descarga, una sola vez
-npm run build            # genera server/index.js
+npm run build            # genera server/index.js y, al lado, el trozo de unpdf que se carga al leer un PDF
 ```
 
 Después se apunta el cliente a `node /ruta/absoluta/a/Normativa-colombiana-MCP/server/index.js`, con el mismo formato de arriba. Funciona desde cualquier directorio de trabajo.
