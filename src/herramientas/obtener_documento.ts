@@ -79,6 +79,22 @@ const comun = {
     .describe('Tope del TEXTO devuelto; se ajusta al rango 200–40.000'),
 }
 
+/**
+ * Descargar a disco vale con cualquier fuente, así que vive aparte de los extras
+ * por fuente y la unión de abajo (cerrada con `.strict()`) también lo admite: sin
+ * esto, `entero` y `ruta_destino` se anunciaban y se rechazaban siempre.
+ */
+const archivo = {
+  entero: z
+    .boolean()
+    .optional()
+    .describe('En vez de trocear, escribe el documento a disco y devuelve la ruta con un trozo del texto'),
+  ruta_destino: z
+    .string()
+    .optional()
+    .describe('Carpeta donde guardar el archivo (con entero o para descargar el PDF/Word sin devolver texto)'),
+}
+
 export const schema = estricto({
   // Solo las fuentes encendidas (FUENTES): la llamada a una apagada no se puede
   // ni escribir, y la valida el mismo esquema antes de tocar la red.
@@ -116,14 +132,7 @@ export const schema = estricto({
     .string()
     .optional()
     .describe('Solo sectorial: enlace del acto a leer, tal como lo devuelve buscar_normativa_sectorial'),
-  entero: z
-    .boolean()
-    .optional()
-    .describe('En vez de trocear, escribe el documento a disco y devuelve la ruta con un trozo del texto'),
-  ruta_destino: z
-    .string()
-    .optional()
-    .describe('Carpeta donde guardar el archivo (con entero o para descargar el PDF/Word sin devolver texto)'),
+  ...archivo,
 })
 
 /** El tipo de entrada (los valores con default se resuelven al validar). */
@@ -205,10 +214,11 @@ const identificador = z.union([z.string(), z.number()]).transform(String)
  * convierte el parámetro de otra fuente en un error en vez de en un descarte
  * silencioso. El SDK no la publica (ver arriba), pero es la que valida.
  */
+const compartidos = { ...comun, ...archivo }
 const union = z.discriminatedUnion('fuente', [
   z
     .object({
-      ...comun,
+      ...compartidos,
       fuente: z.literal('gestor'),
       id: identificador,
       articulo: z.string().optional(),
@@ -216,17 +226,17 @@ const union = z.discriminatedUnion('fuente', [
       sin_temas: z.boolean().optional(),
     })
     .strict(),
-  z.object({ ...comun, fuente: z.literal('corte'), ruta: z.string(), seccion: z.enum(SECCIONES_PROVIDENCIA).optional() }).strict(),
+  z.object({ ...compartidos, fuente: z.literal('corte'), ruta: z.string(), seccion: z.enum(SECCIONES_PROVIDENCIA).optional() }).strict(),
   z
-    .object({ ...comun, fuente: z.literal('suprema'), ruta: z.string(), sala: z.string(), seccion: z.enum(SECCIONES_PROVIDENCIA).optional() })
+    .object({ ...compartidos, fuente: z.literal('suprema'), ruta: z.string(), sala: z.string(), seccion: z.enum(SECCIONES_PROVIDENCIA).optional() })
     .strict(),
-  z.object({ ...comun, fuente: z.literal('consejo'), token: z.string(), seccion: z.enum(SECCIONES_PROVIDENCIA).optional() }).strict(),
-  z.object({ ...comun, fuente: z.literal('dian'), link: z.string() }).strict(),
-  z.object({ ...comun, fuente: z.literal('creg'), ruta: z.string() }).strict(),
+  z.object({ ...compartidos, fuente: z.literal('consejo'), token: z.string(), seccion: z.enum(SECCIONES_PROVIDENCIA).optional() }).strict(),
+  z.object({ ...compartidos, fuente: z.literal('dian'), link: z.string() }).strict(),
+  z.object({ ...compartidos, fuente: z.literal('creg'), ruta: z.string() }).strict(),
   // La entidad se resuelve en el handler (y allí se listan los ids válidos):
   // enumerarla aquí exigiría el registro sectorial ya cargado, y este módulo se
   // evalúa antes de `src/fuentes/sectorial/registro.ts`.
-  z.object({ ...comun, fuente: z.literal('sectorial'), entidad: z.string(), url: z.string() }).strict(),
+  z.object({ ...compartidos, fuente: z.literal('sectorial'), entidad: z.string(), url: z.string() }).strict(),
 ])
 
 /** El error de una combinación imposible: qué se pidió, qué falta o sobra, y qué sí funciona. */
