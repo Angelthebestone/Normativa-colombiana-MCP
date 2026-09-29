@@ -9,11 +9,11 @@ import test from 'node:test'
 import { alcance, leerFuentes } from '../src/nucleo/alcance.ts'
 
 test('vacía es todas; la lista positiva lleva siempre el Gestor; la negativa quita solo esas', () => {
-  assert.equal(leerFuentes('').size, 11)
+  assert.equal(leerFuentes('').size, 13)
   assert.deepEqual([...leerFuentes('corte, SUIN')], ['gestor', 'corte', 'suin'])
   const sin = leerFuentes('-creg,-anh')
   assert.equal(sin.has('creg') || sin.has('anh'), false)
-  assert.equal(sin.size, 9)
+  assert.equal(sin.size, 11)
 })
 
 test('una clave mal escrita, el Gestor o las dos formas mezcladas rompen en vez de ignorarse', () => {
