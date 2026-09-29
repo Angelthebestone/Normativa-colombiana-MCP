@@ -22,6 +22,7 @@
  */
 import { cargar, limpiarTermino, sinTildes, textoDe } from '../../nucleo/parse.ts'
 import { parsearCita, rutaDeSentencia } from '../../nucleo/citas.ts'
+import { obtener, poner } from '../../nucleo/cache.ts'
 import { pedir as http } from '../../nucleo/http.ts'
 import { esStopword } from '../../nucleo/stopwords.ts'
 
@@ -302,6 +303,25 @@ function formasDeSondeo(sentencia: string): string[] {
   return [...new Set([literal, sinGuion, deAnio].filter(Boolean))]
 }
 
+/**
+ * Veredictos firmes de `verificar`, guardados un rato. Una búsqueda no se revalida
+ * como una copia de documento, y sin esto volver a preguntar por la misma sentencia
+ * paga otra vez todos los sondeos: medido el 2026-09-29, C-337/11 costaba +2
+ * peticiones la segunda vez y una sentencia inexistente +5, sin ninguna copia. El
+ * flujo normal (resolver_cita, luego consultar_vigencia, luego linea_jurisprudencial)
+ * la pregunta tres veces seguidas. Nunca se guarda `no-medido`: un fallo de red no
+ * es un dato.
+ *
+ * ponytail: 5 minutos fijos y solo en memoria. El techo es que una sentencia
+ * publicada dentro de esa ventana se siga declarando inexistente; el salto
+ * siguiente sería un TTL más corto solo para `no-existe`.
+ */
+const TTL_VERIFICACION_MS = 5 * 60_000
+const recordar = (clave: string, v: VerificacionSentencia): VerificacionSentencia => {
+  poner(clave, v, TTL_VERIFICACION_MS)
+  return v
+}
+
 export type VerificacionSentencia = {
   estado: 'existe' | 'no-existe' | 'no-medido'
   providencia?: Providencia
@@ -335,17 +355,23 @@ export type VerificacionSentencia = {
  * sola basta, y por eso se prueban las dos en orden, gastando la segunda llamada
  * únicamente cuando la primera no dio el acierto.
  */
-export async function verificar(sentencia: string): Promise<VerificacionSentencia> {
+export async function verificar(
+  sentencia: string,
+  deps: { buscar?: typeof buscar } = {},
+): Promise<VerificacionSentencia> {
   const sondeos: string[] = []
   const objetivo = identidad(sentencia)
+  const clave = `corte:verificar:${objetivo}`
+  const guardado = obtener(clave) as VerificacionSentencia | null
+  if (guardado) return guardado
   try {
     for (const forma of formasDeSondeo(sentencia)) {
       sondeos.push(forma)
-      const { items } = await buscar({ termino: forma, limite: 20 })
+      const { items } = await (deps.buscar ?? buscar)({ termino: forma, limite: 20 })
       const p = items.find((x) => identidad(x.sentencia) === objetivo)
-      if (p) return { estado: 'existe', providencia: p, sondeos }
+      if (p) return recordar(clave, { estado: 'existe', providencia: p, sondeos })
     }
-    return { estado: 'no-existe', sondeos }
+    return recordar(clave, { estado: 'no-existe', sondeos })
   } catch (e) {
     // Fallo de fuente, no negativa: se declara para que nadie lo lea como "no existe".
     return { estado: 'no-medido', sondeos, motivo: (e as Error).message }
