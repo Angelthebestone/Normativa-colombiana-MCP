@@ -1,6 +1,7 @@
 /**
  * Diferencia entre dos versiones de un artículo: qué cambió y de qué clase.
  */
+import { dice } from '../nucleo/deduplicar.ts'
 import { sinTildes } from '../nucleo/parse.ts'
 
 type Clasificacion = 'plazo' | 'sancion' | 'excepcion' | 'sujeto' | 'prohibicion' | 'obligacion' | 'no clasificado'
@@ -85,23 +86,7 @@ export const bigramas = (s: string): string[] => {
   return r
 }
 
-export function similitudLexica(a: string, b: string): number {
-  const A = bigramas(a)
-  const B = bigramas(b)
-  if (!A.length && !B.length) return 1
-  if (!A.length || !B.length) return 0
-  const m = new Map<string, number>()
-  for (const x of B) m.set(x, (m.get(x) ?? 0) + 1)
-  let inter = 0
-  for (const x of A) {
-    const c = m.get(x) ?? 0
-    if (c > 0) {
-      inter++
-      m.set(x, c - 1)
-    }
-  }
-  return (2 * inter) / (A.length + B.length)
-}
+export const similitudLexica = (a: string, b: string): number => dice(bigramas(a), bigramas(b))
 
 export const UMBRAL_EDITORIAL = 0.92
 

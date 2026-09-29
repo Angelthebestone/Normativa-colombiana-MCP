@@ -41,14 +41,13 @@ export function deduplicar<T>(items: T[], claveFn: (item: T) => string): { items
 export const claveActo = (a: { tipo: string; numero: string; anio: string }): string =>
   `${a.tipo}|${a.numero}|${a.anio}`
 
-/** Similitud léxica simple (Dice de bigramas sin dependencias) para comparar epígrafes. */
-export function similitudEpigrafes(a: string, b: string): number {
-  const norm = (s: string): string[] => {
-    const n = normaliza(s).split(' ')
-    return n.filter(Boolean)
-  }
-  const A = norm(a)
-  const B = norm(b)
+/**
+ * Coeficiente de Dice sobre multiconjuntos de fichas: 2·|A∩B| / (|A|+|B|). Dos
+ * vacíos son iguales (1); uno vacío y otro no, nada en común (0). Lo comparten
+ * la similitud de epígrafes (fichas = palabras) y la del diff de artículos
+ * (fichas = bigramas de caracteres).
+ */
+export function dice(A: string[], B: string[]): number {
   if (!A.length && !B.length) return 1
   if (!A.length || !B.length) return 0
   const m = new Map<string, number>()
@@ -62,4 +61,10 @@ export function similitudEpigrafes(a: string, b: string): number {
     }
   }
   return (2 * inter) / (A.length + B.length)
+}
+
+/** Similitud léxica simple (Dice sobre palabras, sin dependencias) para comparar epígrafes. */
+export function similitudEpigrafes(a: string, b: string): number {
+  const palabras = (s: string): string[] => normaliza(s).split(' ').filter(Boolean)
+  return dice(palabras(a), palabras(b))
 }
