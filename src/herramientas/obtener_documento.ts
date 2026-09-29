@@ -42,7 +42,7 @@ import { parsearCita } from '../nucleo/citas.ts'
 import { extraerTextoWord } from '../fuentes/sectorial/word.ts'
 import { textoDePdfSectorial, avisoEscaneo } from '../fuentes/sectorial/pdf.ts'
 import { adaptador, ids } from '../fuentes/sectorial.ts'
-import { numeroDeArticulo } from '../nucleo/normalizar.ts'
+import { estricto, numeroDeArticulo } from '../nucleo/normalizar.ts'
 
 import * as gestor from '../fuentes/gestor.ts'
 import * as corte from '../fuentes/jurisprudencia/corte.ts'
@@ -79,7 +79,7 @@ const comun = {
     .describe('Tope del TEXTO devuelto; se ajusta al rango 200–40.000'),
 }
 
-export const schema = {
+export const schema = estricto({
   // Solo las fuentes encendidas (FUENTES): la llamada a una apagada no se puede
   // ni escribir, y la valida el mismo esquema antes de tocar la red.
   fuente: z
@@ -124,13 +124,12 @@ export const schema = {
     .string()
     .optional()
     .describe('Carpeta donde guardar el archivo (con entero o para descargar el PDF/Word sin devolver texto)'),
-}
+})
 
-const schemaCompleto = z.object(schema)
 /** El tipo de entrada (los valores con default se resuelven al validar). */
-type Parametros = z.input<typeof schemaCompleto>
+type Parametros = z.input<typeof schema>
 /** Ya validado y con los defaults aplicados (desde/limite_caracteres resueltos). */
-type Resueltas = z.infer<typeof schemaCompleto>
+type Resueltas = z.infer<typeof schema>
 
 /**
  * El contrato real de `fuente`, en una tabla que el mensaje de error reutiliza.
@@ -819,7 +818,7 @@ export async function escribir(p: Parametros, deps: DepsLectura = {}): Promise<s
   // es lo que el esquema plano no puede decir. Se hace aquí, antes de tocar la
   // red: una llamada imposible no gasta viaje ni devuelve un vacío que se lea
   // como "no hay resultados".
-  const r = schemaCompleto.parse(p) as Resueltas
+  const r = schema.parse(p) as Resueltas
   if (!union.safeParse(r).success) throw new Error(problemaDeFuente(r))
   const tope = topeDe(r.limite_caracteres)
   // Con ruta_destino la orden es descargar, no leer: se obedece antes que el troceo.

@@ -1,6 +1,7 @@
 /** El restrictor: por qué una norma es pertinente para ESE subtema y no para otro. */
 import { z } from 'zod'
 
+import { estricto } from '../nucleo/normalizar.ts'
 import { alcance } from '../nucleo/alcance.ts'
 import { conPrefijo, sinPrefijo } from '../nucleo/catalogos.ts'
 import { cargarIndice } from '../nucleo/indice.ts'
@@ -21,7 +22,7 @@ const esquema = z.object({
   normid: z.coerce.string().regex(/^\d+$/).describe('normid de la misma fila de buscar_por_tema'),
 })
 
-export const schema = esquema.shape
+export const schema = estricto(esquema.shape)
 
 type Params = z.infer<typeof esquema>
 

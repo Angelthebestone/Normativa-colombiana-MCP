@@ -4,6 +4,7 @@
  * de la Corte Constitucional (jurisprudencia) y explica el carácter del nivel.
  */
 import { z } from 'zod'
+import { estricto } from '../nucleo/normalizar.ts'
 import { caracterDelNivel, NIVELES, tipoANivel, type Nivel } from '../nucleo/jerarquia.ts'
 import { alcance, proyectar } from '../nucleo/alcance.ts'
 import * as corte from '../fuentes/jurisprudencia/corte.ts'
@@ -19,7 +20,7 @@ export const DESCRIPCION =
   'buscar sin nivel usa buscar_normas o buscar_por_tema. No es asesoría jurídica: verifica siempre ' +
   'en el enlace.'
 
-export const schema = {
+export const schema = estricto({
   // La jurisprudencia sale de la Corte Constitucional: con ella apagada
   // (FUENTES), el nivel desaparece del enum en vez de devolver un vacío.
   nivel: z
@@ -33,11 +34,10 @@ export const schema = {
     .max(20)
     .default(10)
     .describe('Cuántos documentos devolver (máximo 20; por defecto 10)'),
-}
+})
 
 /** El schema como ZodObject: de él se deriva el tipo de los parámetros resueltos. */
-const schemaCompleto = z.object(schema)
-type Parametros = z.infer<typeof schemaCompleto>
+type Parametros = z.infer<typeof schema>
 
 export type BuscadorNormas = (nivel: Nivel, texto: string, limite: number) => Promise<{ titulo: string; url: string }[]>
 

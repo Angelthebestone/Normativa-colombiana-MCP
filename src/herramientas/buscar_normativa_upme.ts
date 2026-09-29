@@ -8,6 +8,7 @@
  */
 import { z } from 'zod'
 
+import { estricto } from '../nucleo/normalizar.ts'
 import { alcance } from '../nucleo/alcance.ts'
 import { vacio } from '../nucleo/vacio.ts'
 import * as upme from '../fuentes/upme.ts'
@@ -30,7 +31,7 @@ const esquema = z.object({
     .describe('Incluir nombramientos y demás actos de personal. Por defecto se ocultan.'),
 })
 
-export const schema = esquema.shape
+export const schema = estricto(esquema.shape)
 
 type Params = z.infer<typeof esquema>
 

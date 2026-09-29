@@ -4,6 +4,7 @@
  */
 import { z } from 'zod'
 
+import { estricto } from '../nucleo/normalizar.ts'
 import { idTipo, parsearCita, candidatosAmbiguos } from '../nucleo/citas.ts'
 import * as gestor from '../fuentes/gestor.ts'
 import * as suin from '../fuentes/suin.ts'
@@ -21,7 +22,7 @@ export const DESCRIPCION =
   'fecha_consulta, alcance, sobre (si se pidió), evidencias (una por norma, con los mismos campos del texto) y ' +
   'avisos.'
 
-export const schema = {
+export const schema = estricto({
   norma_a: z.string().describe('Cita de la primera norma, ej. "Ley 909 de 2004"'),
   norma_b: z.string().describe('Cita de la segunda norma'),
   sobre: z.string().optional().describe('Tema opcional para buscar artículos de ambas que lo mencionen'),
@@ -32,11 +33,10 @@ export const schema = {
       'Salida: "markdown" (texto legible, por defecto) o "json" (un objeto con fecha_consulta, alcance, ' +
         'evidencias y avisos, sin cabecera ni pie)',
     ),
-}
+})
 
-const schemaCompleto = z.object(schema)
 /** Entrada del cliente: `formato` llega opcional (tiene default). */
-type Parametros = z.input<typeof schemaCompleto>
+type Parametros = z.input<typeof schema>
 
 /** Fecha de la consulta en AAAA-MM-DD: la que el envoltorio ya no añade en modo json. */
 const hoy = () => new Date().toISOString().slice(0, 10)

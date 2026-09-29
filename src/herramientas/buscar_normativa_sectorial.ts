@@ -1,6 +1,7 @@
 /** `buscar_normativa_sectorial`: el contrato común de los reguladores, una sola herramienta. */
 import { z } from 'zod'
 
+import { estricto } from '../nucleo/normalizar.ts'
 import { alcance } from '../nucleo/alcance.ts'
 import { vacio } from '../nucleo/vacio.ts'
 // El esquema se evalúa al importar y `sectorial.ids()` sale del registro: sin
@@ -47,7 +48,7 @@ const esquema = z.object({
   limite: z.coerce.number().int().min(1).max(100).default(15),
 })
 
-export const schema = esquema.shape
+export const schema = estricto(esquema.shape)
 
 type Params = z.infer<typeof esquema>
 

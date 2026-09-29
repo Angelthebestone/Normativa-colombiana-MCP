@@ -5,6 +5,7 @@
  */
 import { z } from 'zod'
 
+import { estricto } from '../nucleo/normalizar.ts'
 import { alcance } from '../nucleo/alcance.ts'
 import { conAlternativas } from '../nucleo/alternativas.ts'
 import { sinTildes } from '../nucleo/parse.ts'
@@ -38,7 +39,7 @@ const esquema = z.object({
   limite: z.coerce.number().int().min(1).max(100).default(10).describe('Cuántas providencias mostrar (hasta 100)'),
 })
 
-export const schema = esquema.shape
+export const schema = estricto(esquema.shape)
 
 type Params = z.infer<typeof esquema>
 

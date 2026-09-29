@@ -9,6 +9,7 @@
  */
 import { z } from 'zod'
 
+import { estricto } from '../nucleo/normalizar.ts'
 import { alcance } from '../nucleo/alcance.ts'
 import { vacio } from '../nucleo/vacio.ts'
 import * as anla from '../fuentes/anla.ts'
@@ -32,7 +33,7 @@ const esquema = z.object({
     .describe('Eureka pagina sola y con distinto tamaño según la sección: no lo calcules, usa el que dice la respuesta'),
 })
 
-export const schema = esquema.shape
+export const schema = estricto(esquema.shape)
 
 type Params = z.infer<typeof esquema>
 

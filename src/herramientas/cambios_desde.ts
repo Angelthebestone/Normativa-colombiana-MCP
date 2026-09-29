@@ -3,6 +3,7 @@
  * filtrados por el año de la norma modificadora.
  */
 import { z } from 'zod'
+import { estricto } from '../nucleo/normalizar.ts'
 import { idTipo, parsearCita, candidatosAmbiguos } from '../nucleo/citas.ts'
 import * as gestor from '../fuentes/gestor.ts'
 import { historial, type Cambio } from '../nucleo/parse.ts'
@@ -14,13 +15,13 @@ export const DESCRIPCION =
   'Resume los cambios (modificación, derogación, adición) que el Gestor anota sobre LAS NORMAS QUE SE LISTAN, ' +
   'filtrándolos por el año de la norma modificadora. NO rastrea novedades automáticamente ni descubre normas nuevas.'
 
-export const schema = {
+export const schema = estricto({
   normas: z.array(z.string()).min(1).describe('Citas de normas a revisar, ej. ["Ley 909 de 2004"]'),
   desde: z
     .string()
     .regex(/^\d{4}-\d{2}-\d{2}$/)
     .describe('Fecha AAAA-MM-DD; se filtra por el AÑO de la norma modificadora'),
-}
+})
 
 type Parametros = { normas: string[]; desde: string }
 

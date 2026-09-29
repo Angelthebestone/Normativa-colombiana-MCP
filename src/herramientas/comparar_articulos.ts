@@ -26,7 +26,7 @@ import {
   limpiarArticulo,
   type Norma,
 } from '../nucleo/parse.ts'
-import { numeroDeArticulo } from '../nucleo/normalizar.ts'
+import { estricto, numeroDeArticulo } from '../nucleo/normalizar.ts'
 
 import * as gestor from '../fuentes/gestor.ts'
 import { alcance } from '../nucleo/alcance.ts'
@@ -56,7 +56,7 @@ const esquema = z.object({
 })
 
 /** Shape plano que consume el SDK; los parámetros se infieren del objeto completo. */
-export const schema = esquema.shape
+export const schema = estricto(esquema.shape)
 
 type Params = z.infer<typeof esquema>
 

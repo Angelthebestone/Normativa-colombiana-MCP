@@ -11,7 +11,7 @@ import { codigoDe, referencia as refCodigo } from '../nucleo/codigos.ts'
 import { esCompiladora } from '../nucleo/compiladas.ts'
 import { validarUrl } from '../nucleo/evidencia.ts'
 import { advertenciasVigencia, articulo as extraerArticulo } from '../nucleo/parse.ts'
-import { numeroDeArticulo } from '../nucleo/normalizar.ts'
+import { estricto, numeroDeArticulo } from '../nucleo/normalizar.ts'
 import { vacio } from '../nucleo/vacio.ts'
 import * as corte from '../fuentes/jurisprudencia/corte.ts'
 import * as gestor from '../fuentes/gestor.ts'
@@ -363,7 +363,7 @@ const esquema = z.object({
     ),
 })
 
-export const schema = esquema.shape
+export const schema = estricto(esquema.shape)
 
 type Params = z.infer<typeof esquema>
 

@@ -1,6 +1,7 @@
 /** `describir_fuentes`: qué cubre este servidor y, sobre todo, qué NO cubre. */
 import { z } from 'zod'
 
+import { estricto } from '../nucleo/normalizar.ts'
 import { activa } from '../nucleo/alcance.ts'
 import { ALIAS_FUENTES, ALIAS_INVERSO, CLAVES_FUENTES } from '../nucleo/claves_fuentes.ts'
 import { CODIGOS, referencia as refCodigo } from '../nucleo/codigos.ts'
@@ -30,7 +31,7 @@ const esquema = z.object({
     .describe('Clave de una sola fuente ("creg", "suin", "sic"…). Sin ella se devuelven todas.'),
 })
 
-export const schema = esquema.shape
+export const schema = estricto(esquema.shape)
 
 type Params = z.infer<typeof esquema>
 

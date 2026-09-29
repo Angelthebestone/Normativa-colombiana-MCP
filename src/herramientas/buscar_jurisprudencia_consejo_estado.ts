@@ -1,6 +1,7 @@
 /** `buscar_jurisprudencia_consejo_estado`: providencias de SAMAI, con su radicado. */
 import { z } from 'zod'
 
+import { estricto } from '../nucleo/normalizar.ts'
 import { alcance } from '../nucleo/alcance.ts'
 import { sinTildes } from '../nucleo/parse.ts'
 import { vacio } from '../nucleo/vacio.ts'
@@ -42,7 +43,7 @@ const esquema = z.object({
   limite: z.coerce.number().int().min(1).max(10).default(5).describe('Cuántas mostrar de la página (hasta 10)'),
 })
 
-export const schema = esquema.shape
+export const schema = estricto(esquema.shape)
 
 type Params = z.infer<typeof esquema>
 

@@ -8,6 +8,7 @@ import { stat, writeFile } from 'node:fs/promises'
 import * as path from 'node:path'
 import { z } from 'zod'
 
+import { estricto } from '../nucleo/normalizar.ts'
 import { agregar, crear, enDisco, habilitado, leer, type Expediente } from '../nucleo/expediente.ts'
 
 const AVISO_DESACTIVADO =
@@ -34,7 +35,7 @@ export const DESCRIPCION =
   'de un expediente YA CREADO; "leer" lo devuelve agrupado; "exportar" lo escribe como markdown en ' +
   'la ruta pedida.'
 
-export const schema = z.object({
+export const schema = estricto({
   accion: z
     .enum(['crear', 'agregar', 'leer', 'exportar'])
     .describe('Qué hacer: crear un expediente, agregar una entrada, leer su contenido o exportarlo'),

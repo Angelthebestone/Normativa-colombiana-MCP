@@ -180,10 +180,12 @@ export type Clase = 'normaliza' | 'acepta-mal' | 'rechazo-util' | 'rechazo-tardi
  * llegó, o los valores que se aceptan. Un «Required» a secas no lo es.
  */
 function mensajeEnseña(error: z.ZodError, args: Record<string, unknown>): boolean {
-  const m = JSON.stringify(error.issues)
-  const recibido = Object.values(args).some((v) => typeof v !== 'object' && m.includes(String(v)))
-  const opciones = /options|expected|Expected|received/.test(m) && !/^Required$/.test(m)
-  return recibido || opciones
+  const m = error.issues.map((i) => `${i.path.join('.')}: ${i.message}`).join(' | ')
+  const valor = Object.values(args).some((v) => typeof v !== 'object' && m.includes(String(v)))
+  // Nombrar el campo que sobra también enseña: es la mitad del arreglo.
+  const campo = Object.keys(args).some((k) => m.includes(k))
+  const opciones = /options|expected|Expected|received|campos de esta herramienta/.test(m)
+  return valor || campo || opciones
 }
 
 export function clasificar(t: Torcida): { clase: Clase; detalle: string } {

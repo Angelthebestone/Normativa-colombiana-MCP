@@ -17,7 +17,7 @@ import { z } from 'zod'
 
 import { historial, type Cambio } from '../nucleo/parse.ts'
 import { idTipo, parsearCita, candidatosAmbiguos } from '../nucleo/citas.ts'
-import { numeroDeArticulo } from '../nucleo/normalizar.ts'
+import { estricto, numeroDeArticulo } from '../nucleo/normalizar.ts'
 
 import * as gestor from '../fuentes/gestor.ts'
 import { alcance } from '../nucleo/alcance.ts'
@@ -50,7 +50,7 @@ const esquema = z.object({
     .describe('Salida: "markdown" (texto legible, por defecto) o "json" (solo el objeto de datos, sin cabecera ni pie)'),
 })
 
-export const schema = esquema.shape
+export const schema = estricto(esquema.shape)
 
 type Params = z.infer<typeof esquema>
 

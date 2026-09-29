@@ -13,6 +13,7 @@
  */
 import { z } from 'zod'
 
+import { estricto } from '../nucleo/normalizar.ts'
 import { BASE, MAXIMO, TIPOS, buscar, fechaPortal, type Resultado } from '../fuentes/diario_oficial.ts'
 
 export const TITULO = 'Buscar en el Diario Oficial (Imprenta Nacional)'
@@ -42,7 +43,7 @@ const esquema = z.object({
     .describe(`Cuántos diarios mostrar (hasta ${MAXIMO}); el portal los sirve de 10 en 10`),
 })
 
-export const schema = esquema.shape
+export const schema = estricto(esquema.shape)
 
 type Params = z.infer<typeof esquema>
 

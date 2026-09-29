@@ -1,6 +1,7 @@
 /** Consulta temática desde el índice empaquetado: instantánea y sin depender del portal. */
 import { z } from 'zod'
 
+import { estricto } from '../nucleo/normalizar.ts'
 import { alcance, DESCARGO } from '../nucleo/alcance.ts'
 import { conPrefijo } from '../nucleo/catalogos.ts'
 import { cargarIndice, frescura } from '../nucleo/indice.ts'
@@ -22,7 +23,7 @@ const esquema = z.object({
   limite: z.coerce.number().int().min(1).max(50).default(15),
 })
 
-export const schema = esquema.shape
+export const schema = estricto(esquema.shape)
 
 type Params = z.infer<typeof esquema>
 

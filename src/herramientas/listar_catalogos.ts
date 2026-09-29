@@ -1,6 +1,7 @@
 /** Los valores válidos de los filtros de `buscar_normas`, que el portal no documenta. */
 import { z } from 'zod'
 
+import { estricto } from '../nucleo/normalizar.ts'
 import { conPrefijo, sinPrefijo } from '../nucleo/catalogos.ts'
 import { sinTildes } from '../nucleo/parse.ts'
 import { vacio } from '../nucleo/vacio.ts'
@@ -29,7 +30,7 @@ const esquema = z.object({
   limite: z.coerce.number().int().min(1).max(200).default(50),
 })
 
-export const schema = esquema.shape
+export const schema = estricto(esquema.shape)
 
 type Params = z.infer<typeof esquema>
 

@@ -5,6 +5,7 @@
  */
 import { z } from 'zod'
 
+import { estricto } from '../nucleo/normalizar.ts'
 import { alcance } from '../nucleo/alcance.ts'
 import { vacio } from '../nucleo/vacio.ts'
 import * as suprema from '../fuentes/jurisprudencia/cortesuprema.ts'
@@ -41,7 +42,7 @@ const esquema = z.object({
     .describe('Cuántas mostrar. El buscador entrega páginas de 10 como máximo; para ver más, usa desde.'),
 })
 
-export const schema = esquema.shape
+export const schema = estricto(esquema.shape)
 
 type Params = z.infer<typeof esquema>
 

@@ -1,5 +1,6 @@
 import { z } from 'zod'
 
+import { estricto } from '../nucleo/normalizar.ts'
 import { idTipo, parsearCita, candidatosAmbiguos, type Cita } from '../nucleo/citas.ts'
 import { clasificarValidacion, validarArticulo, validarNumeroAnio, validarUrl } from '../nucleo/evidencia.ts'
 import { sinTildes } from '../nucleo/parse.ts'
@@ -16,7 +17,7 @@ export const DESCRIPCION =
   'objeto {fecha_consulta, resultados:[...]} con un resultado por cita. Una cita sin forma, ambigua o con la ' +
   'fuente caída NUNCA lanza: sale como objeto con estado y detalle.'
 
-export const schema = {
+export const schema = estricto({
   cita: z.string().optional().describe('Cita a validar, ej. "Ley 909 de 2004"'),
   citas: z
     .array(z.string())
@@ -31,7 +32,7 @@ export const schema = {
     .describe(
       'Salida: "markdown" (texto legible, por defecto) o "json" (un objeto por cita, sin cabecera ni pie)',
     ),
-}
+})
 
 /** Fecha de la consulta en AAAA-MM-DD: la que el envoltorio ya no añade en modo json. */
 const hoy = () => new Date().toISOString().slice(0, 10)

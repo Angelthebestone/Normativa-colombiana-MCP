@@ -1,6 +1,7 @@
 /** Buscador general del Gestor Normativo: el de palabras del portal, con sus filtros. */
 import { z } from 'zod'
 
+import { estricto } from '../nucleo/normalizar.ts'
 import { alcance } from '../nucleo/alcance.ts'
 import { conPrefijo, idOnombre } from '../nucleo/catalogos.ts'
 import { NO_EN_GESTOR, normalizarEntidad } from '../nucleo/entidades.ts'
@@ -34,7 +35,7 @@ const esquema = z.object({
   limite: z.coerce.number().int().min(1).max(100).default(20),
 })
 
-export const schema = esquema.shape
+export const schema = estricto(esquema.shape)
 
 type Params = z.infer<typeof esquema>
 

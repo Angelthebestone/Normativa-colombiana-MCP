@@ -14,6 +14,7 @@
  */
 import { z } from 'zod'
 
+import { estricto } from '../nucleo/normalizar.ts'
 import * as gestor from '../fuentes/gestor.ts'
 import * as corte from '../fuentes/jurisprudencia/corte.ts'
 import * as suin from '../fuentes/suin.ts'
@@ -52,7 +53,7 @@ const CLAVE_ALCANCE: Record<Fuente, string> = {
 const FUENTES = ['gestor', 'corte', 'suin', 'dian', 'invima', 'supersalud', 'anm'] as const
 export type Fuente = (typeof FUENTES)[number]
 
-export const schema = {
+export const schema = estricto({
   texto: z.string().describe('Términos a buscar, ej. "teletrabajo"'),
   perfil: z
     .enum(['laboral', 'tributario', 'ambiental', 'contratacion', 'energia', 'salud', 'mineria'])
@@ -74,11 +75,10 @@ export const schema = {
       'Salida: "markdown" (texto legible, por defecto) o "json" (un objeto con fecha_consulta, alcance, texto, ' +
         'resultados, sin_resultados, fallidas y avisos, sin cabecera ni pie)',
     ),
-}
+})
 
-const schemaCompleto = z.object(schema)
 /** Entrada del cliente: los campos con default (limite, formato) llegan opcionales. */
-type Parametros = z.input<typeof schemaCompleto>
+type Parametros = z.input<typeof schema>
 
 export type Item = {
   fuente: string
