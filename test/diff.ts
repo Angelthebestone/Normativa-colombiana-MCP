@@ -89,3 +89,39 @@ test('agruparEditoriales: formatear distingue EDITORIAL de AÑADIDO/ELIMINADO', 
   assert.deepEqual(sustantivo.anadidos, ['sanción pecuniaria'])
   assert.deepEqual(sustantivo.eliminados, ['multa'])
 })
+
+/**
+ * Lo que asume el modo `con_reforma` de comparar_articulos: la errata de una
+ * línea del portal se empareja como editorial y `de` queda del lado A (la
+ * reforma) y `a` del lado B (el texto vigente). Medido el 2026-09-28 en el
+ * artículo 31 de la Ley 909 de 2004, cuyo numeral 4 repite la palabra con y sin
+ * tilde entre la página y la transcripción de la Ley 1960 de 2019.
+ */
+test('una errata del portal en una línea larga se empareja como editorial', () => {
+  const reforma =
+    '4 Con los resultados de las pruebas la Comisión Nacional del Servicio Civil elaborará en estricto orden de mérito la lista de elegibles que tendrá una vigencia de dos años.'
+  const vigente =
+    '4 Con los resultados de las pruebas la Comisión Nacional del Servicio Civil elaborara en estricto orden de mérito la lista de elegibles que tendrá una vigencia de dos años.'
+  assert.ok(similitudLexica(reforma, vigente) >= UMBRAL_EDITORIAL, `similitud ${similitudLexica(reforma, vigente)}`)
+  const d = diffArticulos(reforma, vigente)
+  const r = agruparEditoriales(d.anadidos, d.eliminados)
+  assert.equal(r.editoriales.length, 1)
+  assert.equal(r.editoriales[0]!.de, reforma, '«de» es el lado A: la línea de la reforma')
+  assert.equal(r.editoriales[0]!.a, vigente, '«a» es el lado B: la línea del texto vigente')
+  assert.equal(r.anadidos.length, 0)
+  assert.equal(r.eliminados.length, 0)
+})
+
+/**
+ * Por esto el modo `con_reforma` no hace diff cuando la reforma solo toca una
+ * parte: el marcador «(…)» que el portal usa en la transcripción parcial no
+ * casa con el numeral completo y quedaría como añadido/eliminado, que se lee
+ * como si el resto del artículo hubiera cambiado.
+ */
+test('los marcadores «(…)» de una transcripción parcial no se emparejan con el texto completo', () => {
+  const d = diffArticulos('1. (...)', '1. Convocatoria. La convocatoria es norma reguladora de todo concurso.')
+  const r = agruparEditoriales(d.anadidos, d.eliminados)
+  assert.equal(r.editoriales.length, 0)
+  assert.deepEqual(r.anadidos, ['1. Convocatoria. La convocatoria es norma reguladora de todo concurso.'])
+  assert.deepEqual(r.eliminados, ['1. (...)'])
+})
