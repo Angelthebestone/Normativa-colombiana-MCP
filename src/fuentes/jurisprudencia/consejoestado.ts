@@ -278,6 +278,67 @@ export async function buscar(
   return { ...res, items: exigidos, pagina: n, url, ...(nota ? { nota } : {}), omitidos }
 }
 
+/**
+ * Providencias tituladas de UN radicado concreto, sin depender de la paginación.
+ *
+ * `buscar` no sirve para esto y no es culpa del portal: su canario exige el
+ * rótulo `PaginaActualLabel`, y medido el 2026-09-28 ese rótulo NO aparece
+ * cuando la consulta es un radicado —ni con la providencia buscada (HTTP 200,
+ * 129.526 bytes) ni sin ninguna (HTTP 200, ~21.876 bytes)—, así que lanzaba
+ * `CanarioError` en los dos casos. El fallo era del canario. Aquí el canario
+ * mira otra cosa: el armazón de resultados (`ResultadoBusqueda1`) y las filas
+ * del repetidor, que sí vienen en las dos respuestas.
+ *
+ * SAMAI tokeniza la consulta, así que la frase puede traer vecinos: se filtra
+ * por identidad y solo salen las providencias cuyo radicado coincide con el
+ * pedido. Y un vacío con armazón NO es un fallo: significa que SAMAI no tiene
+ * titulada ninguna providencia de ese proceso, que es distinto de que el
+ * proceso no exista (solo titula una parte).
+ */
+export async function porRadicado(formateado: string): Promise<{ items: Providencia[]; url: string }> {
+  // Una sola página: el radicado es una frase, no una consulta que recorra
+  // miles de resultados. Va CON guiones, que es como SAMAI lo indexa.
+  const url = enlaceBusqueda(formateado, 0, true)
+  const r = await pedir(url, 120_000)
+
+  // Mismo trato que `buscar`: un 500 es su consulta agotando el tiempo, no un
+  // cambio de marcado, y culpabilizar al parser manda a actualizar la extensión.
+  if (r.status >= 500) {
+    throw new Error(
+      `SAMAI no respondió a tiempo (error ${r.status}): su buscador agota el tiempo con consultas amplias. ` +
+        `Vuelve a intentarlo. No es que no haya providencias.`,
+    )
+  }
+  if (r.status !== 200) throw new Error(`SAMAI respondió ${r.status}.`)
+
+  const res = parsear(r.cuerpo, 10, url)
+  // Las filas del repetidor se cuentan del HTML crudo, no de `items`: si están
+  // pero no se leen, `items` viene vacío y hay que distinguir ese caso del vacío
+  // legítimo.
+  const hayFilas = new RegExp(`${RAIZ}HypRadicado_\\d+"`).test(r.cuerpo)
+  const hayArmazon = /ResultadoBusqueda1/.test(r.cuerpo)
+
+  // Sin el armazón la respuesta ni siquiera es la página de resultados: es un
+  // cambio de marcado, no un "no hay nada".
+  if (!res.items.length && !hayArmazon) {
+    throw new CanarioError(
+      'SAMAI respondió sin el armazón de resultados: el enlace permanente de búsqueda dejó de devolver resultados',
+    )
+  }
+  // Con armazón y filas del repetidor, pero ninguna legible, el fallo es del
+  // parseo: este es el caso traicionero, parece "no hay providencias" y no lo es.
+  if (!res.items.length && hayFilas) {
+    throw new CanarioError(
+      `SAMAI devolvió filas de resultados pero no se pudo leer ninguna providencia ` +
+        `(los identificadores del repetidor cambiaron)`,
+    )
+  }
+
+  const pedido = formateado.replace(/\D/g, '')
+  const items = res.items.filter((p) => p.radicado.replace(/\D/g, '') === pedido)
+  return { items, url }
+}
+
 /** Página que abre la providencia con el token del buscador. No pide verificación. */
 export const enlaceProvidencia = (token: string): string =>
   `${BASE}/PaginasTransversales/VerProvidencia.aspx?tokenDocumento=${token}`
