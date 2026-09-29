@@ -23,6 +23,11 @@ export type Codigo = {
   alias: string[]
   /** Si la norma NO está en el corpus, por qué. Se dice en vez de "no encontré". */
   ausente?: string
+  /**
+   * Nombre (sin extensión) del documento en la Secretaría del Senado, cuando la
+   * norma NO está en el Gestor y su texto sale de allí: `codigo_civil`.
+   */
+  senado?: string
 }
 
 /**
@@ -44,6 +49,7 @@ export const CODIGOS: Codigo[] = [
       'no exista: es que esta instalación no puede leerlo. Quedan fuera de lo verificable aquí la acción ' +
       'reivindicatoria, la responsabilidad civil, la filiación, el divorcio y la prescripción ordinaria: consúltalos ' +
       'en la edición oficial del Código Civil, no en esta respuesta.',
+    senado: 'codigo_civil',
   },
   {
     nombre: 'Código de Comercio',

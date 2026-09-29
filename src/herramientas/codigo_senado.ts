@@ -1,0 +1,117 @@
+/**
+ * Resolución de un código cuyo texto sale de la Secretaría del Senado: hoy, el
+ * Código Civil (Ley 84 de 1873), que el Gestor Normativo no publica y cuya ficha
+ * en SUIN no sirve el texto.
+ *
+ * Es la rama de `resolver_cita` para los códigos con `senado` en la tabla de
+ * `nucleo/codigos.ts`. Vive fuera de `index.ts` por lo mismo que `validar_cita`:
+ * es una responsabilidad con sus propias reglas de honestidad.
+ *
+ * Tres advertencias viajan SIEMPRE con el texto, porque cada una evita un error
+ * que no se ve al leer la respuesta:
+ * - el portal solo habla HTTP plano (su puerto 443 no abre, medido el 2026-09-28):
+ *   el texto llega sin cifrar ni autenticar, y para un texto legal eso se dice;
+ * - los apartes tachados (`~~…~~`) son los que el portal marca como inexequibles o
+ *   derogados: leerlos como vigentes es el error grave;
+ * - las notas de vigencia y la jurisprudencia de cada artículo son del editor del
+ *   portal y NO se reproducen (su pie de página reserva esos derechos): se remite
+ *   al enlace, donde están.
+ */
+import { articulo as articuloDelSenado, BASE_SENADO } from '../fuentes/senado.ts'
+import * as suin from '../fuentes/suin.ts'
+import { activa, alcance, avisoApagada } from '../nucleo/alcance.ts'
+import { referencia, type Codigo } from '../nucleo/codigos.ts'
+import type { Cita } from '../nucleo/citas.ts'
+
+const SIN_CIFRAR =
+  'La Secretaría del Senado solo sirve HTTP sin cifrar (su puerto 443 no abre): este texto viajó sin autenticar. ' +
+  'Contrástalo en el enlace antes de citarlo en un escrito.'
+
+const NOTAS_EN_EL_ENLACE =
+  'El portal anota, artículo por artículo, la vigencia, las modificaciones y la jurisprudencia de constitucionalidad ' +
+  '(notas de su editor, que no se reproducen aquí): consúltalas en el enlace antes de citar.'
+
+export async function resolverCodigo(o: {
+  cita: string
+  c: Cita
+  codigo: Codigo
+  /** Artículos pedidos, ya resueltos entre la cita y el parámetro `articulos`. */
+  pedidos: string[]
+  articuloIgnorado: string
+}): Promise<string> {
+  const { cita, c, codigo, pedidos, articuloIgnorado } = o
+  const archivo = codigo.senado!
+  const equivalencia = c.codigo
+    ? `\n«${codigo.nombre}» se cita aquí como ${referencia(codigo)}, que es su norma contenedora y lo que hay que escribir en un escrito.`
+    : ''
+  const indice = `${BASE_SENADO}/${archivo}.html`
+
+  // El estado de vigencia es el de la norma entera, de SUIN; el del artículo, en el enlace.
+  const f = activa('suin') ? await suin.ficha(c.tipo, c.numero, c.anio ?? codigo.anio) : null
+  const vig = !f
+    ? `\nEstado de vigencia: ${avisoApagada('suin')}`
+    : f.ok
+      ? `\nEstado de vigencia de la norma según SUIN-Juriscol (ficha consultada hoy): ${f.ficha.estado || 'SUIN no publica el estado de esta norma'}\n  ${f.ficha.url}`
+      : `\nEstado de vigencia: no consta; SUIN-Juriscol no respondió con la ficha (${f.detalle}).`
+  const epigrafe = f?.ok && f.ficha.epigrafe ? `${f.ficha.epigrafe}\n` : ''
+  const suinUso = f ? [{ clave: 'suin', detalle: f.ok ? 'estado consultado' : 'sin ficha' }] : []
+  const titulo = `${referencia(codigo)} — ${codigo.nombre}`
+
+  if (!activa('senado')) {
+    return (
+      `### ${cita}${equivalencia}\n${alcance(suinUso)}\n${articuloIgnorado}${titulo}\n${epigrafe}` +
+      `${avisoApagada('senado')} Sin ella no hay dónde leer el texto del ${codigo.nombre}: el Gestor Normativo no lo ` +
+      `publica y SUIN-Juriscol no sirve el texto de sus documentos. No es que el artículo no exista: consúltalo en la ` +
+      `edición oficial.${vig}`
+    )
+  }
+
+  if (!pedidos.length) {
+    return (
+      `### ${cita}${equivalencia}\n${alcance([...suinUso])}\n${articuloIgnorado}${titulo}\n${epigrafe}` +
+      `El texto del ${codigo.nombre} se lee artículo por artículo desde la Secretaría del Senado: pídelo en la ` +
+      `cita ("art. 946 del ${codigo.nombre}") o con el parámetro articulos.\n` +
+      `URL: ${indice}${vig}`
+    )
+  }
+
+  const bloques: string[] = []
+  let actualizacion = ''
+  let leidos = 0
+  let tachados = false
+  for (const numero of pedidos) {
+    const r = await articuloDelSenado(archivo, numero)
+    if (r.ok) {
+      leidos += 1
+      actualizacion ||= r.actualizacion
+      tachados ||= r.tachados
+      bloques.push(`\n\n--- Artículo ${numero} ---\nURL: ${r.url}\n${r.texto}`)
+    } else if (r.razon === 'no-existe') {
+      bloques.push(
+        `\n\nNo encontré un "artículo ${numero}" en el ${codigo.nombre} de la Secretaría del Senado (${r.detalle}). ` +
+          `Comprueba el número; el texto está en ${indice}.`,
+      )
+    } else {
+      bloques.push(
+        `\n\nNo pude leer el artículo ${numero} del ${codigo.nombre}: ${r.detalle}. ` +
+          `Esto NO significa que no exista: vuelve a intentarlo o léelo en ${indice}.`,
+      )
+    }
+  }
+
+  const avisos = [
+    tachados
+      ? 'Los apartes entre ~~ ~~ están TACHADOS en el portal: los declaró inexequibles o los derogó; no los cites como vigentes.'
+      : '',
+    leidos ? NOTAS_EN_EL_ENLACE : '',
+    leidos ? SIN_CIFRAR : '',
+  ].filter(Boolean)
+
+  return (
+    `### ${cita}${equivalencia}\n${alcance([{ clave: 'senado', detalle: `${leidos} de ${pedidos.length} artículo(s)` }, ...suinUso])}\n` +
+    `${articuloIgnorado}${titulo}\n${epigrafe}` +
+    (actualizacion ? `Texto de la Secretaría del Senado. ${actualizacion}\n` : '') +
+    `${vig.trimStart()}${bloques.join('')}` +
+    (avisos.length ? `\n\n${avisos.join('\n')}` : '')
+  )
+}
