@@ -18,7 +18,7 @@
  * esperando a que alguien tomara ese camino.
  */
 import { spawn } from 'node:child_process'
-import { readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { build } from 'esbuild'
 
 // La versión se inyecta desde package.json: escrita a mano en el User-Agent se
@@ -46,7 +46,9 @@ const BANNER = [
 ].join('\n')
 
 // El nombre del fichero de `unpdf` lleva un hash: sin esto, cada build dejaría el
-// suyo al lado y el paquete acabaría publicando los viejos.
+// suyo al lado y el paquete acabaría publicando los viejos. `server/` está
+// ignorado por git: en un clon nuevo no existe y el `readdirSync` rompía el build.
+mkdirSync('server', { recursive: true })
 for (const f of readdirSync('server')) if (/^unpdf-.*\.js$/.test(f)) rmSync(`server/${f}`)
 
 const r = await build({
