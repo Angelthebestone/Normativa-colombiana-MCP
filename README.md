@@ -141,6 +141,12 @@ Después se apunta el cliente a `node /ruta/absoluta/a/Normativa-colombiana-MCP/
 
 > Carpeta sin espacios: si la ruta local contiene espacios (p. ej. `C:\Users\…\normativa mcp\server\index.js`), algunos clientes lanzan el comando sin comillas y Node solo ve la primera parte (`C:\Users\…\normativa`) y sale con código 1. Para instalación local, clona en una carpeta sin espacios o usa la Opción B (`npx`), que no tiene este problema.
 
+### Opción D — con Bun (alternativa opcional)
+
+Node sigue siendo el runtime de referencia: es el de las pruebas (`npm run check`) y el del `.mcpb`. El servidor construido en la Opción C también arranca con [Bun](https://bun.sh), y se ha probado **a mano con Bun 1.4.2**: mismo `tools/list`, mismas respuestas y TLS íntegro (Bun respeta la cadena de certificados propia del servidor). Arranca unos 40 ms antes y ocupa unos 19 MB menos de memoria; la latencia de cada consulta es la misma, porque la marca el portal. No se prueba en cada versión: si algo falla solo con Bun, reprodúcelo antes con Node.
+
+El cliente se apunta a `bun /ruta/absoluta/a/Normativa-colombiana-MCP/server/index.js` (misma nota de la carpeta sin espacios). Construir sigue requiriendo Node.
+
 ### Qué recibe el cliente
 
 Al conectarse, el servidor entrega **28 herramientas**, **5 prompts** y sus **propias instrucciones de uso**: a qué tipo de pregunta corresponde cada herramienta, que debe citarse siempre la fuente y que nunca debe afirmarse por cuenta propia que una norma está vigente. Los clientes que respetan el campo `instructions` del protocolo lo aprovechan sin configurar nada.

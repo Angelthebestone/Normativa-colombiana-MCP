@@ -3,7 +3,7 @@
 Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/).
 Este proyecto sigue [versionado semántico](https://semver.org/lang/es/).
 
-## [Sin publicar] — 2026-09-29
+## [1.15.0] — 2026-09-29
 
 **El Código Civil se lee, el radicado de 23 dígitos se entiende, y las herramientas devuelven la cita judicial ya compuesta y datos encadenables.** Implementa el banco de ideas (`ideas.md`): 1.1, 1.2, 1.3, 2.2, 4.1, 4.2, 5.1, 5.2, 6.4, 6.5, 6.6 y 6.7; quedan sin hacer 2.1 (empaquetar el Civil y el CGP: se resolvió leyendo el Civil del Senado en vivo; el CGP ya está en el Gestor), 3.x, 6.1, 6.2 y 6.3. Dos de las premisas del banco eran falsas y se midieron antes de construir (ver **Hallazgos**).
 
@@ -22,6 +22,7 @@ Este proyecto sigue [versionado semántico](https://semver.org/lang/es/).
 - **`CACHE_DIR`**: las copias de documentos se guardan además en disco y sobreviven a los reinicios (C-355/06, 3,4 MB: 2.278 ms → 26 ms en un proceso nuevo; con la copia vencida, 304 sin bytes). Solo documentos, tope de 500 ficheros o 256 MB, escritura atómica. Sin la variable no se toca el disco.
 - **`buscar_jurisprudencia.tipos`** acepta «tutela», «constitucionalidad», «unificación» y «auto», además de las siglas.
 - **`npm run salud`**: healthcheck interno (no es una herramienta MCP) que sondea en paralelo los 26 portales que consulta el servidor: OK / LENTO / MANTENIMIENTO / CAÍDO con latencia, y sale con 1 si hay alguno caído. Corrida real: 18 OK, 8 LENTO, 0 caídos.
+- **Bun como alternativa opcional** (README, Opción D): el servidor construido arranca con Bun 1.4.2 con el mismo `tools/list`, las mismas respuestas y TLS íntegro, unos 40 ms antes y con 19 MB menos de memoria. Probado a mano; Node sigue siendo el runtime de referencia, el de las pruebas y el del `.mcpb`.
 
 ### Corregido
 
