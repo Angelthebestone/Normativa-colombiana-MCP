@@ -28,6 +28,7 @@ test('parsearPortal extrae las tarjetas del portal (título, número, año, url)
 
 test('buscar cae al portal cuando el REST devuelve 0 y marca procedencia', async () => {
   const r = await buscar({ texto: 'vehículos eléctricos' }, {
+    pedirRest: async () => ({ status: 200, cuerpo: '[]', cabeceras: {} }),
     pedirPortal: async () => ({ status: 200, cuerpo: fixture }),
   })
   assert.equal(r.procedencia, 'portal')
@@ -37,6 +38,7 @@ test('buscar cae al portal cuando el REST devuelve 0 y marca procedencia', async
 
 test('buscar con REST vacío y portal no parseable degrada sin romper el camino REST', async () => {
   const r = await buscar({ texto: 'algo' }, {
+    pedirRest: async () => ({ status: 200, cuerpo: '[]', cabeceras: {} }),
     pedirPortal: async () => ({ status: 200, cuerpo: '<html><body>sin tarjetas</body></html>' }),
   })
   assert.equal(r.procedencia, 'portal')
