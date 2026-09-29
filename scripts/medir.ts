@@ -55,17 +55,17 @@ async function medirRecorridos(ids: number[], repeticiones: number): Promise<voi
     const ultima = corridas[corridas.length - 1]!
 
     console.log(
-      'rec  pregunta (recortada)                            llamadas  http      bytes  caracteres  ~tokens   ms p50   ms p95  ¿llegó?',
+      'rec  pregunta (recortada)                            llamadas  http     bytes   rep   cop  caracteres  ~tokens   ms p50   ms p95  ¿llegó?',
     )
     console.log(
-      '---  ---------------------------------------------  --------  ----  ---------  ----------  -------  -------  -------  --------',
+      '---  ---------------------------------------------  --------  ----  --------  ----  ----  ----------  -------  -------  -------  --------',
     )
     for (const [i, r] of ultima.entries()) {
       const muestras = corridas.map((c) => c[i]!.ms).filter((m) => m > 0)
-      const bytes = r.pasos.reduce((a, p) => a + p.bytes, 0)
       console.log(
         `${String(r.recorrido.id).padStart(3)}  ${r.recorrido.pregunta.slice(0, 45).padEnd(45)}  ` +
-          `${String(r.llamadas).padStart(8)}  ${String(r.http).padStart(4)}  ${String(Math.round(bytes / 1024)).padStart(6)}KB  ` +
+          `${String(r.llamadas).padStart(8)}  ${String(r.http).padStart(4)}  ${String(Math.round(r.bytes / 1024)).padStart(6)}KB  ` +
+          `${String(r.repetidas).padStart(4)}  ${String(r.copias).padStart(4)}  ` +
           `${String(r.caracteres).padStart(10)}  ${String(tokens(r.caracteres)).padStart(7)}  ` +
           `${String(Math.round(percentil(muestras, 0.5))).padStart(7)}  ${String(Math.round(percentil(muestras, 0.95))).padStart(7)}  ` +
           `${r.llego ? `sí (paso ${r.llegoEn})` : 'NO'}`,
@@ -77,18 +77,19 @@ async function medirRecorridos(ids: number[], repeticiones: number): Promise<voi
       console.log(`\n#${r.recorrido.id} ${r.recorrido.pregunta}`)
       for (const p of r.pasos) {
         console.log(
-          `   ${p.tool.padEnd(34)} ${String(Math.round(p.ms)).padStart(6)} ms  http=${p.http}  ` +
+          `   ${p.tool.padEnd(34)} ${String(Math.round(p.ms)).padStart(6)} ms  http=${p.http}  rep=${p.repetidas}  cop=${p.copias}  ` +
             `${String(p.caracteres).padStart(6)} car  ~${String(tokens(p.caracteres)).padStart(5)} tok  ` +
             `${p.esError ? 'ERROR ' : ''}${p.acierta ? '✓ llegó' : ''}  (${p.por})`,
         )
       }
     }
 
-    const suma = (c: 'llamadas' | 'http' | 'caracteres') => ultima.reduce((a, r) => a + r[c], 0)
+    const suma = (c: 'llamadas' | 'http' | 'caracteres' | 'repetidas' | 'copias') => ultima.reduce((a, r) => a + r[c], 0)
     const sinLlegar = ultima.filter((r) => !r.llego).map((r) => r.recorrido.id)
     const totalCar = suma('caracteres')
     console.log(
       `\nresumen: ${ultima.length} recorridos, ${suma('llamadas')} llamadas, ${suma('http')} peticiones HTTP, ` +
+        `${suma('repetidas')} repetidas, ${suma('copias')} copias, ` +
         `${totalCar} caracteres (~${tokens(totalCar)} tokens). Sin llegar: ${sinLlegar.length ? sinLlegar.join(', ') : 'ninguno'}.`,
     )
     if (repeticiones > 1) {

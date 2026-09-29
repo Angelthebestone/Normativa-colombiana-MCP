@@ -24,6 +24,10 @@ export type LineaDeUso = {
   /** Peticiones HTTP acumuladas por el proceso hasta terminar esta llamada. */
   peticiones: number
   bytes: number
+  /** URLs repetidas acumuladas por el proceso hasta terminar esta llamada. */
+  repetidas: number
+  /** Respuestas servidas de copia, sin salir a la red, acumuladas hasta esta llamada. */
+  copias: number
   error?: string
 }
 
@@ -108,6 +112,34 @@ export class Cliente {
    */
   peticionesAcumuladas(): number {
     return this.usos[this.usos.length - 1]?.peticiones ?? 0
+  }
+
+  /**
+   * Bytes de cuerpo acumulados por el proceso hasta la última llamada terminada.
+   * Mismo aviso que en `peticionesAcumuladas()`: el contador es del proceso
+   * entero, así que lo que costó UNA llamada es la diferencia contra el valor de
+   * antes, no el valor de `ultimoUso`.
+   */
+  bytesAcumulados(): number {
+    return this.usos[this.usos.length - 1]?.bytes ?? 0
+  }
+
+  /**
+   * URLs repetidas acumuladas por el proceso hasta la última llamada terminada.
+   * Mismo aviso que en `peticionesAcumuladas()`: es un acumulado del proceso, así
+   * que lo que costó UNA llamada es la diferencia contra el valor de antes.
+   */
+  repetidasAcumuladas(): number {
+    return this.usos[this.usos.length - 1]?.repetidas ?? 0
+  }
+
+  /**
+   * Copias servidas sin salir a la red, acumuladas hasta la última llamada
+   * terminada. Mismo aviso que en `peticionesAcumuladas()`: es un acumulado del
+   * proceso, así que lo que costó UNA llamada es la diferencia de antes a después.
+   */
+  copiasAcumuladas(): number {
+    return this.usos[this.usos.length - 1]?.copias ?? 0
   }
 
   cerrar(): void {

@@ -509,7 +509,7 @@ server.registerTool = ((nombre: string, config: unknown, handler: (...a: unknown
       const anotar = (ok: boolean, error?: string) => {
         const red = redResumen()
         process.stderr.write(
-          `${JSON.stringify({ ts: new Date().toISOString(), herramienta: nombre, ms: Math.round(performance.now() - t0), ok, peticiones: red.peticiones, bytes: red.bytes, ...(error ? { error } : {}) })}\n`,
+          `${JSON.stringify({ ts: new Date().toISOString(), herramienta: nombre, ms: Math.round(performance.now() - t0), ok, peticiones: red.peticiones, bytes: red.bytes, repetidas: red.repetidas, copias: red.copias, ...(error ? { error } : {}) })}\n`,
         )
       }
       try {
