@@ -29,7 +29,10 @@ export const DESCRIPCION =
   'resultados con su fuente y su enlace (con perfil "salud" añade INVIMA y Supersalud; con "mineria", la ' +
   'ANM). Úsala cuando la consulta es abierta o por materia y no hay herramienta obvia; para una cita exacta ' +
   'sigue siendo mejor resolver_cita y para un tribunal concreto, su buscador propio. Cada resultado declara ' +
-  'su fuente; la vigencia de SUIN se rotula SEGÚN EL BUSCADOR y no es la ficha oficial.'
+  'su fuente; la vigencia de SUIN se rotula SEGÚN EL BUSCADOR y no es la ficha oficial. Cuando la fuente ' +
+  'sirve su texto, cada resultado trae "Para leer", la llamada lista a obtener_documento. Con formato="json" ' +
+  'devuelve un objeto con fecha_consulta, alcance, texto, resultados (cada uno con su "Para leer" cuando ' +
+  'existe), sin_resultados, fallidas y avisos.'
 
 /**
  * Clave de la línea de alcance para cada fuente consultable. Los tres
@@ -64,14 +67,64 @@ export const schema = {
     .optional()
     .describe('Fuentes a consultar; sin él se usan todas menos DIAN (que va con perfil=tributario)'),
   limite: z.coerce.number().int().min(1).max(30).default(15).describe('Cuántos resultados por fuente (máximo 30)'),
+  formato: z
+    .enum(['markdown', 'json'])
+    .default('markdown')
+    .describe(
+      'Salida: "markdown" (texto legible, por defecto) o "json" (un objeto con fecha_consulta, alcance, texto, ' +
+        'resultados, sin_resultados, fallidas y avisos, sin cabecera ni pie)',
+    ),
 }
 
 const schemaCompleto = z.object(schema)
-type Parametros = z.infer<typeof schemaCompleto>
+/** Entrada del cliente: los campos con default (limite, formato) llegan opcionales. */
+type Parametros = z.input<typeof schemaCompleto>
 
-export type Item = { fuente: string; titulo: string; url: string; detalle?: string }
+export type Item = {
+  fuente: string
+  titulo: string
+  url: string
+  detalle?: string
+  /** La llamada lista a obtener_documento que trae el texto, cuando la fuente lo sirve. */
+  paraLeer?: string
+}
+
+/**
+ * La llamada literal a `obtener_documento` que devuelve el texto de este
+ * resultado. Se arma con los MISMOS nombres de parámetro que exige esa
+ * herramienta por fuente (gestor→id, corte→ruta, dian→link, sectorial→entidad+url).
+ * SUIN no tiene: su visor vive en una red privada (suin.TEXTO_NO_PUBLICO).
+ */
+export const paraLeerDe = (fuente: string, campos: Record<string, string>): string =>
+  `obtener_documento con ${[`fuente="${fuente}"`, ...Object.entries(campos).map(([k, v]) => `${k}="${v}"`)].join(', ')}`
+
+/**
+ * true si `url` cae en el mismo origen que el dominio permitido del regulador.
+ * Es la condición que exige `obtener_documento` para leer un PDF sectorial; sin
+ * ella no se promete un «Para leer» que la lectura rechazaría. Medido el
+ * 2026-09-28: los actos de la ANM viven en https://saportalanm.blob.core.windows.net
+ * —un blob de Azure, no su dominio—, así que su enlace se rechaza por dominio.
+ */
+export const mismoOrigen = (dominio: string, url: string): boolean => {
+  try {
+    return new URL(url).origin === new URL(dominio).origin
+  } catch {
+    return false
+  }
+}
 
 const PERFILES_ADMITIDOS = ['laboral', 'tributario', 'ambiental', 'contratacion', 'energia', 'salud', 'mineria'] as const
+
+/** Fecha de la consulta en AAAA-MM-DD: la que el envoltorio ya no añade en modo json. */
+const hoy = () => new Date().toISOString().slice(0, 10)
+
+/**
+ * Por qué los resultados de SUIN no llevan «Para leer». Va UNA vez al final, no
+ * en cada ítem: es la misma razón para todos y repetirla infla la respuesta.
+ */
+const NOTA_SUIN =
+  'Los resultados de SUIN no traen "Para leer": su visor de texto vive en una red privada (direcciones ' +
+  '192.168.x.x) y obtener_documento no lo alcanza.'
 
 /**
  * Qué fuentes consultar según perfil y filtro explícito. Las apagadas (FUENTES)
@@ -99,7 +152,12 @@ async function porGestor(texto: string, limite: number): Promise<Item[]> {
     texto,
     1,
   )
-  return items.slice(0, limite).map((i) => ({ fuente: 'gestor', titulo: i.titulo, url: i.url }))
+  return items.slice(0, limite).map((i) => ({
+    fuente: 'gestor',
+    titulo: i.titulo,
+    url: i.url,
+    paraLeer: paraLeerDe('gestor', { id: i.id }),
+  }))
 }
 
 async function porCorte(texto: string, limite: number): Promise<Item[]> {
@@ -113,6 +171,7 @@ async function porCorte(texto: string, limite: number): Promise<Item[]> {
     titulo: `${p.sentencia} (${p.tipo}, ${p.fecha})`,
     url: p.url,
     ...(p.sintesis ? { detalle: p.sintesis.slice(0, 200) } : {}),
+    ...(p.ruta ? { paraLeer: paraLeerDe('corte', { ruta: p.ruta }) } : {}),
   }))
 }
 
@@ -141,6 +200,7 @@ async function porDian(texto: string, limite: number): Promise<Item[]> {
     titulo: d.nombre,
     url: d.url,
     detalle: d.epigrafe,
+    ...(d.link ? { paraLeer: paraLeerDe('dian', { link: d.link }) } : {}),
   }))
 }
 
@@ -153,6 +213,9 @@ const porSectorial = (id: 'invima' | 'supersalud' | 'anm') => async (texto: stri
     fuente: id,
     titulo: `${x.tipo} ${x.numero}${x.anio ? ` de ${x.anio}` : ''}${x.epigrafe ? ` — ${x.epigrafe.slice(0, 120)}` : ''}`,
     url: x.url,
+    // obtener_documento lee el sectorial por entidad+url, no por su clave interna.
+    // Solo se promete si el enlace cae en el dominio que esa lectura acepta.
+    ...(mismoOrigen(a.dominioPermitido, x.url) ? { paraLeer: paraLeerDe('sectorial', { entidad: id, url: x.url }) } : {}),
   }))
 }
 
@@ -183,9 +246,14 @@ export function formatear(
   const consultadas = Object.keys(resultados) as Fuente[]
   const conFallo = new Set(Object.keys(fallidas) as Fuente[])
   const vacias = consultadas.filter((f) => !resultados[f]?.length && !conFallo.has(f))
+  const ordenados = ordenar(Object.values(resultados).flat(), perfil)
   const lineas: string[] = []
-  for (const item of ordenar(Object.values(resultados).flat(), perfil)) {
-    lineas.push(`- [${item.fuente}] ${item.titulo}\n  ${item.url}${item.detalle ? `\n  ${item.detalle}` : ''}`)
+  for (const item of ordenados) {
+    // «Para leer» va pegado a la URL: es la llamada que devuelve el TEXTO del
+    // resultado, y solo la traen las fuentes cuyo texto sí se puede pedir.
+    const extra =
+      (item.detalle ? `\n  ${item.detalle}` : '') + (item.paraLeer ? `\n  Para leer: ${item.paraLeer}` : '')
+    lineas.push(`- [${item.fuente}] ${item.titulo}\n  ${item.url}${extra}`)
   }
   const bloque = [
     `Resultados para "${texto}"${perfil ? ` (perfil ${perfil})` : ''}:`,
@@ -206,6 +274,8 @@ export function formatear(
       'Esto es un FALLO de la fuente, no un vacío: no concluyas que no hay resultados ahí. Vuelve a intentarlo.',
     )
   }
+  // Una sola línea al final explica por qué hay resultados sin «Para leer».
+  if (ordenados.some((i) => i.fuente === 'suin')) bloque.push('', NOTA_SUIN)
   return bloque.join('\n')
 }
 
@@ -213,12 +283,24 @@ export async function escribir(
   params: Parametros,
   deps: { porFuente?: Record<Fuente, (texto: string, limite: number) => Promise<Item[]>> } = {},
 ): Promise<string> {
+  const json = params.formato === 'json'
   // Un perfil desconocido no debe ejecutar ningún fan-out: se lista lo admitido.
   if (params.perfil && !(PERFILES_ADMITIDOS as readonly string[]).includes(params.perfil)) {
-    return (
-      'Alcance: sin consultar ninguna fuente (la llamada no llegó a salir).\n\n' +
-      `No existe el perfil "${params.perfil}". Disponibles: ${PERFILES_ADMITIDOS.join(', ')}.`
-    )
+    const cabecera = 'Alcance: sin consultar ninguna fuente (la llamada no llegó a salir).'
+    const aviso = `No existe el perfil "${params.perfil}". Disponibles: ${PERFILES_ADMITIDOS.join(', ')}.`
+    if (json) {
+      return JSON.stringify({
+        fecha_consulta: hoy(),
+        texto: params.texto,
+        perfil: params.perfil,
+        alcance: cabecera,
+        resultados: [],
+        sin_resultados: [],
+        fallidas: {},
+        avisos: [aviso],
+      })
+    }
+    return `${cabecera}\n\n${aviso}`
   }
   const porFuente = deps.porFuente ?? POR_FUENTE
   const fuentes = fuentesDe(params.perfil, params.fuentes)
@@ -261,5 +343,32 @@ export async function escribir(
     clave,
     detalle: v.fallo ? (v.n ? `${v.n} resultado(s) y un fallo` : 'falló') : `${v.n} resultado(s)`,
   }))
-  return `${alcance(usadas)}\n\n${formatear(consultadas, params.texto, params.perfil, fallidas)}`
+  const lineaAlcance = alcance(usadas)
+
+  // Modo json: los mismos datos que el markdown, sin cabecera ni pie, y con lo
+  // que en prosa eran advertencias dentro de `avisos`. Sin sangría: se paga en
+  // contexto. `sin_resultados` y `fallidas` reemplazan los bloques de prosa.
+  if (json) {
+    const conFallo = new Set(Object.keys(fallidas) as Fuente[])
+    const vacias = fuentes.filter((f) => !resultado[f].length && !conFallo.has(f))
+    const caidas = fuentes.filter((f) => conFallo.has(f))
+    const todos = ordenar(Object.values(consultadas).flat(), params.perfil)
+    const avisos: string[] = []
+    if (vacias.length)
+      avisos.push('Un vacío en una fuente NO significa que la norma no exista; para una cita exacta usa resolver_cita.')
+    if (caidas.length)
+      avisos.push('Esto es un FALLO de la fuente, no un vacío: no concluyas que no hay resultados ahí. Vuelve a intentarlo.')
+    if (todos.some((i) => i.fuente === 'suin')) avisos.push(NOTA_SUIN)
+    return JSON.stringify({
+      fecha_consulta: hoy(),
+      texto: params.texto,
+      ...(params.perfil ? { perfil: params.perfil } : {}),
+      alcance: lineaAlcance,
+      resultados: todos,
+      sin_resultados: vacias,
+      fallidas,
+      avisos,
+    })
+  }
+  return `${lineaAlcance}\n\n${formatear(consultadas, params.texto, params.perfil, fallidas)}`
 }

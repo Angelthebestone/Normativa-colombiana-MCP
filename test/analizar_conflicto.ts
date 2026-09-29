@@ -7,7 +7,7 @@
 import { strict as assert } from 'node:assert'
 import test from 'node:test'
 
-import { formatear, type Evidencia } from '../src/herramientas/analizar_conflicto.ts'
+import { escribir, formatear, type Evidencia } from '../src/herramientas/analizar_conflicto.ts'
 
 const evidencia = (parcial: Partial<Evidencia> = {}): Evidencia => ({
   cita: 'Ley 909 de 2004',
@@ -74,4 +74,31 @@ test('el plural casa con el singular: "términos" encuentra "término" y lo decl
   )
   assert.ok(conVariante.includes('casó la variante «término»'))
   assert.ok(conVariante.includes('…el término corre…'))
+})
+
+// --- formato json -----------------------------------------------------------
+
+test('escribir json: sin citas interpretables no toca la red y trae las claves documentadas', async () => {
+  // Dos citas que no parsean: evidenciaDe vuelve antes de ninguna llamada.
+  const r = await escribir({ norma_a: 'esto no es una cita', norma_b: 'tampoco', formato: 'json' })
+  const d = JSON.parse(r)
+  assert.deepEqual(Object.keys(d).sort(), ['alcance', 'avisos', 'evidencias', 'fecha_consulta'])
+  assert.match(d.fecha_consulta, /^\d{4}-\d{2}-\d{2}$/)
+  assert.match(d.alcance, /sin consultar ninguna fuente/)
+  assert.equal(d.evidencias.length, 2)
+  assert.equal(d.evidencias[0].parseada, false)
+  assert.ok(d.avisos.some((a: string) => /Conflicto POTENCIAL/.test(a)))
+  assert.ok(d.avisos.some((a: string) => /resolver_cita/.test(a)))
+})
+
+test('escribir json: incluye "sobre" cuando se pide el tema', async () => {
+  const r = await escribir({ norma_a: 'esto no es una cita', norma_b: 'tampoco', sobre: 'teletrabajo', formato: 'json' })
+  assert.equal(JSON.parse(r).sobre, 'teletrabajo')
+})
+
+test('escribir markdown sigue siendo el texto de siempre, no json', async () => {
+  const r = await escribir({ norma_a: 'esto no es una cita', norma_b: 'tampoco' })
+  assert.match(r, /^Alcance: sin consultar ninguna fuente/)
+  assert.match(r, /Conflicto POTENCIAL, no conclusión jurídica/)
+  assert.doesNotMatch(r, /^\s*\{/)
 })
