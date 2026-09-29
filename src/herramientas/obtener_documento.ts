@@ -42,6 +42,8 @@ import { parsearCita } from '../nucleo/citas.ts'
 import { extraerTextoWord } from '../fuentes/sectorial/word.ts'
 import { textoDePdfSectorial, avisoEscaneo } from '../fuentes/sectorial/pdf.ts'
 import { adaptador, ids } from '../fuentes/sectorial.ts'
+import { numeroDeArticulo } from '../nucleo/normalizar.ts'
+
 import * as gestor from '../fuentes/gestor.ts'
 import * as corte from '../fuentes/jurisprudencia/corte.ts'
 import * as suprema from '../fuentes/jurisprudencia/cortesuprema.ts'
@@ -86,7 +88,7 @@ export const schema = {
   ...comun,
   // Extras por fuente (opcionales; el handler valida cuál aplica según fuente).
   id: z.coerce.string().optional().describe('Solo gestor: id numérico de la norma'),
-  articulo: z.string().optional().describe('Solo gestor: número de artículo'),
+  articulo: z.preprocess(numeroDeArticulo, z.string().optional()).describe('Solo gestor: número de artículo'),
   historial: z
     .boolean()
     .optional()

@@ -11,6 +11,7 @@ import { codigoDe, referencia as refCodigo } from '../nucleo/codigos.ts'
 import { esCompiladora } from '../nucleo/compiladas.ts'
 import { validarUrl } from '../nucleo/evidencia.ts'
 import { advertenciasVigencia, articulo as extraerArticulo } from '../nucleo/parse.ts'
+import { numeroDeArticulo } from '../nucleo/normalizar.ts'
 import { vacio } from '../nucleo/vacio.ts'
 import * as corte from '../fuentes/jurisprudencia/corte.ts'
 import * as gestor from '../fuentes/gestor.ts'
@@ -332,8 +333,7 @@ const esquema = z.object({
     .optional()
     .describe('Varias citas a la vez, ej. ["Ley 909 de 2004", "C-337/11"]: cada una se resuelve y se devuelve con su enlace'),
   articulos: z
-    .array(z.string())
-    .optional()
+    .preprocess((v) => (Array.isArray(v) ? v.map(numeroDeArticulo) : v), z.array(z.string()).optional())
     .describe(
       'Varios artículos de la MISMA norma en una sola llamada, ej. ["705", "707", "710"]. Se usa con cita ' +
         'apuntando a la norma ("Decreto Ley 624 de 1989"); la norma se descarga una vez y se extrae cada artículo.'

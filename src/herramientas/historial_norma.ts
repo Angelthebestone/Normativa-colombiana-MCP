@@ -17,6 +17,8 @@ import { z } from 'zod'
 
 import { historial, type Cambio } from '../nucleo/parse.ts'
 import { idTipo, parsearCita, candidatosAmbiguos } from '../nucleo/citas.ts'
+import { numeroDeArticulo } from '../nucleo/normalizar.ts'
+
 import * as gestor from '../fuentes/gestor.ts'
 import { alcance } from '../nucleo/alcance.ts'
 
@@ -33,8 +35,7 @@ export const DESCRIPCION =
 const esquema = z.object({
   cita: z.string().describe('Cita de la norma, ej. "Ley 100 de 1993"'),
   articulo: z
-    .string()
-    .optional()
+    .preprocess(numeroDeArticulo, z.string().optional())
     .describe('Filtra a los cambios que afectaron ese artículo (ej. "6"); sin él se devuelven todos'),
   desde: z.coerce
     .number()

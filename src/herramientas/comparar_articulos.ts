@@ -26,6 +26,8 @@ import {
   limpiarArticulo,
   type Norma,
 } from '../nucleo/parse.ts'
+import { numeroDeArticulo } from '../nucleo/normalizar.ts'
+
 import * as gestor from '../fuentes/gestor.ts'
 import { alcance } from '../nucleo/alcance.ts'
 
@@ -41,12 +43,12 @@ export const DESCRIPCION =
 
 const esquema = z.object({
   norma_a: z.string().describe('Cita de la norma base, ej. "Ley 909 de 2004"'),
-  articulo_a: z.string().describe('Número del artículo de la norma base, ej. "31"'),
+  articulo_a: z.preprocess(numeroDeArticulo, z.string()).describe('Número del artículo de la norma base, ej. "31"'),
   norma_b: z
     .string()
     .optional()
     .describe('Cita de la segunda norma, ej. "Decreto 1083 de 2015"; no se usa con con_reforma=true'),
-  articulo_b: z.string().optional().describe('Número de artículo de la segunda norma; no se usa con con_reforma=true'),
+  articulo_b: z.preprocess(numeroDeArticulo, z.string().optional()).describe('Número de artículo de la segunda norma; no se usa con con_reforma=true'),
   con_reforma: z
     .boolean()
     .default(false)

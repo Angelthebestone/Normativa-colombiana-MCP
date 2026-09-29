@@ -86,6 +86,12 @@ export type Torcida = {
    * un caso que no tiene arreglo automático y lo correcto es rechazarlo.
    */
   correcta?: Record<string, unknown>
+  /**
+   * El esquema lo deja pasar A PROPÓSITO y quien lo rechaza es la herramienta,
+   * con un mensaje mejor del que daría zod. Nombra a quién rechaza. Medirlo como
+   * «acepta mal» sería falso: la llamada sí se rechaza, solo que más tarde.
+   */
+  rechazaDespues?: string
 }
 
 /** El corpus. Se añade, no se quita. */
@@ -133,9 +139,9 @@ export const TORCIDAS: Torcida[] = [
   { herramienta: 'expediente', args: { accion: 'Crear' }, porque: 'acción capitalizada', correcta: { accion: 'crear' } },
 
   // --- ids con o sin prefijo ----------------------------------------------
-  { herramienta: 'explicar_relacion_tema', args: { temsubid: '38872', normid: '31431' }, porque: 'temsubid sin su prefijo', correcta: { temsubid: 'ts-38872' } },
-  { herramienta: 'listar_catalogos', args: { catalogo: 'subtemas', tema_id: '24457' }, porque: 'tema_id sin su prefijo', correcta: { tema_id: 'tema-24457' } },
-  { herramienta: 'listar_catalogos', args: { catalogo: 'subtemas', tema_id: 'ts-24457' }, porque: 'prefijo de OTRO catálogo: no tiene arreglo, hay que rechazarlo' },
+  { herramienta: 'explicar_relacion_tema', args: { temsubid: '38872', normid: '31431' }, porque: 'temsubid sin su prefijo', rechazaDespues: 'sinPrefijo' },
+  { herramienta: 'listar_catalogos', args: { catalogo: 'subtemas', tema_id: '24457' }, porque: 'tema_id sin su prefijo', rechazaDespues: 'sinPrefijo' },
+  { herramienta: 'listar_catalogos', args: { catalogo: 'subtemas', tema_id: 'ts-24457' }, porque: 'prefijo de OTRO catálogo, que es el cruce que sinPrefijo existe para impedir', rechazaDespues: 'sinPrefijo' },
 
   // --- límites fuera de rango ---------------------------------------------
   { herramienta: 'buscar_por_tema', args: { texto: 'x', limite: 0 }, porque: 'límite por debajo del mínimo' },
@@ -167,7 +173,7 @@ export const TORCIDAS: Torcida[] = [
 
 // --- clasificación --------------------------------------------------------
 
-export type Clase = 'normaliza' | 'acepta-mal' | 'rechazo-util' | 'rechazo-crudo' | 'sin-esquema'
+export type Clase = 'normaliza' | 'acepta-mal' | 'rechazo-util' | 'rechazo-tardio' | 'rechazo-crudo' | 'sin-esquema'
 
 /**
  * `rechazo-util` exige que el mensaje diga algo accionable: o el valor que
@@ -189,6 +195,7 @@ export function clasificar(t: Torcida): { clase: Clase; detalle: string } {
   const objeto = exportado instanceof z.ZodObject ? exportado : z.object(exportado)
   const r = objeto.safeParse(t.args)
   if (r.success) {
+    if (t.rechazaDespues) return { clase: 'rechazo-tardio', detalle: `lo rechaza ${t.rechazaDespues}, no el esquema` }
     if (!t.correcta) return { clase: 'acepta-mal', detalle: 'se acepta una llamada que no tiene arreglo automático' }
     const salida = r.data as Record<string, unknown>
     const malas = Object.entries(t.correcta).filter(
@@ -206,7 +213,7 @@ export function clasificar(t: Torcida): { clase: Clase; detalle: string } {
 }
 
 export function recuento(): Record<Clase, number> {
-  const r: Record<Clase, number> = { normaliza: 0, 'acepta-mal': 0, 'rechazo-util': 0, 'rechazo-crudo': 0, 'sin-esquema': 0 }
+  const r: Record<Clase, number> = { normaliza: 0, 'acepta-mal': 0, 'rechazo-util': 0, 'rechazo-tardio': 0, 'rechazo-crudo': 0, 'sin-esquema': 0 }
   for (const t of TORCIDAS) r[clasificar(t).clase]++
   return r
 }
@@ -240,6 +247,8 @@ test('el reparto medido no empeora', () => {
       `  normaliza a la llamada correcta   ${String(r.normaliza).padStart(3)}  (${pct(r.normaliza)} %)\n` +
       `  acepta mal (silenciosamente)      ${String(r['acepta-mal']).padStart(3)}  (${pct(r['acepta-mal'])} %)\n` +
       `  rechazo que enseña                ${String(r['rechazo-util']).padStart(3)}  (${pct(r['rechazo-util'])} %)\n` +
+      `  rechazo tardío (lo hace la tool)  ${String(r['rechazo-tardio']).padStart(3)}  (${pct(r['rechazo-tardio'])} %)
+` +
       `  rechazo crudo                     ${String(r['rechazo-crudo']).padStart(3)}  (${pct(r['rechazo-crudo'])} %)\n`,
   )
   assert.ok(r.normaliza >= 0, 'el recuento se calcula')
