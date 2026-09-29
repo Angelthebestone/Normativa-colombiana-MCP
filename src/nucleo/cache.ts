@@ -1,7 +1,7 @@
 /**
  * Cache en memoria: valores genéricos con TTL y copias de documento con
  * revalidación condicional. Comparten mapa y purga perezosa, pero son dos cosas
- * distintas: `conCache` guarda un cálculo cualquiera durante un TTL, y una copia
+ * distintas: `obtener`/`poner` guardan un valor cualquiera durante un TTL, y una copia
  * guarda el cuerpo de una URL con sus validadoras HTTP para que la capa de
  * transporte la revalide y, si la fuente calla, la sirva fechada y rotulada.
  *
@@ -61,19 +61,6 @@ export function obtener(clave: string): unknown | null {
 /** Guarda `valor` bajo `clave` hasta `ttlMs` milisegundos desde ahora. */
 export function poner(clave: string, valor: unknown, ttlMs: number): void {
   entradas.set(clave, { valor, vence: Date.now() + ttlMs })
-}
-
-/**
- * Devuelve el valor cacheado si está fresco; si no, ejecuta `fn`, lo cachea
- * con `ttlMs` y lo devuelve. `fn` es async para servir a los módulos de
- * fuentes, que consultan la red.
- */
-export async function conCache<T>(clave: string, ttlMs: number, fn: () => Promise<T>): Promise<T> {
-  const fresco = obtener(clave)
-  if (fresco !== null) return fresco as T
-  const valor = await fn()
-  poner(clave, valor, ttlMs)
-  return valor
 }
 
 /**

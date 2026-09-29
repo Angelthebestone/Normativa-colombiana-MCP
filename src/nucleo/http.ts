@@ -1,4 +1,3 @@
-import { AsyncLocalStorage } from 'node:async_hooks'
 import { request as pedirHttps } from 'node:https'
 import { pipeline } from 'node:stream'
 import { rootCertificates } from 'node:tls'
@@ -276,52 +275,6 @@ export function decodificar(datos: Buffer, contentType = ''): string {
   }
 }
 
-// --- presupuesto de tiempo por llamada -----------------------------------
-
-/**
- * Presupuesto de tiempo de UNA llamada a herramienta, propagado por contexto
- * asíncrono para no pasarlo de mano en mano por cuarenta firmas.
- *
- * Justificación medida (2026-09-16, `scripts/medir.ts --recorridos`): el paso
- * más lento de los ocho recorridos fue un `obtener_documento` de 3.845 ms y el
- * p95 de los diez y nueve pasos quedó por debajo de 4 s; lo caro de verdad son
- * la búsqueda de la DIAN (~20 s por el diseño de su endpoint, no admite tope) y
- * el Decreto 1083 (~8 s). Un techo de 45 s deja entrar ambos con holgura y corta
- * el caso que el usuario no tolera: minuto y medio de espera para acabar en
- * error, habiendo podido devolver lo que ya estaba reunido.
- */
-const presupuesto = new AsyncLocalStorage<number>()
-
-export class PresupuestoAgotado extends Error {
-  constructor(ms: number) {
-    super(
-      `Se agotó el presupuesto de ${Math.round(ms / 1000)} s para esta llamada: ` +
-        `se cortó para no hacer esperar más a cambio de nada. ` +
-        `Vuelve a pedirlo con menos pasos o más estrecho (un artículo, una fuente).`,
-    )
-    this.name = 'PresupuestoAgotado'
-  }
-}
-
-/** Corre `fn` con `ms` de presupuesto para todas las peticiones que lance. */
-export function conPresupuesto<T>(ms: number, fn: () => Promise<T>): Promise<T> {
-  return presupuesto.run(Date.now() + ms, fn)
-}
-
-/** Ms que quedan del presupuesto en curso, o null si no hay ninguno puesto. */
-export function presupuestoRestante(): number | null {
-  const hasta = presupuesto.getStore()
-  return hasta === undefined ? null : hasta - Date.now()
-}
-
-/** Recorta el `timeout` de una petición a lo que queda de presupuesto. */
-function timeoutEfectivo(timeout: number): number {
-  const queda = presupuestoRestante()
-  if (queda === null) return timeout
-  if (queda <= 0) throw new PresupuestoAgotado(0)
-  return Math.max(1000, Math.min(timeout, queda))
-}
-
 // --- petición ------------------------------------------------------------
 
 type Cruda = {
@@ -490,7 +443,7 @@ async function pedirUna(
     let r: Cruda
     try {
       r = await enCola(host, () =>
-        crudo(url, timeoutEfectivo(timeout), accept, { ...extra, ...condicionales }, cuerpo),
+        crudo(url, timeout, accept, { ...extra, ...condicionales }, cuerpo),
       )
     } catch (e) {
       const d = degradarO()
@@ -590,8 +543,8 @@ async function pedirUna(
  * no se queda pegado: la siguiente llamada vuelve a intentarlo.
  *
  * ponytail: solo GET de `pedir`; `pedirBytes` (los PDF) baja aparte y no se
- * fusiona. Si algún día se conecta `conPresupuesto`, la clave tiene que incluir
- * el techo del llamador: hoy nadie lo establece y no puede heredarse el de otro.
+ * fusiona. Si algún día se pone un techo de tiempo por llamada, la clave tiene
+ * que incluirlo: no puede heredarse el del llamador que llegó primero.
  */
 const enVuelo = new Map<string, Promise<Respuesta>>()
 
@@ -621,7 +574,7 @@ export async function pedirBytes(
   const est = estadoDe(host)
   if (est.degradado) throw errorDegradado(host, est.reintentaEnMs!)
   try {
-    const r = await enCola(host, () => crudo(url, timeoutEfectivo(timeout), accept, {}))
+    const r = await enCola(host, () => crudo(url, timeout, accept, {}))
     if (r.status >= 500) anotarFallo(host)
     else restablecer(host)
     anotarRed(r.datos.length)

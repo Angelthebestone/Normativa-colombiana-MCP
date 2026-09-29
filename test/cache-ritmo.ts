@@ -5,43 +5,10 @@
  */
 import { strict as assert } from 'node:assert'
 import { createServer } from 'node:http'
-import { setTimeout as sleep } from 'node:timers/promises'
 import test from 'node:test'
 
 import * as cache from '../src/nucleo/cache.ts'
 import * as http from '../src/nucleo/http.ts'
-
-test('conCache devuelve el valor cacheado sin ejecutar fn de nuevo', async () => {
-  let veces = 0
-  const fn = async () => {
-    veces++
-    return `v${veces}`
-  }
-  const clave = `cache-contador-${Date.now()}`
-
-  const primero = await cache.conCache(clave, 60_000, fn)
-  const segundo = await cache.conCache(clave, 60_000, fn)
-
-  assert.equal(primero, 'v1')
-  assert.equal(segundo, 'v1')
-  assert.equal(veces, 1)
-})
-
-test('TTL expirado: conCache ejecuta fn de nuevo', async () => {
-  let veces = 0
-  const fn = async () => {
-    veces++
-    return `v${veces}`
-  }
-  const clave = `cache-ttl-${Date.now()}`
-
-  await cache.conCache(clave, 20, fn)
-  await sleep(30)
-  const recalculado = await cache.conCache(clave, 60_000, fn)
-
-  assert.equal(recalculado, 'v2')
-  assert.equal(veces, 2)
-})
 
 test('ritmo: N peticiones al mismo host quedan espaciadas ≥1 s', async () => {
   const host = 'funcionpublica.gov.co'
@@ -187,17 +154,6 @@ test('copias: el almacén tiene tope y descarta la más antigua', () => {
   assert.equal(cache.obtenerCopia('https://x.gov.co/0.htm'), null, 'la primera en entrar es la primera en salir')
   assert.ok(cache.obtenerCopia('https://x.gov.co/79.htm'), 'la última sigue dentro')
   cache.limpiarCopias()
-})
-
-test('presupuesto: se propaga por contexto y se agota de verdad', async () => {
-  assert.equal(http.presupuestoRestante(), null, 'sin presupuesto no hay techo')
-  await http.conPresupuesto(5_000, async () => {
-    const queda = http.presupuestoRestante()!
-    assert.ok(queda > 0 && queda <= 5_000, `debería quedar algo de 5 s, quedan ${queda}`)
-    await sleep(20)
-    assert.ok(http.presupuestoRestante()! < queda, 'el presupuesto tiene que consumirse con el tiempo')
-  })
-  assert.equal(http.presupuestoRestante(), null, 'al salir del contexto el techo desaparece')
 })
 
 test('circuit breaker: vencida la ventana el host vuelve a intentarse sin restablecerlo a mano', (t) => {
