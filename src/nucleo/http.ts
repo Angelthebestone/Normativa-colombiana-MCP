@@ -1,5 +1,4 @@
 import { AsyncLocalStorage } from 'node:async_hooks'
-import { request as pedirHttp } from 'node:http'
 import { request as pedirHttps } from 'node:https'
 import { pipeline } from 'node:stream'
 import { rootCertificates } from 'node:tls'
@@ -364,7 +363,7 @@ export function cuerpoDe(res: NodeJS.ReadableStream & { headers: Record<string, 
   })
 }
 
-function crudo(
+async function crudo(
   url: string,
   timeout: number,
   accept: string,
@@ -376,7 +375,10 @@ function crudo(
   }
   // El Senado solo habla HTTP plano (su puerto 443 no abre, comprobado el 2026-09-28): el mismo
   // transporte, con su ritmo por dominio, reintentos y decodificación, sirve para las dos.
-  const request = url.startsWith('http:') ? pedirHttp : pedirHttps
+  // `node:http` se importa aquí y no arriba: un `import` estático hace que Node lea todos sus
+  // exports al arrancar, y algunos (WebSocket, MessageEvent) cargan `undici` entero, que solo
+  // hace falta para el Senado.
+  const request = url.startsWith('http:') ? (await import('node:http')).request : pedirHttps
   return new Promise((resolve, reject) => {
     const req = request(
       url,
