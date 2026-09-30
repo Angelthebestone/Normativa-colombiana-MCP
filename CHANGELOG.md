@@ -3,7 +3,7 @@
 Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/).
 Este proyecto sigue [versionado semántico](https://semver.org/lang/es/).
 
-## [Sin publicar]
+## [1.15.1] — 2026-09-30
 
 **Segunda y tercera serie de pruebas (28 herramientas, 1.14.0 y 1.15.0 publicada): 23 correcciones, casi todas falsos vacíos o etiquetas engañosas.** Cambio OpenSpec `corregir-hallazgos-segunda-serie`. Sin parámetros nuevos ni retirados.
 
