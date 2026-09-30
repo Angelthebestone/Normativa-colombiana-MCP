@@ -2,7 +2,9 @@
 
 Motivación y lista de hallazgos: ver `proposal.md`. Los specs de este cambio fijan el comportamiento; aquí va el «cómo», siempre la corrección más pequeña en el sitio donde nace el defecto.
 
-Cada hallazgo se verificó contra el código de la 1.15.0 (`origin/main`, commit 38db743, que ya contiene la rama `optimizacion`), no contra el 1.14.0 con que se probó. Dos se descartan por estar ya corregidos: `entero`/`ruta_destino` (`obtener_documento.ts:83-96` añade el objeto `archivo` a la unión) y el «undefined» de `explicar_relacion_tema` (`estricto()` en `normalizar.ts:72-79`).
+Cada hallazgo se verificó contra el código de la 1.15.0 (`origin/main`, commit 38db743, que ya contiene la rama `optimizacion`), no contra el 1.14.0 con que se probó. Uno se descarta por estar ya corregido: `entero`/`ruta_destino` (`obtener_documento.ts:83-96` añade el objeto `archivo` a la unión), que la tercera serie confirmó contra la 1.15.0 publicada.
+
+La tercera serie (las 28 tools contra la 1.15.0 publicada, `v1.15.0` = 2434e9a, cuyo árbol contiene 875fbde) **reabrió el otro descarte**: el «undefined» de `explicar_relacion_tema` se había dado por corregido leyendo `estricto()` (`normalizar.ts:72-79`), pero esa rama solo se activa con `issue.validation === 'regex'`; el campo `temsubid` no tiene regex y por eso el mensaje sigue saliendo. Se corrige en D11. La lección es la de siempre: un descarte se comprueba ejecutándolo, no leyendo el arreglo.
 
 Convenciones del repo que rigen todas las decisiones (CLAUDE.md): borrar el camino viejo en vez de envolverlo, reutilizar lo instalado (`pedir`, `cargar`, `trocear`, `articulo()`), un módulo por responsabilidad, y marcar con `ponytail:` los atajos deliberados con su techo y su salto siguiente. Los tests se registran a mano en el script `test` de `package.json` (un fichero no registrado no corre; ya pasó con 12).
 
@@ -56,6 +58,24 @@ Cambio de comportamiento: con el tope por defecto (8.000) un artículo de hasta 
 - Iconos: `cargar()` en `parse.ts` quita los elementos `.material-symbols-outlined` (medido en las páginas de CREG e INVIMA: `<span class="material-symbols-outlined …">developer_guide</span>`). Lo usan todas las fuentes HTML; ningún selector de scraping depende de esos iconos.
 - Descripciones: `listar_catalogos` sin recuentos; `invima.ts` y `supersalud.ts` dicen que el HTML se lee con `obtener_documento`.
 
+**D11. `temsubid` obligatorio de verdad.** En `explicar_relacion_tema.ts:21`, `temsubid: z.coerce.string()` pasa a `z.string()`. `coerce` no aporta nada: el valor lleva prefijo («ts-38872») y un número suelto se rechaza igual en `sinPrefijo`. Con `z.string()` la ausencia la levanta el esquema del campo y `conAviso` (`normalizar.ts:72`) la redacta como «Falta "temsubid", que es obligatorio: …»; y `isOptional()` deja de aceptarla, con lo que el esquema JSON que se publica lo lista en `required` (hoy solo lista `normid`, porque `z.coerce.string()` acepta «undefined»). Se comprueba de paso que ningún otro campo obligatorio de las 28 herramientas sea `z.coerce.string()` sin regex (medido: solo este; `id` de `obtener_documento` es opcional y ya lo trata `obtener_documento.ts:206`).
+*Alternativa descartada:* añadir en `conAviso` un caso `ctx.data === 'undefined'` para cualquier tipo. Parchea el síntoma y deja el esquema publicado mintiendo.
+
+**D12. El aviso de OR sale de la nota de la fuente, no de la herramienta.** `consejoestado.buscar` ya devuelve `nota` según el modo (`consejoestado.ts:269-276`: filtro AND en exacto con ≥2 términos, «Modo ampliado (OR)» en `exacto=false`). La herramienta añade además, sin condición, «El buscador une los términos con OR…» (`buscar_jurisprudencia_consejo_estado.ts:82-83`). Se borra esa frase incondicional y la herramienta imprime `r.nota`. Cuando una frase exacta sin resultados se amplía (`ampliada: true`), la fuente ya antepone su aviso; se comprueba que la respuesta declare el modo OR en ese caso también.
+
+**D13. «Temas asociados (N de M)».** En `obtener_documento.ts:535`, `Math.min(10, ordenados.length)` pasa a `Math.min(cuantosTemas, ordenados.length)`, con `cuantosTemas` ya calculado en la línea 526 (3 si el tope es menor de 2000, 10 si no). Un solo número, el que se muestra.
+
+**D14. Filas sin número (sectorial) y duplicados de salud.**
+- `buscar_normativa_sectorial.ts:92`: la clave de repetidas ignora las filas sin número (`if (!d.numero) continue`); la línea de resultado (`:111`) omite el número y el «de» cuando faltan y rotula por tipo y epígrafe. El aviso de repetidas solo nombra actos con número y año.
+- `buscar_unificado.ts`: tras reunir los resultados, dos ítems de `invima` y `supersalud` con el mismo nombre de archivo (último segmento de la URL) se fusionan en el primero, con «también en Supersalud» en el detalle, y el límite se completa con lo siguiente. Precedente: la deduplicación que la búsqueda federada ya aplica entre fuentes (spec `busqueda/deduplicacion-resultados`). `// ponytail: la clave es el nombre de archivo; el techo es un acto que las dos entidades publiquen con nombres distintos; el salto sería comparar epígrafes normalizados.`
+
+**D15. Perfiles de contratación y energía.**
+- Contratación (`perfiles.ts:82-85`): en vez de `[p.radicado, p.url]`, cada resultado lleva el radicado con su clase, la fecha del proceso rotulada como en D8, la sala y las partes si existen, y el enlace de la ficha. Los campos ya vienen en `p` (los usa la herramienta del Consejo de Estado); solo se dejan de tirar.
+- Energía (`perfiles.ts:87-92`): `creg.buscar('vigentes', texto, limite, undefined)` sin año mira solo el año en curso (así lo declara `buscar_resoluciones_creg`). No se recorren todos los años (consultas de más para una fuente que ya tiene herramienta propia): la advertencia del perfil dice que solo se revisó el año en curso y remite a `buscar_resoluciones_creg` con `anio`. Mismo criterio que D7: declarar el alcance, no ampliarlo.
+
+**D16. Fuente degradada: la causa y la verdad.** `Breaker` (`http.ts:163`) gana `ultimo: string`, la causa del último fallo. `anotarFallo(host)` pasa a `anotarFallo(host, causa)`; los tres sitios que lo llaman (`http.ts:493`, `:578`, `:584`) ya tienen a mano el estado HTTP o el mensaje del error de red. `errorDegradado(host, ms, causa)` redacta dos formas: recién armada («La fuente X no respondió: <causa>. No se reintenta sola; las llamadas a X se cortan 60 s y pasado ese plazo se vuelve a llamar») y en pausa («X sigue en pausa por <causa>; quedan N s y esta llamada no salió a la red»). Se conserva el `test` `/degradada/` que usa `http.ts:584` para no contar la excepción del propio breaker como fallo. La causa raíz del fallo de Superfinanciera NO se decide aquí: primero se mide (tarea 6.5) con `MEDIR_RED` y `pedir`, porque puede ser el certificado, un 5xx real o un cambio del portal, y cada uno pide otra corrección.
+*Evidencia de por qué:* tres intentos de la tercera serie, el segundo y el tercero pasado más de un minuto, respondieron los tres «reintentando en 60 s»; una pausa heredada habría mostrado una cifra menor, así que cada llamada tocó la red, falló y rearmó los 60 s.
+
 ## Risks / Trade-offs
 
 - **[Riesgo] El criterio del armazón en D6 se apoya en la medición documentada de `porRadicado`, no en una medición propia de «frase exacta sin resultados».** Una sonda con `curl` no vale: SAMAI responde «ENLACE DE CONSULTA INCOMPLETO O CORRUPTO» a peticiones que no son las de la extensión. → La tarea 4.1 captura esa página con el cliente real (`pedir`) antes de tocar código. **Si no trae el armazón, se detiene el trabajo y se elige otro discriminador con el usuario**; no se adivina.
@@ -69,12 +89,14 @@ Cambio de comportamiento: con el tope por defecto (8.000) un artículo de hasta 
 | Hallazgo | Motivo |
 |---|---|
 | `entero` / `ruta_destino` rechazados | Ya corregido en 1.15.0 (`obtener_documento.ts:83-96`). |
-| «undefined» en `explicar_relacion_tema` | Ya corregido en 1.15.0 (`normalizar.ts:72-79`, commit 875fbde). |
+| Entidades «0» y «ACTA» en `listar_catalogos entidades` | Datos del propio Gestor; filtrarlos por heurística arriesga borrar una entidad real. |
+| Epígrafe cortado a mitad de palabra en `consultar_perfil energia` («solares foto») | Tope de longitud deliberado del perfil; sin daño para la cita, que va en el enlace. |
+| Campo «Publicación:» vacío en `resolver_cita` de una sentencia | Cosmético; la relatoría no publica la fecha de esa ficha. |
 | UPME: la Res. 692/2025 sale en las páginas 1 y 2 | Probable orden inestable por empate de fecha de publicación del portal; sin verificar. |
-| Superfinanciera «degradada» (3 intentos) | Externo y sin medir; corresponde `npm run salud`, no código. |
-| Filtro `SU` de `buscar_jurisprudencia` | No concluyente: «tutela» con SU devuelve 10. |
+| Causa del fallo de Superfinanciera (6 intentos en dos series, siempre «reintentando en 60 s») | Se mide antes de decidir (tarea 6.5). Lo que sí se corrige es el mensaje, que esconde la causa (D16). |
+| Filtro `SU` de `buscar_jurisprudencia` | Coherente: «discapacidad» con SU da 0 y la SU-049/17, sobre la misma materia, no contiene esa palabra en su tema ni su síntesis; «tutela» con SU devuelve SU. Sin defecto. |
 | `expediente` desactivado | Configuración (`EXPEDIENTES=1`), no defecto. |
-| `URL:` tras cada párrafo | Decisión deliberada (`conOrigen`: un párrafo sin origen se cita como de otro documento). |
+| `URL:` tras cada párrafo | Decisión deliberada (`conOrigen`: un párrafo sin origen se cita como de otro documento). La tercera serie midió su coste: con `consejo`, un tope de 600 caracteres devolvió el token de unos 700 caracteres tres veces. Reducirlo (p. ej. el origen solo al cambiar de sección) cambia una garantía de citación: es decisión de Angel, no de este cambio. |
 | «Remite a un documento externo» sobre el título de la Res. 1403 | Heurística de `documentosRemitidos`; falso positivo menor, sin arreglo pequeño y seguro. |
 | Circular 2/2000 de INVIMA con 360.982 caracteres | Sin verificar qué contiene el resto; requiere medir primero. |
 | Constitución sin tildes | Así la publica el Gestor; el texto se transcribe literal a propósito. |

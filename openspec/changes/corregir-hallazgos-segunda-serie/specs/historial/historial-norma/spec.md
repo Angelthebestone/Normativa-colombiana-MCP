@@ -24,6 +24,10 @@ Cuando se pide el historial de una norma con un número de artículo, el sistema
 - **WHEN** el usuario pide el historial de la Ley 909 de 2004 con artículo 31
 - **THEN** el sistema devuelve al menos «MODIFICADO por Ley 1960 de 2019, artículo 6» con su nota literal, en vez de «ninguno sobre el artículo 31»
 
+#### Scenario: Notas de control constitucional y de leyes adicionantes dentro del artículo
+- **WHEN** el usuario pide el historial de la Ley 1221 de 2008 con artículo 6, cuyo texto lleva la nota de la Sentencia C-337 de 2011 y «(Adiciona Art 54 numerales 13, 14,15 de la Ley 2466 de 2025)»
+- **THEN** el sistema devuelve al menos esas dos notas, en vez de «ninguno sobre el artículo 6»
+
 #### Scenario: Un número que coincide con el de otra norma
 - **WHEN** el usuario pide el artículo 6 de la Ley 909 de 2004
 - **THEN** el sistema no incluye notas de otros artículos de la Ley 909 solo porque su norma modificadora tenga un «artículo 6»

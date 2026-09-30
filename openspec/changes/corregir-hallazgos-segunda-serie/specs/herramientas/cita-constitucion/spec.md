@@ -11,6 +11,10 @@ El sistema SHALL resolver «Constitución Política», «Constitución Política
 - **WHEN** el usuario resuelve «art. 53 de la Constitución Política»
 - **THEN** el sistema devuelve el texto del artículo 53 con su enlace al Gestor e identifica la norma como la Constitución Política de 1991
 
+#### Scenario: La Constitución sin artículo
+- **WHEN** el usuario resuelve «Constitución Política» sin indicar artículo
+- **THEN** el sistema identifica la Constitución Política de 1991 con su enlace y explica cómo pedir un artículo («art. 53 de la Constitución Política»), en vez de responder «No encontré una cita normativa»
+
 #### Scenario: Varios artículos de la Constitución
 - **WHEN** el usuario resuelve «Constitución Política» con los artículos 53 y 83
 - **THEN** el sistema descarga la norma una vez y devuelve los dos artículos

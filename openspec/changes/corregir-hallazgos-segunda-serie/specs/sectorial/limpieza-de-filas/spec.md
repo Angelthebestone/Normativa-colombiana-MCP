@@ -19,6 +19,17 @@ El sistema SHALL excluir de los resultados de la SIC los actos cuya etiqueta de 
 - **WHEN** una fila de la SIC es una resolución de carácter general sin esas marcas
 - **THEN** el sistema la conserva
 
+### Requirement: Una fila sin número no se imprime con hueco ni cuenta como repetida
+El sistema SHALL NOT imprimir el número de un acto cuando el portal no lo publica (sin dobles espacios ni «de» huérfanos: la fila se rotula por su tipo y su epígrafe), y SHALL NOT contar como repetidas dos filas sin número, que son actos distintos. El aviso de que el portal repite una entrada SHALL nombrar solo actos con número y año.
+
+#### Scenario: Dos proyectos sin número en la misma página
+- **WHEN** la SIC lista dos filas sin número y con epígrafes distintos
+- **THEN** el sistema no dice que el portal repite entradas y no imprime «Norma  de 2026»
+
+#### Scenario: Acto repetido por el portal
+- **WHEN** el portal lista dos veces la Ley 1333 de 2009 con fecha o enlace distintos
+- **THEN** el sistema conserva el aviso de que son filas repetidas del portal
+
 ### Requirement: Un valor vacío del portal no se imprime como dato
 El sistema SHALL tratar el texto «None» que la ANH publica como categoría de un acto como ausencia de categoría, y SHALL NOT imprimirlo.
 
