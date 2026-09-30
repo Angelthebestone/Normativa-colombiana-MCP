@@ -102,8 +102,14 @@ test('portal roto: el 301 que se apunta a sí mismo marca el host (el síntoma d
   assert.equal(d.roto, true)
   assert.match(d.motivo!, /bucle/)
 
-  // Con barra final el destino es el mismo recurso: sigue siendo bucle.
-  assert.equal(diagnosticarRespuesta('https://x.gov.co/a', 301, { location: 'https://x.gov.co/a/' }, '').roto, true)
+  // Con la ruta relativa que resuelve a la misma URL también es bucle.
+  assert.equal(diagnosticarRespuesta('https://x.gov.co/a', 301, { location: '/a' }, '').roto, true)
+})
+
+test('portal roto: la redirección canónica que solo añade la barra final no es un bucle (Superfinanciera)', () => {
+  const url = 'https://www.superfinanciera.gov.co/10115974'
+  assert.equal(diagnosticarRespuesta(url, 301, { location: `${url}/` }, '').roto, false)
+  assert.equal(diagnosticarRespuesta(url, 301, { location: '/10115974/' }, '').roto, false)
 })
 
 test('portal roto: un redirect legítimo no marca, y un 404 no es un portal roto', () => {
