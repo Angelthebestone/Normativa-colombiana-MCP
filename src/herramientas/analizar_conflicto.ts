@@ -16,7 +16,7 @@ export const TITULO = 'Analizar un posible conflicto entre dos normas'
 
 export const DESCRIPCION =
   'Reúne para dos normas la EVIDENCIA de un posible conflicto: identificación en el Gestor, vigencia según ' +
-  'SUIN cuando consta, nivel en la jerarquía y carácter, reformas anotadas en el texto y pasajes que mencionan ' +
+  'SUIN cuando consta, nivel en la jerarquía y carácter, notas de reforma del texto (de cualquier artículo de la norma) y pasajes que mencionan' +
   'un tema. NO detecta contradicciones semánticas: el resultado es un conflicto POTENCIAL, no una conclusión ' +
   'jurídica; verifica en los enlaces antes de actuar. Con formato="json" devuelve un objeto con ' +
   'fecha_consulta, alcance, sobre (si se pidió), evidencias (una por norma, con los mismos campos del texto) y ' +
@@ -196,7 +196,7 @@ export function formatear(evA: Evidencia, evB: Evidencia, sobre?: string): strin
     ['Norma B', evB],
   ] as const) {
     if (ev.noEncontrada || ev.ambigua || !ev.parseada) continue
-    if (ev.reformas.length) bloques.push('', `${etiqueta} — reformas anotadas en el texto (primeras 5):`, ...ev.reformas)
+    if (ev.reformas.length) bloques.push('', `${etiqueta} — notas de reforma del texto (de cualquier artículo de la norma; las 5 primeras del documento):`, ...ev.reformas)
     if (sobre) {
       const pedido = `«${sobre}»`
       const casado = ev.terminoCasado && ev.terminoCasado !== sobre ? ` (casó la variante «${ev.terminoCasado}»)` : ''

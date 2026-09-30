@@ -106,15 +106,102 @@ test('el tope se pagina con desde/limite y se declara lo que queda', () => {
   assert.match(s3, /Pide un "desde" menor/)
 })
 
-test('el filtro por articulo solo trae los cambios de ese artículo', () => {
+test('con articulo, formatearHistorial solo rotula: el filtro se hizo antes, sobre el texto del artículo', () => {
   const cambios = historial(CON_REFORMAS)
-  const s = formatearHistorial(cambios, 'Ley 1221 de 2008', 'https://x.gov.co/norma.php?i=1', { articulo: '54' })
-  assert.match(s, /sobre el artículo 54/)
-  assert.match(s, /ADICIONADO por Ley 2466 de 2025/)
-  assert.doesNotMatch(s, /MODIFICADO por Decreto 666/)
-  const vacio = formatearHistorial(cambios, 'Ley 1221 de 2008', 'https://x.gov.co/norma.php?i=1', { articulo: '999' })
-  assert.match(vacio, /ninguno sobre el artículo 999/)
+  const s = formatearHistorial(cambios, 'Ley 1221 de 2008', 'https://x.gov.co/norma.php?i=1', { articulo: '6' })
+  assert.match(s, /3 cambio\(s\) anotado\(s\).*sobre el artículo 6/s)
+  const vacio = formatearHistorial([], 'Ley 1221 de 2008', 'https://x.gov.co/norma.php?i=1', { articulo: '999' })
+  assert.match(vacio, /no anota cambios sobre el artículo 999/)
   assert.match(vacio, /NO equivale a que siga intacto/)
+  assert.match(vacio, /resolver_cita/)
+})
+
+// --- D1: el filtro por artículo lee el texto de ESE artículo -------------------
+
+/** Ley 909, artículo 31: lo reforma la Ley 1960 (su artículo 6); el artículo 6 de la 909 no tiene notas. */
+const LEY_909 = [
+  'ARTÍCULO 6. Registro público de carrera.',
+  'Las entidades enviarán la información.',
+  '',
+  'ARTÍCULO 31. Etapas del proceso de selección o concurso.',
+  'El proceso de selección comprende la convocatoria y el reclutamiento.',
+  '(Modificado por el Art. 6 de la Ley 1960 de 2019)',
+  '',
+  'ARTÍCULO 32. Otro artículo.',
+  '(Derogado por el Art. 2 de la Ley 1033 de 2006)',
+].join('\n')
+
+const args = (articulo: string | undefined, formato: 'markdown' | 'json' = 'markdown') =>
+  ({ cita: 'Ley 909 de 2004', articulo, desde: 0, limite: 20, formato }) as const
+
+test('artículo 31 de la Ley 909: trae la nota de la Ley 1960 aunque su artículo sea el 6', async () => {
+  const s = await escribir(args('31'), depsConTexto(LEY_909))
+  assert.match(s, /MODIFICADO por Ley 1960 de 2019, artículo 6/)
+  assert.match(s, /1 cambio\(s\) anotado\(s\).*sobre el artículo 31/s)
+  assert.doesNotMatch(s, /ninguno sobre el artículo/)
+  assert.doesNotMatch(s, /Ley 1033/, 'la nota del artículo 32 no es del 31')
+})
+
+test('artículo 6 de la Ley 909: no hereda la nota de otro artículo cuya norma modificadora tiene un «artículo 6»', async () => {
+  const s = await escribir(args('6'), depsConTexto(LEY_909))
+  assert.doesNotMatch(s, /Ley 1960/)
+  assert.match(s, /no anota cambios sobre el artículo 6/)
+  assert.match(s, /NO equivale a que siga intacto/)
+  assert.match(s, /resolver_cita/)
+})
+
+test('un artículo que no existe lo dice y lista los detectados, sin «ninguno anotado»', async () => {
+  const s = await escribir(args('999'), depsConTexto(LEY_909))
+  assert.match(s, /No encontré el artículo 999\. Artículos detectados: 6, 31, 32/)
+  assert.doesNotMatch(s, /ninguno|no anota/)
+  const d = JSON.parse(await escribir(args('999', 'json'), depsConTexto(LEY_909)))
+  assert.equal(d.total, 0)
+  assert.equal(d.titulo, ITEM.titulo)
+  assert.match(d.avisos[0], /No encontré el artículo 999/)
+})
+
+test('el json del artículo trae total y cambios coherentes con el texto', async () => {
+  const d = JSON.parse(await escribir(args('31', 'json'), depsConTexto(LEY_909)))
+  assert.equal(d.total, 1)
+  assert.equal(d.cambios.length, 1)
+  assert.equal(d.cambios[0].norma, 'Ley 1960')
+  assert.equal(d.cambios[0].articulo, '6')
+})
+
+/** Ley 1221, artículo 6: control constitucional y una ley adicionante dentro del artículo; y una nota de otro artículo. */
+const LEY_1221 = [
+  'ARTÍCULO 5. Otro artículo.',
+  '(Modificado por el Art. 1 Decreto 666 de 2017)',
+  '',
+  'ARTÍCULO 6. Garantías laborales, sindicales y de seguridad social para los teletrabajadores.',
+  'NOTA: Declarado exequible condicionadamente Sentencia de la Corte Constitucional C-337 de fecha mayo 11 de 2011',
+  '(Adiciona Art 54 numerales 13, 14,15 de la Ley 2466 de 2025)',
+  '',
+  'ARTÍCULO 7. Siguiente.',
+].join('\n')
+
+test('artículo 6 de la Ley 1221: devuelve las notas de la C-337 de 2011 y de la Ley 2466, no la del artículo 5', async () => {
+  const s = await escribir(args('6'), depsConTexto(LEY_1221))
+  assert.match(s, /DECLARADO por Sentencia C-337 de 2011/)
+  assert.match(s, /ADICIONADO por Ley 2466 de 2025/)
+  assert.match(s, /2 cambio\(s\) anotado\(s\)/)
+  assert.doesNotMatch(s, /Decreto 666/)
+})
+
+// --- D2: la prosa modificatoria no es una nota ---------------------------------
+
+test('«modificado por la Ley 2101 de 2021, el cual quedará así:» no cuenta; la nota genuina del portal sí', () => {
+  const cambios = historial(
+    [
+      'ARTÍCULO 3. El artículo 10 de la Ley 789 de 2002, modificado por la Ley 2101 de 2021, el cual quedará así:',
+      'Artículo 10. Texto transcrito.',
+      '(Modificado por el Art. 3 de la Ley 2418 de 2024)',
+    ].join('\n'),
+  )
+  assert.deepEqual(
+    cambios.map((c) => `${c.norma} ${c.anio}`),
+    ['Ley 2418 2024'],
+  )
 })
 
 // --- 4.2: orden por año, sin año al final y última reforma anotada ----------
@@ -227,13 +314,11 @@ test('escribir json devuelve solo el objeto, con la forma prometida y los cambio
 })
 
 test('escribir json: un artículo sin cambios sale con total 0 y aviso, no como error', async () => {
-  const d = JSON.parse(
-    await escribir({ cita: 'Ley 1221 de 2008', articulo: '999', desde: 0, limite: 20, formato: 'json' }, depsConTexto(CON_REFORMAS)),
-  )
+  const d = JSON.parse(await escribir(args('6', 'json'), depsConTexto(LEY_909)))
   assert.equal(d.total, 0)
   assert.deepEqual(d.cambios, [])
   assert.equal(d.ultima_reforma, null)
-  assert.match(d.avisos.join(' '), /ninguno sobre el artículo 999/)
+  assert.match(d.avisos.join(' '), /no anota cambios sobre el artículo 6/)
 })
 
 test('escribir json: una cita ilegible sale como objeto con aviso, sin consultar nada', async () => {

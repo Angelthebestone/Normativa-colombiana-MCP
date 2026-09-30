@@ -68,9 +68,9 @@ const celda = ($tr: ReturnType<ReturnType<typeof cargar>>, i: number): string =>
   return colapsarEspacios($tr.find('td').eq(i).text())
 }
 
-export async function buscar(opts: OpcionesSectorial): Promise<ResultadoSectorial> {
+export async function buscar(opts: OpcionesSectorial, deps: { pedir?: typeof pedir } = {}): Promise<ResultadoSectorial> {
   const url = `${BASE}${RUTA}`
-  const r = await pedir(url, 90_000)
+  const r = await (deps.pedir ?? pedir)(url, 90_000)
   // El 302 lo deja `pedir` sin seguir: si algún día llega aquí con la redirección
   // en la mano, la página cambió y un vacío se leería como "no hay normativa".
   if (r.status === 302) {
@@ -109,7 +109,9 @@ export async function buscar(opts: OpcionesSectorial): Promise<ResultadoSectoria
       norma.match(ANIO_TRAS_DE)?.[1] ??
       (suelto && suelto !== numero ? suelto : (fecha.match(ANIO)?.[0] ?? ''))
     const hrefAbsoluto = href.startsWith('http') ? href : new URL(href, BASE).toString()
-    const aviso = advertenciaPortalRoto(epigrafe, hrefAbsoluto)
+    // Se compara con la celda «Norma», que trae el número propio del acto: el
+    // epígrafe de un decreto modificatorio cita al modificado (el 1227 dice 1072).
+    const aviso = advertenciaPortalRoto(`${tipo} ${norma}`, hrefAbsoluto)
     items.push({
       tipo: colapsarEspacios(tipo),
       numero,

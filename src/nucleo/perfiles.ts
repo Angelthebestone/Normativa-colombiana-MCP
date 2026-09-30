@@ -73,18 +73,54 @@ async function consultarTributario(texto: string, limite: number): Promise<strin
   )
 }
 
-async function consultarAmbiental(texto: string, limite: number): Promise<string> {
-  // Eureka no tiene buscador propio: se baja la sección y se filtra en memoria.
-  const r = await anla.listar('leyes', 0)
-  return lineas(anla.filtrar(r.items, texto).slice(0, limite).map((x) => [x.titulo, x.url] as [string, string]))
+/**
+ * Eureka no tiene buscador propio: se baja la primera página de cada sección y
+ * se filtra en memoria. Una entrada que figura en dos secciones sale una vez.
+ * Una sección que no responde se dice en la propia respuesta: callarla haría
+ * pasar por completo un barrido al que le falta una sección.
+ * ponytail: solo la primera página de cada sección; el techo es lo que Eureka pone en las siguientes; el salto, paginar con el «desde» que cada sección declara.
+ */
+export async function consultarAmbiental(
+  texto: string,
+  limite: number,
+  deps: { listar?: typeof anla.listar } = {},
+): Promise<string> {
+  const secciones = Object.keys(anla.SECCIONES) as anla.SeccionAnla[]
+  const respuestas = await Promise.allSettled(secciones.map((s) => (deps.listar ?? anla.listar)(s, 0)))
+  const fallidas = respuestas.flatMap((r, i) => (r.status === 'rejected' ? [`${secciones[i]} (${(r.reason as Error).message})`] : []))
+  if (fallidas.length === secciones.length) throw (respuestas[0] as PromiseRejectedResult).reason
+  const unicas = new Map<string, anla.EntradaAnla>()
+  for (const r of respuestas) if (r.status === 'fulfilled') for (const x of r.value.items) unicas.set(x.url, x)
+  const cuerpo = lineas(anla.filtrar([...unicas.values()], texto).slice(0, limite).map((x) => [x.titulo, x.url] as [string, string]))
+  return fallidas.length ? `${cuerpo}\n\nNo respondieron y no se revisaron: ${fallidas.join('; ')}.`.trimStart() : cuerpo
 }
 
-async function consultarContratacion(texto: string, limite: number): Promise<string> {
-  const r = await consejo.buscar(texto, limite, 1)
-  return lineas(r.items.map((p) => [p.radicado, p.url] as [string, string]))
+/** Una providencia en cuatro líneas como máximo; el portal no publica siempre las partes. */
+export async function consultarContratacion(
+  texto: string,
+  limite: number,
+  deps: { buscar?: typeof consejo.buscar } = {},
+): Promise<string> {
+  const r = await (deps.buscar ?? consejo.buscar)(texto, limite, 1)
+  return lineas(
+    r.items.map(
+      (p) =>
+        [
+          `${p.radicado}${p.clase ? ` (${p.clase})` : ''}`,
+          [
+            [p.fecha && `Fecha del proceso: ${p.fecha}`, p.sala && `Sala: ${p.sala}`].filter(Boolean).join(' · '),
+            p.actor || p.demandado ? `${p.actor || '(sin demandante)'} contra ${p.demandado || '(sin demandado)'}` : '',
+            p.url,
+          ]
+            .filter(Boolean)
+            .join('\n  '),
+        ] as [string, string],
+    ),
+  )
 }
 
 async function consultarEnergia(texto: string, limite: number): Promise<string> {
+  // Sin año, la CREG mira solo el año en curso: lo declara la advertencia del perfil.
   const r = await creg.buscar('vigentes', texto, limite, undefined)
   return lineas(
     r.items.map((x) => [`Resolución CREG ${x.numero} de ${x.anio}`, x.epigrafe] as [string, string]),
@@ -116,25 +152,33 @@ const AMBIENTAL: Perfil = {
   nombre: 'Licenciamiento ambiental',
   sector: 'Licenciamiento y normativa ambiental (ANLA)',
   fuente: 'anla',
-  advertencia: 'Eureka clasifica la normativa nacional por temas; no es normativa propia de la ANLA.',
+  advertencia:
+    'Eureka no tiene buscador propio: se revisó solo la primera página de cada una de sus 7 secciones y se filtró ' +
+    'en memoria, así que un vacío NO prueba que no haya normativa; para seguir usa listar_normativa_ambiental_anla ' +
+    'con la sección y desde. Eureka clasifica la normativa nacional por temas; no es normativa propia de la ANLA.',
   consultar: consultarAmbiental,
 }
 
 const CONTRATACION_ESTATAL: Perfil = {
   id: 'contratacion_estatal',
   nombre: 'Contratación estatal',
-  sector: 'Contratación estatal (Consejo de Estado y Gestor)',
+  sector: 'Contratación estatal (Consejo de Estado)',
   fuente: 'consejo',
-  advertencia: 'Los tokens de SAMAI caducan en una hora: cita por radicado, no por enlace.',
+  advertencia:
+    'Los tokens de SAMAI caducan en una hora: cita por radicado, no por enlace. La fecha es la del proceso, no la ' +
+    'de la providencia: esa se lee en su texto.',
   consultar: consultarContratacion,
 }
 
 const ENERGIA: Perfil = {
   id: 'energia',
   nombre: 'Energía y gas',
-  sector: 'Energía y gas (CREG, UPME, ANH)',
+  sector: 'Energía y gas (CREG)',
   fuente: 'creg',
-  advertencia: 'El estado (vigente/derogada) es según la compilación de la CREG, no un campo de vigencia.',
+  advertencia:
+    'Solo se revisaron las resoluciones de la CREG del año en curso (sin año, la fuente mira solo el actual): para ' +
+    'otros años usa buscar_resoluciones_creg con anio. El estado (vigente/derogada) es según la compilación de la ' +
+    'CREG, no un campo de vigencia.',
   consultar: consultarEnergia,
 }
 

@@ -6,6 +6,8 @@
 import { strict as assert } from 'node:assert'
 import test from 'node:test'
 
+import { buscar as buscarMintrabajo } from '../src/fuentes/sectorial/mintrabajo.ts'
+import type { pedir, Respuesta } from '../src/nucleo/http.ts'
 import {
   advertenciaPortalRoto,
   diagnosticarRespuesta,
@@ -46,6 +48,52 @@ test('numeroDelEpigrafe y numeroDelArchivo extraen lo esperado', () => {
   // El año del archivo no cuenta como número de norma: "ley-2101-2021.pdf" → solo "2101".
   assert.deepEqual(numeroDelArchivo('https://x.gov.co/documents/d/guest/ley-2101-2021.pdf'), ['2101'])
   assert.deepEqual(numeroDelArchivo('https://x.gov.co/documento.pdf'), [])
+})
+
+test('el nombre del archivo se compara decodificado: «%201227» ya no se lee 201227', () => {
+  assert.deepEqual(
+    numeroDelArchivo('https://x.gov.co/documents/d/guest/DECRETO%201227%20DEL%2018%20DE%20JULIO%20DE%202022.pdf'),
+    ['1227'],
+  )
+  // Un «%» que no es un escape válido no rompe la comparación: se usa el nombre tal cual.
+  assert.deepEqual(numeroDelArchivo('https://x.gov.co/documents/d/guest/ley-1333-100%-2009.pdf'), ['1333', '100'])
+  assert.deepEqual(numeroDelArchivo('https://x.gov.co/documents/d/guest/ley-2101-2021.pdf'), ['2101'])
+})
+
+// --- Mintrabajo: el número propio del acto es el de su celda «Norma», no el del epígrafe ---
+
+const fila = (tipo: string, norma: string, epigrafe: string, fecha: string, href: string) =>
+  `<tr><td data-label="Tipo de norma">${tipo}</td><td data-label="Norma">${norma}</td>` +
+  `<td data-label="Epígrafe">${epigrafe}</td><td data-label="Fecha">${fecha}</td>` +
+  `<td data-label="Acceso"><a href="${href}">Descargar</a></td></tr>`
+
+const conFilas = (...filas: string[]) => ({
+  pedir: (async () => ({ status: 200, cuerpo: `<table><tbody>${filas.join('')}</tbody></table>`, cookies: '', cabeceras: {} }) as Respuesta) as typeof pedir,
+})
+
+test('Mintrabajo: un decreto que modifica a otro no se marca por citar al modificado en su epígrafe', async () => {
+  const r = await buscarMintrabajo(
+    { limite: 100 },
+    conFilas(
+      fila(
+        'Decreto',
+        '1227 de 2022',
+        'Por el cual se modifica el Decreto 1072 de 2015, Único Reglamentario del Sector Trabajo',
+        '18/07/2022',
+        '/documents/d/guest/DECRETO%201227%20DEL%2018%20DE%20JULIO%20DE%202022.pdf',
+      ),
+    ),
+  )
+  assert.equal(r.items.length, 1)
+  assert.doesNotMatch(r.items[0]!.epigrafe, /⚠|Advertencia/)
+})
+
+test('Mintrabajo: la fila «Ley 2021 de 2021» que enlaza la Ley 2101 sigue advirtiendo', async () => {
+  const r = await buscarMintrabajo(
+    { limite: 100 },
+    conFilas(fila('Ley', '2021 de 2021', 'Por medio de la cual se reduce la jornada laboral', '15/07/2021', '/documents/d/guest/ley-2101-2021.pdf')),
+  )
+  assert.match(r.items[0]!.epigrafe, /⚠ Advertencia: el número del epígrafe \(2021\) no coincide con el del archivo enlazado \(2101\)/)
 })
 
 test('portal roto: el 301 que se apunta a sí mismo marca el host (el síntoma de SUIN)', () => {

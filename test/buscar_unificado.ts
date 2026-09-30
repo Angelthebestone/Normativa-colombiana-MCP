@@ -150,6 +150,38 @@ test('escribir: perfil salud consulta INVIMA y Supersalud y declara sus vacíos'
   assert.match(r, /Sin resultados en: gestor, corte, suin, supersalud/)
 })
 
+/** Un acto del normograma compartido: la URL acaba en el nombre del archivo. */
+const acto = (fuente: string, archivo: string): Item => ({ fuente, titulo: archivo, url: `https://normograma.info/docs/${archivo}` })
+
+test('escribir: el acto que INVIMA y Supersalud publican en el mismo archivo sale una vez, atribuido a INVIMA', async () => {
+  const porFuente = porFuenteBase()
+  porFuente['invima'] = async () => [acto('invima', 'circular_0002_2000.htm'), acto('invima', 'resolucion_100_2020.htm')]
+  // Supersalud pide el doble para poder completar el límite tras descartar lo repetido.
+  const pedidos: number[] = []
+  porFuente['supersalud'] = async (_texto, limite) => {
+    pedidos.push(limite)
+    return [acto('supersalud', 'circular_0002_2000.htm'), acto('supersalud', 'decreto_50_2018.htm'), acto('supersalud', 'ley_9_1979.htm')]
+  }
+  const r = await escribir({ texto: 'medicamentos', perfil: 'salud', limite: 2 }, { porFuente })
+  assert.equal(r.split('circular_0002_2000.htm').length - 1, 2, 'el título y la URL de UNA sola entrada')
+  assert.match(r, /\[invima\] circular_0002_2000\.htm\n\s+https:\/\/normograma\.info\/docs\/circular_0002_2000\.htm\n\s+también en Supersalud/)
+  assert.doesNotMatch(r, /\[supersalud\] circular_0002_2000/)
+  // El límite (2) se completa con los actos distintos que siguen.
+  assert.match(r, /\[supersalud\] decreto_50_2018\.htm/)
+  assert.match(r, /\[supersalud\] ley_9_1979\.htm/)
+  assert.deepEqual(pedidos, [4])
+})
+
+test('escribir: dos actos distintos de INVIMA y Supersalud se conservan', async () => {
+  const porFuente = porFuenteBase()
+  porFuente['invima'] = async () => [acto('invima', 'resolucion_100_2020.htm')]
+  porFuente['supersalud'] = async () => [acto('supersalud', 'resolucion_200_2021.htm')]
+  const r = await escribir({ texto: 'medicamentos', perfil: 'salud', limite: 5 }, { porFuente })
+  assert.match(r, /\[invima\] resolucion_100_2020\.htm/)
+  assert.match(r, /\[supersalud\] resolucion_200_2021\.htm/)
+  assert.doesNotMatch(r, /también en Supersalud/)
+})
+
 test('escribir: perfil desconocido devuelve la lista de admitidos sin consultar nada', async () => {
   const porFuente = porFuenteBase()
   porFuente['gestor'] = async () => {

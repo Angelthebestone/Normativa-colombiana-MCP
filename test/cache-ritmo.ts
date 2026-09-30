@@ -30,7 +30,7 @@ test('ritmo: N peticiones al mismo host quedan espaciadas ≥1 s', async () => {
 test('circuit breaker: N fallos seguidos degradan el host y las llamadas no pegan a la red', async () => {
   const host = 'suin-juriscol.gov.co'
 
-  for (let i = 0; i < 3; i++) http.anotarFallo(host)
+  for (let i = 0; i < 3; i++) http.anotarFallo(host, 'HTTP 503')
   assert.equal(http.estadoDe(host).degradado, true)
 
   let red = 0
@@ -162,7 +162,7 @@ test('circuit breaker: vencida la ventana el host vuelve a intentarse sin restab
   t.mock.timers.enable({ apis: ['Date'] })
   const host = 'breaker-ventana.test'
 
-  for (let i = 0; i < 3; i++) http.anotarFallo(host)
+  for (let i = 0; i < 3; i++) http.anotarFallo(host, 'HTTP 503')
   assert.equal(http.estadoDe(host).degradado, true)
   const cuando = http.estadoDe(host).reintentaEnMs!
   assert.ok(cuando > 0)
@@ -171,6 +171,52 @@ test('circuit breaker: vencida la ventana el host vuelve a intentarse sin restab
   assert.equal(http.estadoDe(host).degradado, true, 'a un milisegundo de vencer sigue degradado')
   t.mock.timers.tick(1)
   assert.equal(http.estadoDe(host).degradado, false, 'vencida la ventana se reintenta, sin restablecer a mano')
+})
+
+test('circuit breaker: el error nombra la causa, no promete un reintento y distingue la pausa recién armada de la que sigue', async (t) => {
+  t.mock.timers.enable({ apis: ['Date'] })
+  const host = 'breaker-causa.test'
+  for (let i = 0; i < 3; i++) http.anotarFallo(host, 'HTTP 503')
+
+  // Recién armada: nombra la causa y dice que se vuelve a llamar a la fuente pasado el plazo.
+  const nueva = await http.pedir(`https://${host}/a`, 1000).catch((e: Error) => e)
+  assert.ok(nueva instanceof Error)
+  assert.match(nueva.message, /HTTP 503/)
+  assert.match(nueva.message, /No se reintenta sola/)
+  assert.match(nueva.message, /60 s y pasado ese plazo se vuelve a llamar/)
+  assert.doesNotMatch(nueva.message, /reintentando/)
+
+  // Dentro de la pausa: cuánto queda, que no se llamó a la fuente y la causa que la armó.
+  t.mock.timers.tick(20_000)
+  const enPausa = await http.pedir(`https://${host}/b`, 1000).catch((e: Error) => e)
+  assert.ok(enPausa instanceof Error)
+  assert.match(enPausa.message, /quedan 40 s/)
+  assert.match(enPausa.message, /no se llamó a la fuente/)
+  assert.match(enPausa.message, /HTTP 503/)
+  assert.doesNotMatch(enPausa.message, /reintentando/)
+})
+
+test('circuit breaker: pasada la pausa, una respuesta buena restablece el host', async (t) => {
+  const srv = createServer((_req, res) => {
+    res.writeHead(200, { 'content-type': 'text/html' })
+    res.end('<html>ok</html>')
+  })
+  await new Promise<void>((ok) => srv.listen(0, '127.0.0.1', ok))
+  const host = `127.0.0.1:${(srv.address() as { port: number }).port}`
+  try {
+    t.mock.timers.enable({ apis: ['Date'] })
+    for (let i = 0; i < 3; i++) http.anotarFallo(host, 'HTTP 502')
+    assert.equal(http.estadoDe(host).degradado, true)
+    t.mock.timers.tick(60_001)
+    assert.equal(http.estadoDe(host).degradado, false, 'vencida la pausa se vuelve a llamar a la fuente')
+
+    const r = await http.pedir(`http://${host}/norma.php?i=1`)
+    assert.equal(r.status, 200)
+    for (let i = 0; i < 2; i++) http.anotarFallo(host, 'HTTP 502')
+    assert.equal(http.estadoDe(host).degradado, false, 'la respuesta buena restableció el host: 2 fallos no lo degradan')
+  } finally {
+    srv.close()
+  }
 })
 
 test('circuit breaker: una petición que responde restablece el host', async () => {
@@ -184,13 +230,13 @@ test('circuit breaker: una petición que responde restablece el host', async () 
   const host = `127.0.0.1:${(srv.address() as { port: number }).port}`
   try {
     // Dos fallos: a uno del umbral. Sin restablecer, otros dos degradarían el host.
-    for (let i = 0; i < 2; i++) http.anotarFallo(host)
+    for (let i = 0; i < 2; i++) http.anotarFallo(host, 'HTTP 503')
     assert.equal(http.estadoDe(host).degradado, false)
 
     const r = await http.pedir(`http://${host}/norma.php?i=1`)
     assert.equal(r.status, 200)
 
-    for (let i = 0; i < 2; i++) http.anotarFallo(host)
+    for (let i = 0; i < 2; i++) http.anotarFallo(host, 'HTTP 503')
     assert.equal(http.estadoDe(host).degradado, false, 'la respuesta puso el contador a cero: 2 + 2 ya no suma 4')
   } finally {
     srv.close()

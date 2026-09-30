@@ -1,0 +1,266 @@
+
+
+<!DOCTYPE html>
+
+<html>
+<head><meta content="text/html;" http-equiv="content-type" charset="utf-8" /><meta http-equiv="content-language" content="es" /><meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" /><meta http-equiv="Pragma" content="no-cache" /><meta name="robots" content="noindex" /><title>
+
+</title>
+    
+    <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.7.0/jquery.min.js" integrity="sha384-NXgwF8Kv9SSAr+jemKKcbvQsz+teULH/a5UNJvZc6kP47hZgl62M1vGnw6gHQhb1" crossorigin="anonymous"></script>
+
+    <!--scripts para iconos pequenos-->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" integrity="sha512-iecdLmaskl7CVkqkXNQ/ZH/XLlvWZOJyj7Yy7tcenmpD1ypASozpmT/E0iPtmFIB46ZmdtAc9eNBvH0H/ZpiBw==" crossorigin="anonymous" referrerpolicy="no-referrer" />
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/js/all.min.js" integrity="sha512-fD9DI5bZwQxOi7MhYWnnNPlvXdp/2Pj3XSTRrFs5FQa4mizyGLnJcN6tuvUS6LbmgN1ut+XGSABKvjN0H6Aoow==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+
+    <!--Script de framework bootstrap 5 - actualizado 08062021 - jcoralt-->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-T3c6CoIi6uLrA9TneNEoa7RxnatzjcDSCmG1MXxSR1GAsXEV/Dwwykc2MPK8M2HN" crossorigin="anonymous" />
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js" integrity="sha384-C6RzsynM9kWDrMNeT87bh95OGNyZPhcTNXj1NW7RuBCsyN/o0jlpcV8Qyq46cDfL" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@popperjs/core@2.11.8/dist/umd/popper.min.js" integrity="sha384-I7E8VVD/ismYTF4hNIPjVp/Zjvgyol6VFvRkX/vR+Vc4jQkC+hVqc2pM8ODewa9r" crossorigin="anonymous"></script>
+    
+    <!-- Gtag AZURE 20230804 -->
+    <script async src="https://www.googletagmanager.com/gtag/js?id=G-Y8N7KQ3EBW" defer></script>
+    <script>window.dataLayer = window.dataLayer || []; function gtag() { dataLayer.push(arguments); } gtag('js', new Date()); gtag('config', 'G-Y8N7KQ3EBW');</script>
+    <style>
+        @page {
+            @bottom-right {
+                content: "Página " counter(page) " de " counter(pages);
+            }
+
+            @bottom-left {
+                content: "Generado el " attr(data-date);
+            }
+        }
+    </style>
+    
+    <link href="../App_Themes/SAMAITheme/AdministracionPersonas.css" type="text/css" rel="stylesheet" /><link href="../App_Themes/SAMAITheme/AdministracionPersonas.min.css" type="text/css" rel="stylesheet" /><link href="../App_Themes/SAMAITheme/Alertas%20-%20Copia.min%20-%20Copia.css" type="text/css" rel="stylesheet" /><link href="../App_Themes/SAMAITheme/Alertas%20-%20Copia.min.css" type="text/css" rel="stylesheet" /><link href="../App_Themes/SAMAITheme/Alertas.css" type="text/css" rel="stylesheet" /><link href="../App_Themes/SAMAITheme/Alertas.min.css" type="text/css" rel="stylesheet" /><link href="../App_Themes/SAMAITheme/BuscadorProvidenciasTituladas.css" type="text/css" rel="stylesheet" /><link href="../App_Themes/SAMAITheme/custom.css" type="text/css" rel="stylesheet" /><link href="../App_Themes/SAMAITheme/DatosProceso.css" type="text/css" rel="stylesheet" /><link href="../App_Themes/SAMAITheme/DatosProceso.min.css" type="text/css" rel="stylesheet" /><link href="../App_Themes/SAMAITheme/evalidador.css" type="text/css" rel="stylesheet" /><link href="../App_Themes/SAMAITheme/evalidador.min.css" type="text/css" rel="stylesheet" /><link href="../App_Themes/SAMAITheme/ExpresSAMAI.css" type="text/css" rel="stylesheet" /><link href="../App_Themes/SAMAITheme/ExpresSAMAI.min.css" type="text/css" rel="stylesheet" /><link href="../App_Themes/SAMAITheme/ExternalLoginCallback.css" type="text/css" rel="stylesheet" /><link href="../App_Themes/SAMAITheme/ExternalLoginCallback.min.css" type="text/css" rel="stylesheet" /><link href="../App_Themes/SAMAITheme/Firmas.css" type="text/css" rel="stylesheet" /><link href="../App_Themes/SAMAITheme/Firmas.min.css" type="text/css" rel="stylesheet" /><link href="../App_Themes/SAMAITheme/FWestilos.css" type="text/css" rel="stylesheet" /><link href="../App_Themes/SAMAITheme/FWestilos.min.css" type="text/css" rel="stylesheet" /><link href="../App_Themes/SAMAITheme/Login.css" type="text/css" rel="stylesheet" /><link href="../App_Themes/SAMAITheme/MiPerfil.css" type="text/css" rel="stylesheet" /><link href="../App_Themes/SAMAITheme/MiPerfil.min.css" type="text/css" rel="stylesheet" /><link href="../App_Themes/SAMAITheme/PortalSAMAI.css" type="text/css" rel="stylesheet" /><link href="../App_Themes/SAMAITheme/PortalSAMAI.min.css" type="text/css" rel="stylesheet" /><link href="../App_Themes/SAMAITheme/procesos.css" type="text/css" rel="stylesheet" /><link href="../App_Themes/SAMAITheme/procesos.min.css" type="text/css" rel="stylesheet" /><link href="../App_Themes/SAMAITheme/Propios.css" type="text/css" rel="stylesheet" /><link href="../App_Themes/SAMAITheme/Propios.min.css" type="text/css" rel="stylesheet" /><link href="../App_Themes/SAMAITheme/PublicacionesProcesales.css" type="text/css" rel="stylesheet" /><link href="../App_Themes/SAMAITheme/PublicacionesProcesales.min.css" type="text/css" rel="stylesheet" /><link href="../App_Themes/SAMAITheme/ReportesPersonal.css" type="text/css" rel="stylesheet" /><link href="../App_Themes/SAMAITheme/ReportesPersonal.min.css" type="text/css" rel="stylesheet" /><link href="../App_Themes/SAMAITheme/ResultadoBusqueda.css" type="text/css" rel="stylesheet" /><link href="../App_Themes/SAMAITheme/SAMAIComponentes.css" type="text/css" rel="stylesheet" /><link href="../App_Themes/SAMAITheme/SentenciasTIC.css" type="text/css" rel="stylesheet" /><link href="../App_Themes/SAMAITheme/SentenciasTIC.min.css" type="text/css" rel="stylesheet" /><link href="../App_Themes/SAMAITheme/Site.css" type="text/css" rel="stylesheet" /><link href="../App_Themes/SAMAITheme/Site.min.css" type="text/css" rel="stylesheet" /><link href="../App_Themes/SAMAITheme/WBibliotecaDigital.css" type="text/css" rel="stylesheet" /><link href="../App_Themes/SAMAITheme/WBibliotecaDigital.min.css" type="text/css" rel="stylesheet" /><link href="../App_Themes/SAMAITheme/WGestionSecretarial.css" type="text/css" rel="stylesheet" /><link href="../App_Themes/SAMAITheme/WMonitorNew.css" type="text/css" rel="stylesheet" /><link href="../App_Themes/SAMAITheme/WMonitorNew.min.css" type="text/css" rel="stylesheet" /><link href="../App_Themes/SAMAITheme/Wradicacion.css" type="text/css" rel="stylesheet" /><link href="../App_Themes/SAMAITheme/Wradicacion.min.css" type="text/css" rel="stylesheet" /><link href="../App_Themes/SAMAITheme/WSecretariaOnLine.css" type="text/css" rel="stylesheet" /><link href="../App_Themes/SAMAITheme/WSecretariaOnLine.min.css" type="text/css" rel="stylesheet" /><link href="../App_Themes/SAMAITheme/WValidarAbogado%20-%20Copia.min.css" type="text/css" rel="stylesheet" /><link href="../App_Themes/SAMAITheme/WValidarAbogado.css" type="text/css" rel="stylesheet" /><link href="../App_Themes/SAMAITheme/WValidarAbogado.min.css" type="text/css" rel="stylesheet" /></head>
+<body>
+    <form method="post" action="./ResultadoBuscadorProvidenciasTituladas.aspx?BusquedaDictionary=%7b%22corporacion%22%3a%221100103%22%2c%22modo%22%3a%222%22%2c%22filtro%22%3a%22%22%2c%22busqueda%22%3a%22(%5c%22qwertyzzz%5c%22)%22%2c%22searchMode%22%3a%22any%22%2c%22PaginaActual%22%3a%220%22%7d" id="form1">
+<input type="hidden" name="__VIEWSTATE" id="__VIEWSTATE" value="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" />
+
+
+<script src="../Scripts/WebForms/MsAjax/MicrosoftAjax.js" type="text/javascript"></script>
+<input type="hidden" name="__VIEWSTATEGENERATOR" id="__VIEWSTATEGENERATOR" value="77C07826" />
+<input type="hidden" name="__EVENTVALIDATION" id="__EVENTVALIDATION" value="x3pv9nBkEuJWNo4Kp5hkEp4Y+r/hl32WNwRmD0nciYp9y9Q6TWhwEGN4snhOWvKwaOAXrg9wsB23+YzE2xLtOA+6S/gzmDnhLnjtSKT4Glj727YOmPX/MpyKTnANQU6bLrSwpsgaJ9+gxAOEwtl1zS2bkFtXenvN2VrCVJslsovYcX1buRDd+sUjjkE8mNRUoQfpwg+Yy5u6Sd9ZV2VQhA==" />
+        <div>
+            
+    
+
+    <div id="FWcontenidoventana">
+        <div id="ContentPlaceHolder1_formularioPrincipal" class="p-3">
+	
+            <div class="row p-2">
+                <div class="col-3 text-start">
+                    <img src='/Imagenes/oficial/samailogo_BH71.png' />
+                </div>
+                <div class="col-6 text-middle h5">REPORTE DE BÚSQUEDA EN SISTEMA DE RELATORÍA</div>
+                <div class="col-3 text-end">
+                    <img src='/Imagenes/oficial/logoentidadCE_H71.png' />
+                </div>
+            </div>
+            <div class="d-grid gap-2 d-md-flex justify-content-md-end mt-1 mb-3">
+                <a id="ContentPlaceHolder1_ImprimirPDFLinkButton" href="javascript:__doPostBack(&#39;ctl00$ContentPlaceHolder1$ImprimirPDFLinkButton&#39;,&#39;&#39;)">
+                            <i class="fas fa-download fa-2x"></i>
+                </a>
+            </div>
+            <div class="bg-light pt-2 small mb-4">
+                <p>
+                    El siguiente resultado se generó el
+                    2026-09-29T22:36:53.528
+                </p>
+                <br />
+                <label for="LblCantidadTotal" class="fw-bold">Cantidad total de providencias en la búsqueda:&nbsp;</label>
+                <span id="ContentPlaceHolder1_LblCantidadTotal" class="fw-lighter">0</span>
+                <br />
+                <label for="LblLink" class="fw-bold">Esta misma consulta se puede volver a generar en el siguiente link:&nbsp;</label>
+                <a id="ContentPlaceHolder1_LblLink" class="fw-lighter" href="https://samai.azurewebsites.net/TitulacionRelatoria/ResultadoBuscadorProvidenciasTituladas.aspx?BusquedaDictionary=%7B%22corporacion%22%3A%221100103%22%2C%22modo%22%3A%222%22%2C%22filtro%22%3A%22%22%2C%22busqueda%22%3A%22(%5C%22qwertyzzz%5C%22)%22%2C%22searchMode%22%3A%22any%22%2C%22PaginaActual%22%3A%220%22%7D" target="_blank">Ver Reporte Online</a>
+
+                <div class="text-end text-muted">* Los resultados de este buscador solo reflejan providencias desde el primero de Diciembre de 2021.</div>
+            </div>
+
+            <div id="ContentPlaceHolder1_PanelUpdate">
+		
+                    
+<link href="/App_Themes/SAMAITheme/ResultadoBusqueda.css?v=6" rel="stylesheet" type="text/css" />
+
+<script>
+	var VerProvidenciaIframejs;
+	function CargarVentana(url) {
+		VerProvidenciaIframejs = window.open(url, 'VerProvidenciaIframe');
+	}
+	function Cerrarventana() {
+		VerProvidenciaIframejs.close();
+
+		VerProvidenciaIframejs2 = window.open('about: blank', 'VerProvidenciaIframe');
+		VerProvidenciaIframejs2.close();
+	}
+
+</script>
+<style>
+	.holds-the-iframe {
+		background: url(https://img1.picmix.com/output/stamp/normal/8/5/2/9/509258_fb107.gif) center center no-repeat;
+	}
+
+	.pequeno {
+		max-width: 100px !important;
+	}
+</style>
+
+<!--COMODIN PARA VALIDA ESTADO DE RELOAD-->
+<div class="divoculto">
+	<input type="text" id="RL_COMODIN_RELOAD_VAR" value="Exist">
+</div>
+
+<div id="ModalVerProvidencia" tabindex="-1" class="modal fade" aria-labelledby="ModalVerProvidenciaLabel" aria-hidden="true" style="display: none;">
+			
+	<div class="modal-dialog modal-xl">
+		<div class="modal-content">
+			<div class="modal-header">
+				<h5 class="modal-title h4" id="ModalVerProvidenciaLabel">Ver Documento</h5>
+				<button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close" onclick="Cerrarventana(); return false;"></button>
+			</div>
+			<div class="modal-body">
+				<iframe id="VerProvidenciaIframe" name="VerProvidenciaIframe" class="embed-responsive-item holds-the-iframe" style="overflow: hidden; width: 100%; height: 75vh;"></iframe>
+			</div>
+			<div class="modal-footer">
+				<button type="button" class="btn btn-secondary" data-bs-dismiss="modal" onclick="Cerrarventana(); return false;">Cerrar</button>
+			</div>
+		</div>
+	</div>
+
+		</div>
+<div id="ContentPlaceHolder1_ResultadoBusqueda1_ResultadosUpdatePanel">
+			
+
+<!-- HERRAMIENTAS DE RESULTADOS -->
+<!-- ACCIONES SOBRE LOS RESULTADOS -->
+<!-- COMPARTIR Y DESCARGAR -->
+
+
+
+<!-- CRITERIOS DE BÚSQUEDA -->
+
+<div class="relatoria-resultados-criterios">
+    <div class="relatoria-resultados-criterios__encabezado">
+        <span class="relatoria-resultados__etiqueta">CRITERIOS DE BÚSQUEDA</span>
+        <span class="relatoria-resultados-criterios__ayuda"><i class="fas fa-filter"></i>Parámetros aplicados a la consulta</span>
+    </div>
+
+    <div class="relatoria-resultados-criterio">
+        <span class="relatoria-resultados-criterio__nombre">Filtros</span>
+        <div class="relatoria-resultados-criterio__valor">
+            <span id="ContentPlaceHolder1_ResultadoBusqueda1_LblFiltro"></span>
+        </div>
+    </div>
+
+    <div class="relatoria-resultados-criterio">
+        <span class="relatoria-resultados-criterio__nombre">Búsqueda</span>
+        <div class="relatoria-resultados-criterio__valor">
+            <span id="ContentPlaceHolder1_ResultadoBusqueda1_LblBusqueda">("qwertyzzz")</span>
+        </div>
+    </div>
+</div>
+
+
+<!-- =========================================================
+     INFORMACIÓN DE PÁGINA PARA PDF
+     ========================================================= -->
+
+
+
+<!-- =========================================================
+     ORDENAMIENTO Y PAGINACIÓN
+     ========================================================= -->
+
+<div id="ContentPlaceHolder1_ResultadoBusqueda1_PaginacionPanel" class="relatoria-resultados-navegacion">
+				
+    <!-- ORDENAMIENTO -->
+    <div class="relatoria-resultados-orden">
+        <label for="ContentPlaceHolder1_ResultadoBusqueda1_OrdenRegistrosDropDownList" class="relatoria-resultados__label">Ordenar resultados</label>
+        <select name="ctl00$ContentPlaceHolder1$ResultadoBusqueda1$OrdenRegistrosDropDownList" id="ContentPlaceHolder1_ResultadoBusqueda1_OrdenRegistrosDropDownList" disabled="disabled" class="aspNetDisabled form-select">
+					<option value="FechaProvidencia desc">Providencia m&#225;s reciente primero</option>
+					<option value="FechaProvidencia">Providencia m&#225;s antigua primero</option>
+					<option selected="selected" value="">Ranking de coincidencias</option>
+
+				</select>
+
+    </div>
+
+    <!-- PAGINACIÓN -->
+    <div class="relatoria-resultados-paginacion">
+        
+        <div class="btn-group" role="group" aria-label="Navegación entre páginas">
+            
+            
+        </div>
+
+        <div class="relatoria-resultados-ir-pagina">
+            
+            
+        </div>
+    </div>
+
+
+			</div>
+
+<hr>
+<div id="ContentPlaceHolder1_ResultadoBusqueda1_PaginacionPanel2" class="pt-2">
+				
+	<div class="d-flex justify-content-end">
+		<a id="ContentPlaceHolder1_ResultadoBusqueda1_DescargarDocumentosLinkButton2" class="btn btn-primary btn-sm" href="javascript:__doPostBack(&#39;ctl00$ContentPlaceHolder1$ResultadoBusqueda1$DescargarDocumentosLinkButton2&#39;,&#39;&#39;)"><i class="fa-solid fa-download"></i>&nbsp;&nbsp;Descargar documentos en página</a>
+		&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+		
+		&nbsp;&nbsp;
+		<div class="btn-group" role="group">
+			
+			
+		</div>
+	</div>
+
+			</div>
+<hr>
+<span id="ContentPlaceHolder1_ResultadoBusqueda1_TiempoLabel" class="small text-muted"></span>
+<br />
+	
+		</div>
+
+
+                
+	</div>
+            <div id="PageUpdateProgress" style="display:none;">
+		
+                    <div class="samai-loading-overlay" role="status" aria-live="polite" aria-label="Consultando información">
+                        <div class="samai-loading-indicator">
+                            <div class="spinner-border samai-loading-spinner" aria-hidden="true"></div>
+                            <span class="samai-loading-text">Consultando información...</span>
+                        </div>
+                    </div>
+                
+	</div>
+
+
+
+            <div class="row small text-muted bg-body fw-bold  p-3 pb-0 pt-0">
+                Criterios de búsqueda utilizados:
+            </div>
+            <div class="row small text-muted bg-body">
+                <span id="ContentPlaceHolder1_LblCorporacion" class="fw-lighter">Corporación 1100103</span>
+                <br />
+                F:
+                <span id="ContentPlaceHolder1_LblFiltro" class="fw-lighter"></span>
+                <br />
+                B:
+                <span id="ContentPlaceHolder1_LblBusqueda" class="fw-lighter">("qwertyzzz")</span>
+            </div>
+            <div id="copyrightrama" class="text-center p-1 text-white">
+                Rama Judicial de Colombia | © 2026 Copyright: Consejo de Estado 
+            </div>
+        
+</div>
+    </div>
+
+        </div>
+    </form>
+
+</body>
+</html>

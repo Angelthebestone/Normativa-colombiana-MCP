@@ -82,7 +82,7 @@ function corporacionMedida(r: Radicado): string {
 function ficha(p: consejo.Providencia): string {
   const lineas = [
     `- ${p.radicado}${p.clase ? ` (${p.clase})` : ''}`,
-    p.fecha ? `  Fecha: ${p.fecha}` : '',
+    p.fecha ? `  Fecha del proceso: ${p.fecha}` : '',
     p.sala ? `  Sala: ${p.sala}` : '',
     p.ponente ? `  Ponente: ${p.ponente}` : '',
     p.actor || p.demandado ? `  ${p.actor || '(sin demandante)'} contra ${p.demandado || '(sin demandado)'}` : '',

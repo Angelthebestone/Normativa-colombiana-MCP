@@ -47,8 +47,12 @@ export const schema = estricto(esquema.shape)
 
 type Params = z.infer<typeof esquema>
 
-export async function escribir({ texto, pagina, limite, exacto }: Params): Promise<string> {
-  const r = await consejo.buscar(texto, limite, pagina, exacto)
+/** `deps.buscar` inyecta la fuente para probar sin red. */
+export async function escribir(
+  { texto, pagina, limite, exacto }: Params,
+  deps: { buscar?: typeof consejo.buscar } = {},
+): Promise<string> {
+  const r = await (deps.buscar ?? consejo.buscar)(texto, limite, pagina, exacto)
 
   // SAMAI pagina por titulación, no por caso: el radicado 25000233600020190090701
   // sale en la página 1 y otra vez en la 2 con otras tesis, y quien suma páginas
@@ -78,16 +82,17 @@ export async function escribir({ texto, pagina, limite, exacto }: Params): Promi
   }
   return (
     `${alcance([{ clave: 'consejo', detalle: `${r.items.length} providencia(s)` }])}\n\n` +
-      `Página ${r.pagina} de ${r.paginas} en el Consejo de Estado; se muestran ${r.items.length} providencia(s).\n` +
-      `El buscador une los términos con OR, así que ese número de páginas NO mide pertinencia: mide cuántas ` +
-      `providencias contienen alguna de las palabras.\n\n` +
+      `Página ${r.pagina} de ${r.paginas}${exacto && !r.ampliada ? ' (con la frase exacta)' : ''} en el Consejo de Estado; ` +
+      `se muestran ${r.items.length} providencia(s).\n` +
+      // Lo dice la fuente según el modo: el aviso de OR solo acompaña a una búsqueda hecha en OR.
+      `${r.nota ? `${r.nota}\n` : ''}\n` +
       r.items
         .map((p) => {
           const yaSalio = repetidos.get(p.radicado)
           const cabecera = [
             `- ${p.radicado}${p.clase ? ` (${p.clase})` : ''}` +
               (yaSalio ? ` — REPETIDA: ya salió en la página ${yaSalio} con otras tesis; no la cuentes dos veces` : ''),
-            p.fecha ? `  Fecha: ${p.fecha}` : '',
+            p.fecha ? `  Fecha del proceso: ${p.fecha}` : '',
             p.sala ? `  Sala: ${p.sala}` : '',
             p.ponente ? `  Ponente: ${p.ponente}` : '',
             p.actor || p.demandado ? `  ${p.actor} contra ${p.demandado || '(sin demandado)'}` : '',
@@ -115,7 +120,8 @@ export async function escribir({ texto, pagina, limite, exacto }: Params): Promi
         : `\n\nUNA PROVIDENCIA PUEDE REPETIRSE ENTRE PÁGINAS: SAMAI pagina por problema jurídico, no por caso, ` +
           `así que un radicado con varias tesis puede reaparecer en la página siguiente. Aquí se marcan las que ` +
           `ya salieron mientras se pagine la MISMA búsqueda; en esta página no hay ninguna.`) +
-      `\n\nLOS TOKENS CADUCAN EN UNA HORA: sirven para leer, no para citar. Para citar usa el radicado, que es ` +
+      `\n\nLa fecha que se muestra es la del PROCESO, no la de la providencia: esa se lee en su texto. ` +
+      `LOS TOKENS CADUCAN EN UNA HORA: sirven para leer, no para citar. Para citar usa el radicado, que es ` +
       `lo que se pega en ${consejo.BUSCADOR}: ` +
       r.items.map((p) => p.radicado).join(' · ')
   )

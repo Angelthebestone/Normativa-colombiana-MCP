@@ -127,9 +127,9 @@ test('buscar pagina por ajax hasta el límite pedido', async () => {
   ])
   const r = await buscar({ desde: '01/09/2026', hasta: '30/09/2026', limite: 25 }, { pedir: falso })
   assert.equal(r.total, 29)
-  assert.equal(r.items.length, 29)
+  assert.equal(r.items.length, 25, 'tres páginas de 10 traen 29 filas, pero el límite es 25')
   assert.equal(r.items[10]!.numero, '53.630')
-  assert.equal(r.items.at(-1)!.numero, '53.612')
+  assert.equal(r.items.at(-1)!.numero, leerParcial(PAGINA_3)[4]!.numero)
 
   const filtro = new URLSearchParams(vistas[1]!.cuerpo)
   assert.equal(filtro.get('fechaInicial_input'), '01/09/2026')
@@ -142,6 +142,17 @@ test('buscar pagina por ajax hasta el límite pedido', async () => {
     assert.equal(envio.get('fechaInicial_input'), '01/09/2026', 'la página siguiente conserva el filtro')
     assert.equal(vistas[n]!.extra['Faces-Request'], 'partial/ajax')
   }
+})
+
+test('un límite menor que la página del portal recorta: limite=5 devuelve 5 y dice cuántos faltan', async () => {
+  const { falso, vistas } = enSecuencia([{ cuerpo: BASE_HTML }, { cuerpo: FECHAS_HTML }])
+  const filtros = { desde: '01/09/2026', hasta: '30/09/2026' }
+  const r = await buscar({ ...filtros, limite: 5 }, { pedir: falso })
+  assert.equal(vistas.length, 2, 'no se pide ninguna página de más')
+  assert.equal(r.items.length, 5)
+  assert.equal(r.total, 29)
+  assert.equal(r.items[0]!.numero, '53.640', 'los más recientes')
+  assert.match(formatear(r, { ...filtros, limite: 5 }, filtros), /se muestran 5 .*\n[\s\S]*Faltan 24\./)
 })
 
 test('con menos filas que el límite no se pide ninguna página de más', async () => {

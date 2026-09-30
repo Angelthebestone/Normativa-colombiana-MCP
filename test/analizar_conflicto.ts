@@ -54,7 +54,8 @@ test('la vigencia se cita literal cuando consta, y no se afirma cuando falta', (
 
 test('las reformas se citan literales, con su nota', () => {
   const t = formatear(evidencia({ reformas: ['- MODIFICADO por Ley 1960 de 2019 nota literal: «Modificado por el Art. 1 de la Ley 1960 de 2019»'] }), b)
-  assert.ok(t.includes('reformas anotadas en el texto'))
+  assert.ok(t.includes('notas de reforma del texto (de cualquier artículo de la norma; las 5 primeras del documento)'))
+  assert.ok(!t.includes('reformas anotadas en el texto'))
   assert.ok(t.includes('nota literal: «Modificado por el Art. 1 de la Ley 1960 de 2019»'))
 })
 

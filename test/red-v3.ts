@@ -97,8 +97,9 @@ test('sectorial: un .doc binario (OLE2) avisa sin texto', async () => {
     { fuente: 'sectorial', entidad: 'supersalud', url: 'https://normograma.supersalud.gov.co/compilacion/docs/acto.doc' },
     { pedirBytes: async () => ({ status: 200, datos: ole, contentType: 'application/msword' }) },
   )
-  assert.match(salida, /sin texto/)
+  assert.match(salida, /no trae texto publicado/)
   assert.match(salida, /NO significa que no diga nada/)
+  assert.doesNotMatch(salida, /sin texto extraíble/, 'la advertencia de la fuente ya no declara ilegible su HTML')
 })
 
 test('sectorial: sin entidad o sin url es un error de validación', async () => {

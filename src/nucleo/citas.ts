@@ -69,6 +69,9 @@ const RE_SENTENCIA = /\b(C|T|SU|A)[\s.-]*(\d{1,4})\s*(?:[/-]|\s+de\s+)\s*(\d{2,4
 // "Ley 99999999 de 1800" se partía en "Ley 99999" y el año quedaba fuera, así
 // que el error acababa pidiendo un año que sí se había indicado.
 const RE_TIPO_NUM = new RegExp(`\\b(${NOMBRES_TIPO})\\s*(?:n[ºo°.]?\\s*)?(\\d+)(?:\\s*(?:de|del|/)\\s*(\\d{4}|\\d{2}))?`, 'i')
+// «Constitución», «… Política», «… de Colombia», «… de 1991». No casa con «Constitucional»
+// (Corte Constitucional) ni con «inconstitucional»: exige «ción», no «cional».
+const RE_CONSTITUCION = /\bconstituci[oó]n\b/i
 
 export function parsearCita(texto: string): Cita | null {
   const art = texto.match(RE_ARTICULO)?.[1]
@@ -98,6 +101,13 @@ export function parsearCita(texto: string): Cita | null {
    * Ley 1060 de 2006, que modifica el Código Civil" se cita la ley.
    */
   const cod = codigoCitado(texto)
+  // La Constitución se cita por su nombre como un código, pero no es un código
+  // (no está contenida en nada) y por eso no vive en CODIGOS. Misma precedencia:
+  // gana lo que aparece antes en el texto.
+  const con = texto.match(RE_CONSTITUCION)?.index
+  if (con !== undefined && con < (cod?.indice ?? Infinity) && con < (m?.index ?? Infinity)) {
+    return { tipo: 'constitucion politica', numero: '1', anio: '1991', articulo: art }
+  }
   if (cod && (!m || m.index === undefined || cod.indice < m.index)) {
     return {
       tipo: cod.codigo.tipo,

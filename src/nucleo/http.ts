@@ -160,20 +160,21 @@ export async function enCola<T>(host: string, fn: () => Promise<T>): Promise<T> 
 const DEGRADADO_MS = 60_000
 const UMBRAL_FALLOS = 3
 
-type Breaker = { fallos: number; desde: number; hasta: number | null }
+/** `ultimo` es la causa del último fallo (HTTP 503, error de red…): la que el error de la pausa tiene que decir. */
+type Breaker = { fallos: number; desde: number; hasta: number | null; ultimo: string }
 const breakers = new Map<string, Breaker>()
 
 function breaker(host: string): Breaker {
   let b = breakers.get(host)
   if (!b) {
-    b = { fallos: 0, desde: Date.now(), hasta: null }
+    b = { fallos: 0, desde: Date.now(), hasta: null, ultimo: '' }
     breakers.set(host, b)
   }
   return b
 }
 
-/** Estado declarado de un host: si está degradado y cuándo se vuelve a intentar. */
-export function estadoDe(host: string): { degradado: boolean; reintentaEnMs?: number } {
+/** Estado declarado de un host: si está degradado, por qué y cuándo se vuelve a llamar a la fuente. */
+export function estadoDe(host: string): { degradado: boolean; reintentaEnMs?: number; causa?: string } {
   const b = breaker(host)
   const ahora = Date.now()
   if (b.hasta !== null && ahora >= b.hasta) {
@@ -181,11 +182,11 @@ export function estadoDe(host: string): { degradado: boolean; reintentaEnMs?: nu
     b.desde = ahora
     b.hasta = null
   }
-  return b.hasta === null ? { degradado: false } : { degradado: true, reintentaEnMs: b.hasta - ahora }
+  return b.hasta === null ? { degradado: false } : { degradado: true, reintentaEnMs: b.hasta - ahora, causa: b.ultimo }
 }
 
-/** Anota un fallo de red o 5xx y devuelve el estado resultante del host. */
-export function anotarFallo(host: string): void {
+/** Anota un fallo de red o 5xx, con su causa, y arma la pausa al llegar al umbral. */
+export function anotarFallo(host: string, causa: string): void {
   const b = breaker(host)
   const ahora = Date.now()
   if (b.hasta !== null && ahora >= b.hasta) {
@@ -194,6 +195,7 @@ export function anotarFallo(host: string): void {
     b.hasta = null
   }
   b.fallos += 1
+  b.ultimo = causa
   if (b.fallos >= UMBRAL_FALLOS) {
     b.hasta = ahora + DEGRADADO_MS
     b.fallos = 0
@@ -205,10 +207,23 @@ export function restablecer(host: string): void {
   breakers.delete(host)
 }
 
-/** Error con el que se corta la llamada mientras el host está degradado. */
-export function errorDegradado(host: string, reintentaEnMs: number): Error {
+/**
+ * Error con el que se corta la llamada mientras el host está degradado. Nombra la
+ * causa del fallo y no promete un reintento que nadie hace: pasada la pausa, la
+ * siguiente llamada del usuario vuelve a la fuente. Distingue la pausa recién
+ * armada (queda casi toda la ventana) de la que sigue en curso.
+ */
+export function errorDegradado(host: string, reintentaEnMs: number, causa: string): Error {
+  const quedan = Math.max(1, Math.round(reintentaEnMs / 1000))
+  if (reintentaEnMs > DEGRADADO_MS - 5_000) {
+    return new Error(
+      `La fuente ${host} quedó degradada: no respondió (${causa}). No se reintenta sola; las llamadas a ${host} ` +
+        `se cortan ${quedan} s y pasado ese plazo se vuelve a llamar a la fuente.`,
+    )
+  }
   return new Error(
-    `La fuente ${host} está degradada; reintentando en ${Math.max(1, Math.round(reintentaEnMs / 1000))} s.`,
+    `La fuente ${host} sigue degradada por ${causa}; quedan ${quedan} s de pausa y esta llamada no salió a la red ` +
+      `(no se llamó a la fuente).`,
   )
 }
 
@@ -434,7 +449,7 @@ async function pedirUna(
   if (est.degradado) {
     const d = degradarO()
     if (d) return d
-    throw errorDegradado(host, est.reintentaEnMs!)
+    throw errorDegradado(host, est.reintentaEnMs!, est.causa!)
   }
 
   for (let intento = 0; ; intento++) {
@@ -490,7 +505,7 @@ async function pedirUna(
     // —la fuente decide qué hacer con un 301— pero el host queda marcado.
     const diag = diagnosticarRespuesta(url, r.status, r.cabeceras, texto)
     if (r.status >= 500 || diag.roto) {
-      anotarFallo(host)
+      anotarFallo(host, r.status >= 500 ? `HTTP ${r.status}` : (diag.motivo ?? 'respuesta rota del portal'))
     } else {
       restablecer(host)
     }
@@ -572,16 +587,16 @@ export async function pedirBytes(
 ): Promise<{ status: number; datos: Buffer; contentType: string }> {
   const host = new URL(url).host
   const est = estadoDe(host)
-  if (est.degradado) throw errorDegradado(host, est.reintentaEnMs!)
+  if (est.degradado) throw errorDegradado(host, est.reintentaEnMs!, est.causa!)
   try {
     const r = await enCola(host, () => crudo(url, timeout, accept, {}))
-    if (r.status >= 500) anotarFallo(host)
+    if (r.status >= 500) anotarFallo(host, `HTTP ${r.status}`)
     else restablecer(host)
     anotarRed(r.datos.length)
     return { status: r.status, datos: r.datos, contentType: r.contentType }
   } catch (e) {
     // Fallo de red (no una respuesta): cuenta para el breaker.
-    if (!(e instanceof Error && /degradada/.test(e.message))) anotarFallo(host)
+    if (!(e instanceof Error && /degradada/.test(e.message))) anotarFallo(host, e instanceof Error ? e.message : String(e))
     throw e
   }
 }

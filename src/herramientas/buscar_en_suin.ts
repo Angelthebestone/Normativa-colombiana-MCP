@@ -8,7 +8,9 @@ import { z } from 'zod'
 import { estricto } from '../nucleo/normalizar.ts'
 import { alcance } from '../nucleo/alcance.ts'
 import { conAlternativas } from '../nucleo/alternativas.ts'
+import { sinTildes } from '../nucleo/parse.ts'
 import { vacio } from '../nucleo/vacio.ts'
+import { terminosSignificativos } from '../fuentes/gestor.ts'
 import * as suin from '../fuentes/suin.ts'
 
 export const TITULO = 'Buscar en SUIN-Juriscol'
@@ -38,12 +40,26 @@ export const schema = estricto(esquema.shape)
 
 type Params = z.infer<typeof esquema>
 
-export async function escribir({ texto, vigencia, sector, desde, limite }: Params): Promise<string> {
+/** `deps.buscar` inyecta SUIN para probar sin red. */
+export async function escribir(
+  { texto, vigencia, sector, desde, limite }: Params,
+  deps: { buscar?: typeof suin.buscar } = {},
+): Promise<string> {
   // Idea 5 — si la búsqueda rinde cero, se prueba el sinónimo del tesauro y
   // se anuncia: el índice de SUIN tiene huecos conocidos ("Teletrabajo" da 0
   // pese a existir la Ley 1221 de 2008), así que el vacío no es palabra final.
+  // Una variante sustituye a lo pedido, así que solo vale lo que la contiene
+  // entera: «trabajo remoto» arrastraba 15 documentos que solo dicen «trabajo».
   const { items, variantesUsadas } = await conAlternativas(
-    (t) => suin.buscar({ texto: t, vigencia, sector, desde, limite }).then((r) => r.items),
+    (t) =>
+      (deps.buscar ?? suin.buscar)({ texto: t, vigencia, sector, desde, limite }).then((r) => {
+        if (t === texto) return r.items
+        const terminos = terminosSignificativos(t)
+        return r.items.filter((d) => {
+          const heno = sinTildes(`${d.titulo} ${d.epigrafe}`).toLowerCase()
+          return terminos.every((x) => heno.includes(x))
+        })
+      }),
     texto,
     1,
   )
@@ -56,7 +72,9 @@ export async function escribir({ texto, vigencia, sector, desde, limite }: Param
     return vacio(
       `documentos en SUIN para "${texto}"`,
       'El buscador de SUIN solo indexa título, epígrafe, materia y entidad: no busca dentro del articulado, y las ' +
-        'citas exactas no funcionan ahí. Para una norma concreta usa resolver_cita.',
+        'citas exactas no funcionan ahí. Para una norma concreta usa resolver_cita. Su índice tiene huecos ' +
+        '("Teletrabajo" da 0 pese a estar en el título de la Ley 1221 de 2008): un vacío no prueba que no exista; ' +
+        'prueba buscar_por_tema.',
     )
   }
   if (!r.items.length) {

@@ -7,6 +7,15 @@ export const NIVELES = ['constitucion', 'ley', 'decreto', 'resolucion', 'concept
 
 export type Nivel = (typeof NIVELES)[number]
 
+/** El tipo de documento del Gestor que cada nivel nombra (la jurisprudencia no sale del Gestor). */
+export const TIPO_GESTOR: Record<Exclude<Nivel, 'jurisprudencia'>, string> = {
+  constitucion: 'Constitución Política',
+  ley: 'Ley',
+  decreto: 'Decreto',
+  resolucion: 'Resolución',
+  concepto: 'Concepto',
+}
+
 const normaliza = (s: string): string =>
   s
     .toLowerCase()

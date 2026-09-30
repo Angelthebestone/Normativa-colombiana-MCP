@@ -48,14 +48,17 @@ export type DocumentoAnh = {
 /** La categoría con la que la ANH marca lo que no es regulación, sino planta de personal. */
 export const ES_ADMINISTRATIVO = (categoria: string): boolean => /^administrativo$/i.test(sinTildes(categoria).trim())
 
-export async function buscar(opts: {
-  texto?: string | undefined
-  tipo?: TipoAnh | undefined
-  numero?: string | undefined
-  desde?: string | undefined
-  hasta?: string | undefined
-  pagina?: number | undefined
-}): Promise<{ pagina: number; items: DocumentoAnh[]; url: string }> {
+export async function buscar(
+  opts: {
+    texto?: string | undefined
+    tipo?: TipoAnh | undefined
+    numero?: string | undefined
+    desde?: string | undefined
+    hasta?: string | undefined
+    pagina?: number | undefined
+  },
+  deps: { pedir?: typeof pedir } = {},
+): Promise<{ pagina: number; items: DocumentoAnh[]; url: string }> {
   const p = new URLSearchParams()
   if (opts.tipo) p.set('type', TIPOS[opts.tipo])
   if (opts.numero) p.set('number', String(opts.numero).replace(/\D/g, ''))
@@ -66,7 +69,7 @@ export async function buscar(opts: {
   p.set('page', String(pagina))
 
   const url = `${BASE}${RUTA}?${p}`
-  const r = await pedir(url, 40_000)
+  const r = await (deps.pedir ?? pedir)(url, 40_000)
   if (r.status !== 200) throw new Error(`El portal de la ANH respondió ${r.status}.`)
 
   const $ = cargar(r.cuerpo)
@@ -83,8 +86,9 @@ export async function buscar(opts: {
     const celdas = $tr.find('td').map((__, td) => colapsarEspacios($(td).text())).get()
     const pdf = $tr.find('a[href$=".pdf"]').first().attr('href') ?? ''
     const ficha = $tr.find('a[title="Detalle"], a[href*="/normatividad2/normatividad/"]').last().attr('href') ?? ''
-    // La categoría va dentro de la celda del epígrafe, tras «Disponible en:».
-    const categoria = colapsarEspacios($tr.text().match(/Disponible en:\s*([^]{0,80}?)\s*Acciones/)?.[1] ?? '')
+    // La categoría va dentro de la celda del epígrafe, tras «Disponible en:». El
+    // portal escribe «None» cuando no la tiene: es ausencia, no un dato.
+    const categoria = colapsarEspacios($tr.text().match(/Disponible en:\s*([^]{0,80}?)\s*Acciones/)?.[1] ?? '').replace(/^none$/i, '')
     const epigrafe = colapsarEspacios($tr.find('.block-paragraph').text()) || celdas[4] || ''
     if (!celdas[1] && !epigrafe) return
     items.push({

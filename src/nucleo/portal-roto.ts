@@ -22,9 +22,19 @@ export function numeroDelEpigrafe(epigrafe: string): string[] {
   return m ? [m[1]!] : []
 }
 
-/** Número(s) del nombre del archivo, EXCLUYENDO los años: "ley-2101-2021.pdf" → ["2101"]. */
+/**
+ * Número(s) del nombre del archivo, EXCLUYENDO los años: "ley-2101-2021.pdf" → ["2101"].
+ * El nombre se compara decodificado: «DECRETO%201227%20DEL…» leía «201227» porque
+ * `%20` + `1227` forman un solo número para `\b\d{3,6}\b`.
+ */
 export function numeroDelArchivo(url: string): string[] {
-  const nombre = url.split(/[?#]/)[0]!.split('/').pop() ?? ''
+  const crudo = url.split(/[?#]/)[0]!.split('/').pop() ?? ''
+  let nombre = crudo
+  try {
+    nombre = decodeURIComponent(crudo)
+  } catch {
+    /* un «%» que no es un escape válido: se compara el nombre tal cual */
+  }
   return [...nombre.matchAll(/\b(\d{3,6})\b/g)]
     .map((m) => m[1]!)
     .filter((n) => !/^(19|20)\d{2}$/.test(n))
