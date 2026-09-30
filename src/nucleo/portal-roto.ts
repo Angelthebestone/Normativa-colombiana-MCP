@@ -86,9 +86,10 @@ export function diagnosticarRespuesta(
     } catch {
       return { roto: false } // un Location que no es URL es del portal, no de su disponibilidad
     }
-    // El bucle a sí mismo: el mismo recurso, con o sin barra final.
-    const limpiar = (u: string): string => u.replace(/\/+$/, '').toLowerCase()
-    if (limpiar(resuelto) === limpiar(pedida)) return { roto: true, motivo: `${status} que apunta a la misma URL (bucle)` }
+    // El bucle a sí mismo: el Location es la misma URL que se pidió (el síntoma medido de SUIN).
+    // Añadir la barra final NO lo es: es la redirección canónica de cualquier portal (Superfinanciera:
+    // `/10115974` → `/10115974/`), y contarla como fallo armaba la pausa con tres consultas en paralelo.
+    if (resuelto === new URL(pedida).toString()) return { roto: true, motivo: `${status} que apunta a la misma URL (bucle)` }
     return { roto: false }
   }
   if (status === 503 || MANTENIMIENTO.test(cuerpo.slice(0, 2000))) {

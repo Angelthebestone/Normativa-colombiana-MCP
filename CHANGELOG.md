@@ -3,6 +3,12 @@
 Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/).
 Este proyecto sigue [versionado semántico](https://semver.org/lang/es/).
 
+## [Sin publicar]
+
+### Corregido
+
+- **Superfinanciera devolvía siempre «degradada» y ningún resultado.** El portal está sano: responde `301 /10115974 → /10115974/`, `302 → loader.php` y `200`. Pero el disyuntor contaba como «bucle» (y por tanto como fallo) cualquier 301 cuyo destino solo difiere en la barra final, y las tres consultas anuales seguidas armaban la pausa de 60 s. Ahora solo es bucle el 301 cuyo destino es la misma URL pedida —el síntoma medido de SUIN—. Medido en vivo: sin filtros, 3 actos de 157 (2026); año 2024 con «riesgo», 21; año 2020, 255; el host no queda degradado.
+
 ## [1.15.1] — 2026-09-30
 
 **Segunda y tercera serie de pruebas (28 herramientas, 1.14.0 y 1.15.0 publicada): 23 correcciones, casi todas falsos vacíos o etiquetas engañosas.** Cambio OpenSpec `corregir-hallazgos-segunda-serie`. Sin parámetros nuevos ni retirados.
