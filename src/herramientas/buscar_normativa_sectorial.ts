@@ -52,8 +52,12 @@ export const schema = estricto(esquema.shape)
 
 type Params = z.infer<typeof esquema>
 
-export async function escribir({ entidad, texto, anio, pagina, limite, categoria, solo_entidad }: Params): Promise<string> {
-  const a = sectorial.adaptador(entidad)
+/** `deps.adaptador` inyecta el regulador para probar sin red. */
+export async function escribir(
+  { entidad, texto, anio, pagina, limite, categoria, solo_entidad }: Params,
+  deps: { adaptador?: typeof sectorial.adaptador } = {},
+): Promise<string> {
+  const a = (deps.adaptador ?? sectorial.adaptador)(entidad)
   if (!a) return vacio(`un regulador llamado "${entidad}"`, `Disponibles: ${sectorial.ids().join(', ')}.`)
 
   const r = await a.buscar({ texto, anio, pagina, limite, categoria, ...(solo_entidad !== undefined ? { solo_entidad } : {}) })
@@ -87,8 +91,11 @@ export async function escribir({ entidad, texto, anio, pagina, limite, categoria
   // Parques lista dos veces la Ley 1333 de 2009 en la misma página, con fecha y
   // enlace distintos. Son dos filas reales de una página mantenida a mano, no un
   // duplicado nuestro, pero contarlas como dos normas es un error de quien lee.
+  // Solo cuentan los actos con número y año: dos filas sin número comparten la
+  // clave vacía y no son repetidas, son actos distintos.
   const repes = new Map<string, number>()
   for (const d of r.items) {
+    if (!d.numero || !d.anio) continue
     const k = `${d.tipo} ${d.numero} de ${d.anio}`.toLowerCase()
     repes.set(k, (repes.get(k) ?? 0) + 1)
   }
@@ -108,7 +115,8 @@ export async function escribir({ entidad, texto, anio, pagina, limite, categoria
       r.items
         .map(
           (d) =>
-            `- ${d.tipo} ${d.numero}${d.anio ? ` de ${d.anio}` : ''}${d.fecha ? ` (${d.fecha})` : ''}\n` +
+            // Sin número no se imprime el hueco ni el «de»: la fila se rotula por su tipo y su epígrafe.
+            `- ${d.tipo}${d.numero ? ` ${d.numero}${d.anio ? ` de ${d.anio}` : ''}` : ''}${d.fecha ? ` (${d.fecha})` : !d.numero && d.anio ? ` (${d.anio})` : ''}\n` +
             `  ${d.epigrafe || '(sin epígrafe)'}\n` +
             (d.url ? `  ${d.url}` : '  (el portal no publicó enlace para este acto)')
         )

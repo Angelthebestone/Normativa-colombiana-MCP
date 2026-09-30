@@ -46,22 +46,21 @@ import type { Adaptador, ActoSectorial, OpcionesSectorial, ResultadoSectorial } 
 const BASE = 'https://sedeelectronica.sic.gov.co/transparencia/normativa/busqueda-de-normas/entidad'
 const TAMANO_PAGINA = 20
 
-/** Tipos que el portal ofrece pero que no son normativa vigente. */
-const TIPOS_EXCLUIDOS = new Set([
-  'nombramientos',
-  'proyectos de resolucion',
-  'proyectos de resolución',
-  'proyectos de circulares',
-  'tablas de retencion documental',
-  'tablas de retención documental',
-])
-
 /** Ids de `field_clasificacion2_target_id` (tipo de norma) que sí son normativa. */
 const TIPO_RESOLUCIONES = '177'
 const TIPOS_NORMATIVA = new Set(['16', '17', '177', '178', '179', '180', '181', '188', '451'])
 
 const sinTildesLocal = (s: string): string => s.normalize('NFD').replace(/\p{Diacritic}/gu, '')
 const plano = (s: string): string => sinTildesLocal(s).toLowerCase().trim()
+
+/**
+ * Lo que el portal ofrece pero no es normativa vigente. La etiqueta puede ser
+ * compuesta («Resoluciones, Nombramientos»), así que se busca dentro de ella; y
+ * hay proyectos sin etiqueta, que solo delata su epígrafe («Proyecto de …»).
+ */
+const excluida = (tipo: string, epigrafe: string): boolean =>
+  /nombramiento|proyectos? de (?:resolucion|circular)|tablas de retencion/.test(plano(tipo)) ||
+  /^proyecto de\b/.test(plano(epigrafe))
 
 /**
  * Número y año desde el título. Dos formas: número pegado al año
@@ -105,13 +104,12 @@ function extraer(html: string): ActoSectorial[] {
   filas.each((_, tarjeta) => {
     const $t = $(tarjeta)
     const tipo = colapsarEspacios($t.find('strong').first().text())
-    if (TIPOS_EXCLUIDOS.has(plano(tipo))) return
-
     const $enlace = $t.find('h2.field__label a').first()
     const titulo = colapsarEspacios($enlace.text())
     const href = $enlace.attr('href') ?? ''
     const epigrafe = colapsarEspacios($t.find('p').first().text())
     if (!titulo && !epigrafe) return
+    if (excluida(tipo, epigrafe)) return
 
     const { numero, anio } = numeroYAnio(titulo)
     const fecha = fechaDe(epigrafe || titulo)
@@ -142,7 +140,7 @@ async function buscar(opts: OpcionesSectorial): Promise<ResultadoSectorial> {
   const r = await pedir(url, 40_000)
   if (r.status !== 200) throw new Error(`El repositorio de normatividad de la SIC respondió ${r.status}.`)
 
-  let items = extraer(r.cuerpo).filter((d) => !TIPOS_EXCLUIDOS.has(plano(d.tipo)))
+  let items = extraer(r.cuerpo)
   if (opts.limite && opts.limite > 0) items = items.slice(0, opts.limite)
   const paginas = r.cuerpo.match(/Mostrando la p.gina \d+ de (\d+) p.ginas/i)?.[1] ?? '?'
 

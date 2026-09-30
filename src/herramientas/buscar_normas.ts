@@ -39,6 +39,47 @@ export const schema = estricto(esquema.shape)
 
 type Params = z.infer<typeof esquema>
 
+/**
+ * La búsqueda del Gestor con su refuerzo por subtema. El índice de palabras del
+ * portal es pobrísimo: "teletrabajo" solo casa con 3 documentos en todo el
+ * corpus, y con ninguno de los 43 conceptos que sí están clasificados bajo ese
+ * subtema. Cuando la búsqueda por palabras rinde poco, se reintenta por la vía
+ * temática, que es la que de verdad encuentra. La nota sale SIEMPRE que se use la
+ * vía temática, aunque no añada documentos nuevos: la lista final mezcla dos
+ * catálogos del portal. La comparten `buscar_normas` y `consultar_jerarquia`,
+ * para que la misma pregunta no tenga dos respuestas.
+ */
+export async function buscarConRefuerzo(
+  f: gestor.Filtros,
+  deps: { buscar?: typeof gestor.buscar; subtemaPorNombre?: typeof gestor.subtemaPorNombre } = {},
+): Promise<{ r: Awaited<ReturnType<typeof gestor.buscar>>; nota?: string }> {
+  const buscar = deps.buscar ?? gestor.buscar
+  const r = await buscar(f)
+  if (!f.palabras || r.items.length >= 5 || f.subtema) return { r }
+  const par = temaDelIndice(f.palabras)
+  if (!par) return { r }
+  try {
+    const sub = await (deps.subtemaPorNombre ?? gestor.subtemaPorNombre)(par.t, par.s)
+    if (!sub) return { r }
+    const via = await buscar({ tipo: f.tipo, numero: f.numero, anio: f.anio, entidad: f.entidad, subtema: sub })
+    if (!via.items.length) return { r }
+    const vistos = new Set(r.items.map((i) => i.id))
+    const extra = via.items.filter((i) => !vistos.has(i.id))
+    r.items.push(...extra)
+    return {
+      r,
+      nota:
+        `La búsqueda por palabras solo halló ${r.total}. Se reconsultó con el subtema "${normalizarRotulo(par.s)}" ` +
+        `(id ${conPrefijo('sub', sub)}) del catálogo de búsqueda${extra.length ? ` y se añadieron ${extra.length} documentos` : ', que ya estaban entre los de palabras'}. Ese catálogo y el de ` +
+        `buscar_por_tema son taxonomías distintas del portal, así que allí estos documentos pueden aparecer ` +
+        `bajo otro tema.`,
+    }
+  } catch {
+    /* la vía temática es un refuerzo: si falla, quedan los de palabras */
+    return { r }
+  }
+}
+
 export async function escribir({ palabras, tipo_documento, numero, anio, entidad, tema: temaCrudo, subtema: subtemaCrudo, limite }: Params): Promise<string> {
   // Nombre o id: el id llega con prefijo, y uno pelado o de otro catálogo se
   // rechaza en vez de resolverse contra el tema equivocado.
@@ -74,7 +115,15 @@ export async function escribir({ palabras, tipo_documento, numero, anio, entidad
       )
     }
   }
-  const r = await gestor.buscar({ palabras, tipo: tipo_documento, numero, anio, entidad: ent && !fueraDelGestor ? ent.oficial : entidad, tema, subtema })
+  const { r, nota: refuerzo } = await buscarConRefuerzo({
+    palabras,
+    tipo: tipo_documento,
+    numero,
+    anio,
+    entidad: ent && !fueraDelGestor ? ent.oficial : entidad,
+    tema,
+    subtema,
+  })
   const notas = r.nota ? [r.nota] : []
   if (ent?.aliasUsado && !fueraDelGestor) {
     notas.push(`Entidad normalizada: «${ent.aliasUsado}» → «${ent.oficial}».`)
@@ -82,36 +131,7 @@ export async function escribir({ palabras, tipo_documento, numero, anio, entidad
     notas.push(`Para normativa de «${entidad}» usa buscar_normativa_tributaria (no es un filtro del Gestor).`)
   }
 
-  // El índice de palabras del portal es pobrísimo: "teletrabajo" solo casa con
-  // 3 documentos en todo el corpus, y con ninguno de los 43 conceptos que sí
-  // están clasificados bajo ese subtema. Cuando la búsqueda por palabras rinde
-  // poco, se reintenta por la vía temática, que es la que de verdad encuentra.
-  // El aviso sale SIEMPRE que se use la vía temática, aunque no añada
-  // documentos nuevos: la lista final mezcla dos catálogos del portal.
-  if (palabras && r.items.length < 5 && !subtema) {
-    const par = temaDelIndice(palabras)
-    if (par) {
-      try {
-        const sub = await gestor.subtemaPorNombre(par.t, par.s)
-        if (sub) {
-          const via = await gestor.buscar({ tipo: tipo_documento, numero, anio, entidad, subtema: sub })
-          const vistos = new Set(r.items.map((i) => i.id))
-          const extra = via.items.filter((i) => !vistos.has(i.id))
-          if (via.items.length) {
-            r.items.push(...extra)
-            notas.push(
-              `La búsqueda por palabras solo halló ${r.total}. Se reconsultó con el subtema "${normalizarRotulo(par.s)}" ` +
-                `(id ${conPrefijo('sub', sub)}) del catálogo de búsqueda${extra.length ? ` y se añadieron ${extra.length} documentos` : ', que ya estaban entre los de palabras'}. Ese catálogo y el de ` +
-                `buscar_por_tema son taxonomías distintas del portal, así que allí estos documentos pueden aparecer ` +
-                `bajo otro tema.`
-            )
-          }
-        }
-      } catch {
-        /* la vía temática es un refuerzo: si falla, quedan los de palabras */
-      }
-    }
-  }
+  if (refuerzo) notas.push(refuerzo)
 
   if (!r.items.length) {
     // El filtro de entidad se resuelve bien y aun así devuelve cero, porque el

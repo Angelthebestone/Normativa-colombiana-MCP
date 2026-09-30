@@ -183,6 +183,8 @@ export const TORCIDAS: Torcida[] = [
   // Añadido tras el barrido disruptivo: `z.coerce.string()` convierte un campo AUSENTE en la
   // cadena "undefined" ANTES de validar, y el mensaje de regex la repetía como si fuera un valor.
   { herramienta: 'explicar_relacion_tema', args: { temsubid: 'ts-38872' }, porque: 'falta normid: coerce lo vuelve «undefined»' },
+  // Tercera serie: `temsubid` no tiene regex, así que la rama de `conAviso` que reescribe «undefined» no lo alcanzaba.
+  { herramienta: 'explicar_relacion_tema', args: { normid: '31431' }, porque: 'falta temsubid: coerce lo vuelve «undefined»' },
   { herramienta: 'buscar_normativa_sectorial', args: { entidad: 'sic', anio: 'año 2020' }, porque: 'año con texto' },
 
   // --- booleanos como texto ------------------------------------------------

@@ -238,7 +238,9 @@ async function resolverUnaCita(cita: string, opciones: OpcionesCita = {}): Promi
   // Si la cita vino sin año ("Decreto 1083"), se toma el del título que
   // resolvió el Gestor: sin esto la vigencia se perdía justo en las citas
   // cómodas, que son las que la gente escribe.
-  const anio = c.anio ?? n.titulo.match(/\bde\s+(\d{4})\b/i)?.[1]
+  // SUIN no tiene ficha de la Constitución (medido: «no consta… constitucion
+  // politica 1 de 1991»), así que no se le pregunta.
+  const anio = c.tipo === 'constitucion politica' ? undefined : (c.anio ?? n.titulo.match(/\bde\s+(\d{4})\b/i)?.[1])
   const conVigencia = anio && activa('suin')
   let vig = anio && !conVigencia ? `\nEstado de vigencia: ${avisoApagada('suin')}` : ''
   let detalleSuin = ''

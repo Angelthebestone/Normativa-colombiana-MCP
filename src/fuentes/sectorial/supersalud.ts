@@ -38,8 +38,8 @@ export default adaptadorNormograma({
     'normograma de la entidad indexa (leyes, decretos y resoluciones del Ministerio de Salud, conceptos y ' +
     'jurisprudencia de las altas cortes), con varias entidades en el campo "entidad" de cada resultado. El ' +
     'campo "tipo" dice de qué se trata; no asumas que todo es un acto de la Supersalud. Los documentos son ' +
-    'PDF o HTML sin texto extraíble aquí, y el buscador solo da el AÑO de cada acto, no el día ni el mes. ' +
-    'No publica vigencia.',
+    'PDF o páginas HTML: el texto de las páginas HTML se lee con obtener_documento y fuente="sectorial". El ' +
+    'buscador solo da el AÑO de cada acto, no el día ni el mes. No publica vigencia.',
   apiBase: 'https://normograma.info/prueba-sns/buscador/',
   docsBase: 'https://normograma.supersalud.gov.co/compilacion/docs/',
   soportaAnio: false,

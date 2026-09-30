@@ -18,7 +18,7 @@ export const DESCRIPCION =
   'restrictores de una norma de una vez, usa obtener_documento con fuente="gestor" y mira su bloque "Temas asociados".'
 
 const esquema = z.object({
-  temsubid: z.coerce.string().describe('temsubid de buscar_por_tema, con su prefijo: "ts-38872"'),
+  temsubid: z.string().describe('temsubid de buscar_por_tema, con su prefijo: "ts-38872"'),
   normid: z.coerce.string().regex(/^\d+$/).describe('normid de la misma fila de buscar_por_tema'),
 })
 

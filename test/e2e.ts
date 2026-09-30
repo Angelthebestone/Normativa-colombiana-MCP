@@ -79,6 +79,9 @@ test('las 28 herramientas se declaran con esquemas utilizables', CONTRATO, async
   // esquema: un agente que solo lea el esquema decide con él.
   const juris = tools.find((t: any) => t.name === 'buscar_jurisprudencia')
   assert.deepEqual(juris.inputSchema.required, ['termino'])
+  // `temsubid` era `z.coerce.string()`: la ausencia se volvía «undefined» y el esquema lo publicaba como opcional.
+  const relacion = tools.find((t: any) => t.name === 'explicar_relacion_tema')
+  assert.deepEqual([...relacion.inputSchema.required].sort(), ['normid', 'temsubid'])
 
   // Listas largas: sin offset, ver el segundo tramo obliga a repedir la lista entera.
   const catalogos = tools.find((x: any) => x.name === 'listar_catalogos')
@@ -213,6 +216,32 @@ test('un límite fuera de rango se ajusta en vez de reventar', LENTO, async () =
   const r = await c.tool('obtener_documento', { fuente: 'gestor', id: '31431', limite_caracteres: 400 })
   assert.equal(r.esError, false, 'un valor pequeño no debería producir un error de validación crudo')
   assert.match(r.texto, /Ley 1221 de 2008/)
+})
+
+test('el artículo pedido respeta limite_caracteres y da la llamada del trozo siguiente', LENTO, async () => {
+  const r = await c.tool('obtener_documento', { fuente: 'gestor', id: '31431', articulo: '6', limite_caracteres: 400 })
+  assert.equal(r.esError, false)
+  const m = r.texto.match(/Se muestran (\d+) desde la posición 0; quedan (\d+) sin mostrar/)
+  assert.ok(m, 'debe informar lo mostrado y lo omitido')
+  assert.ok(Number(m[1]) <= 400, `se mostraron ${m[1]} caracteres con tope 400`)
+  assert.match(r.texto, /Trozo siguiente: obtener_documento con fuente="gestor", id="31431", articulo="6", desde=400/)
+})
+
+test('una nota de «Modificado por» en la cola del artículo recortado no se pierde', LENTO, async () => {
+  // Ley 909, artículo 31: la nota de la Ley 1960 va al final y un tope de 200 caracteres no la alcanza.
+  const r = await c.tool('obtener_documento', { fuente: 'gestor', id: '14861', articulo: '31', limite_caracteres: 200 })
+  assert.match(r.texto, /quedan \d+ sin mostrar/)
+  assert.match(r.texto, /nota\(s\) de "Modificado por"/)
+})
+
+test('«Temas asociados (N de M)» cuenta los temas que muestra', LENTO, async () => {
+  const listados = (t: string) => t.split('Temas asociados')[1]!.split('\n').filter((l) => l.startsWith('- ')).length
+  const corto = await c.tool('obtener_documento', { fuente: 'gestor', id: '31431', limite_caracteres: 1000 })
+  assert.match(corto.texto, /Temas asociados \(3 de 7/)
+  assert.equal(listados(corto.texto), 3)
+  const holgado = await c.tool('obtener_documento', { fuente: 'gestor', id: '31431' })
+  assert.match(holgado.texto, /Temas asociados \(7 de 7/)
+  assert.equal(listados(holgado.texto), 7)
 })
 
 test('el subtema se acepta por nombre cuando viene con su tema', LENTO, async () => {

@@ -56,7 +56,7 @@
     },
     {
       "name": "listar_catalogos",
-      "description": "Valores válidos para los filtros de buscar_normas: tipos de documento (29), años, entidades (89) y temas (2.509), más los subtemas de un tema (subtemas con tema_id), los conceptos de Función Pública (conceptos_fp con numero/anio) y el listado curado del DAFP (normas_fp)."
+      "description": "Valores válidos para los filtros de buscar_normas: tipos de documento, años, entidades y temas, más los subtemas de un tema (subtemas con tema_id), los conceptos de Función Pública (conceptos_fp con numero/anio) y el listado curado del DAFP (normas_fp)."
     },
     {
       "name": "buscar_jurisprudencia",
@@ -112,7 +112,7 @@
     },
     {
       "name": "analizar_conflicto",
-      "description": "Reúne para dos normas la EVIDENCIA de un posible conflicto: identificación en el Gestor, vigencia según SUIN cuando consta, nivel en la jerarquía y carácter, reformas anotadas en el texto y pasajes que mencionan un tema."
+      "description": "Reúne para dos normas la EVIDENCIA de un posible conflicto: identificación en el Gestor, vigencia según SUIN cuando consta, nivel en la jerarquía y carácter, notas de reforma del texto (de cualquier artículo de la norma) y pasajes que mencionanun tema."
     },
     {
       "name": "cambios_desde",

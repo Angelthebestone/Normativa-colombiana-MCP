@@ -52,8 +52,9 @@ export default adaptadorNormograma({
     'el buscador de su normograma indexa (leyes, decretos y resoluciones del Ministerio de Salud, conceptos, ' +
     'jurisprudencia de las altas cortes, y las actas de las salas especializadas del propio INVIMA). El campo ' +
     '"tipo" de cada resultado dice de qué se trata; no asumas que todo es un acto del INVIMA. Los documentos son ' +
-    'PDF o HTML sin texto extraíble aquí, y el buscador solo da el AÑO de cada acto, no el día ni el mes — para ' +
-    'la fecha completa hay que abrir la ficha. No publica vigencia.',
+    'PDF o páginas HTML: el texto de las páginas HTML se lee con obtener_documento y fuente="sectorial". El ' +
+    'buscador solo da el AÑO de cada acto, no el día ni el mes — para la fecha completa hay que abrir la ficha. ' +
+    'No publica vigencia.',
   apiBase: 'https://normograma.info/prueba-invima/buscador/',
   docsBase: 'https://normograma.invima.gov.co/compilacion/docs/',
   soportaAnio: true,

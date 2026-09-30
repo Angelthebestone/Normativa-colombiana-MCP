@@ -5,10 +5,10 @@
  */
 import { z } from 'zod'
 import { estricto } from '../nucleo/normalizar.ts'
-import { caracterDelNivel, NIVELES, tipoANivel, type Nivel } from '../nucleo/jerarquia.ts'
+import { caracterDelNivel, NIVELES, TIPO_GESTOR, type Nivel } from '../nucleo/jerarquia.ts'
 import { alcance, proyectar } from '../nucleo/alcance.ts'
 import * as corte from '../fuentes/jurisprudencia/corte.ts'
-import * as gestor from '../fuentes/gestor.ts'
+import { buscarConRefuerzo } from './buscar_normas.ts'
 
 export const TITULO = 'Consultar normativa por nivel de autoridad'
 
@@ -39,15 +39,17 @@ export const schema = estricto({
 /** El schema como ZodObject: de él se deriva el tipo de los parámetros resueltos. */
 type Parametros = z.infer<typeof schema>
 
-export type BuscadorNormas = (nivel: Nivel, texto: string, limite: number) => Promise<{ titulo: string; url: string }[]>
+type Documento = { titulo: string; url: string }
 
-export function formatear(items: { titulo: string; url: string }[], nivel: Nivel, texto: string): string {
+export type BuscadorNormas = (nivel: Nivel, texto: string, limite: number) => Promise<{ items: Documento[]; nota?: string | undefined }>
+
+export function formatear(items: Documento[], nivel: Nivel, texto: string, nota?: string): string {
   if (!items.length) {
-    // "constitución" no es un tipo del catálogo del Gestor: el vacío no es que
-    // no exista normativa, es que ese nivel no se puede filtrar ahí.
+    // La búsqueda por palabras del Gestor indexa solo los resúmenes: un vacío no
+    // dice que el texto de la Constitución no exista, y se lee con resolver_cita.
     const avisoNivel =
       nivel === 'constitucion'
-        ? ' El Gestor no cataloga la Constitución como tipo de documento: para el texto de la Constitución usa resolver_cita con "Constitución Política", y para jurisprudencia constitucional usa buscar_jurisprudencia.'
+        ? ' Para el texto de la Constitución usa resolver_cita con "art. N de la Constitución Política" (N es el número del artículo, ej. 53), y para jurisprudencia constitucional usa buscar_jurisprudencia.'
         : ''
     return (
       `No encontré nada de nivel ${nivel} para "${texto}" en las fuentes consultadas.` +
@@ -57,19 +59,26 @@ export function formatear(items: { titulo: string; url: string }[], nivel: Nivel
   }
   return (
     items.map((i) => `- ${i.titulo}\n  ${i.url}`).join('\n') +
+    (nota ? `\n\n${nota}` : '') +
     `\n\nCarácter: ${caracterDelNivel(nivel)}\n` +
     'Esto no es asesoría jurídica; verifica en el enlace antes de actuar.'
   )
 }
 
-async function porGestor(nivel: Nivel, texto: string, limite: number): Promise<{ titulo: string; url: string }[]> {
-  const r = await gestor.buscar({ palabras: texto, tipo: tipoANivel(nivel) })
-  return r.items.slice(0, limite).map((i) => ({ titulo: i.titulo, url: i.url }))
+/** `deps` inyecta el Gestor para probar sin red. */
+export async function porGestor(
+  nivel: Exclude<Nivel, 'jurisprudencia'>,
+  texto: string,
+  limite: number,
+  deps?: Parameters<typeof buscarConRefuerzo>[1],
+) {
+  const { r, nota } = await buscarConRefuerzo({ palabras: texto, tipo: TIPO_GESTOR[nivel] }, deps)
+  return { items: r.items.slice(0, limite).map((i) => ({ titulo: i.titulo, url: i.url })), nota }
 }
 
-async function porCorte(texto: string, limite: number): Promise<{ titulo: string; url: string }[]> {
+async function porCorte(texto: string, limite: number) {
   const r = await corte.buscar({ termino: texto, limite })
-  return r.items.map((i) => ({ titulo: `${i.sentencia} (${i.tipo}, ${i.fecha})`, url: i.url }))
+  return { items: r.items.map((i) => ({ titulo: `${i.sentencia} (${i.tipo}, ${i.fecha})`, url: i.url })) }
 }
 
 /** La búsqueda es inyectable para probar el formateo sin red. */
@@ -77,9 +86,9 @@ export const buscar: BuscadorNormas = async (nivel, texto, limite) =>
   nivel === 'jurisprudencia' ? porCorte(texto, limite) : porGestor(nivel, texto, limite)
 
 export async function escribir({ nivel, texto, limite }: Parametros): Promise<string> {
-  const items = await buscar(nivel, texto, limite)
+  const { items, nota } = await buscar(nivel, texto, limite)
   // Cada nivel sale de UNA sola fuente: la jurisprudencia, de la relatoría de la
   // Corte; el resto, del Gestor. El número de resultados va en el detalle.
   const fuente = nivel === 'jurisprudencia' ? 'corte' : 'gestor'
-  return `${alcance([{ clave: fuente, detalle: `${items.length} resultado(s)` }])}\n\n${formatear(items, nivel, texto)}`
+  return `${alcance([{ clave: fuente, detalle: `${items.length} resultado(s)` }])}\n\n${formatear(items, nivel, texto, nota)}`
 }

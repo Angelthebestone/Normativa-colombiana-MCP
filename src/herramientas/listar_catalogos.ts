@@ -10,8 +10,8 @@ import * as gestor from '../fuentes/gestor.ts'
 export const TITULO = 'Listar catálogos de búsqueda'
 
 export const DESCRIPCION =
-  'Valores válidos para los filtros de buscar_normas: tipos de documento (29), años, entidades (89) y temas ' +
-  '(2.509), más los subtemas de un tema (subtemas con tema_id), los conceptos de Función Pública ' +
+  'Valores válidos para los filtros de buscar_normas: tipos de documento, años, entidades y temas, ' +
+  'más los subtemas de un tema (subtemas con tema_id), los conceptos de Función Pública ' +
   '(conceptos_fp con numero/anio) y el listado curado del DAFP (normas_fp). En temas el filtro es ' +
   'obligatorio por volumen, y sus ids llevan prefijo ("tema-24457") porque el portal tiene tres taxonomías ' +
   'que reutilizan los mismos números. ' +

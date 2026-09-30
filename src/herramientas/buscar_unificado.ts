@@ -312,7 +312,8 @@ export async function escribir(
   await Promise.all(
     fuentes.map(async (f) => {
       try {
-        resultado[f] = await porFuente[f](params.texto, limite)
+        // Supersalud pide el doble: lo que INVIMA ya trae se descarta más abajo y el límite se completa con lo siguiente.
+        resultado[f] = await porFuente[f](params.texto, f === 'supersalud' ? limite * 2 : limite)
       } catch (e) {
         // Una fuente caída no tumba el resto: se anota como FALLO con su
         // mensaje, no como vacío. Un vacío dice "respondió sin nada"; un fallo
@@ -323,6 +324,19 @@ export async function escribir(
       }
     }),
   )
+
+  // INVIMA y Supersalud publican el mismo normograma: el mismo acto sale de las dos
+  // y gastaba el límite en copias. Sale una vez, atribuido a INVIMA.
+  // ponytail: la clave es el nombre de archivo; el techo es un acto que las dos entidades publiquen con nombres distintos; el salto sería comparar epígrafes normalizados.
+  const archivo = (url: string): string => url.split(/[?#]/)[0]!.split('/').pop() ?? ''
+  const deInvima = new Map(resultado.invima.map((i): [string, Item] => [archivo(i.url), i]))
+  resultado.supersalud = resultado.supersalud
+    .filter((i) => {
+      const gemelo = archivo(i.url) ? deInvima.get(archivo(i.url)) : undefined
+      if (gemelo) gemelo.detalle = 'también en Supersalud'
+      return !gemelo
+    })
+    .slice(0, limite)
 
   // Solo se declaran vacíos de las fuentes que SÍ se consultaron: un filtro
   // explícito (fuentes=["corte"]) no debe reportar "sin resultados" en las

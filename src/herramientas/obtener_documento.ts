@@ -477,9 +477,11 @@ async function gestorDocumento(p: Resueltas, tope: number): Promise<string> {
 
   let cuerpo: string
   let avisoTexto = ''
+  // El artículo pedido se trocea como el documento entero (tope y `desde`).
+  let art: string | null = null
 
   if (p.articulo) {
-    const art = extraerArticulo(n.texto, p.articulo)
+    art = extraerArticulo(n.texto, p.articulo)
     if (!art) {
       const arts = indiceArticulos(n.texto)
       return (
@@ -487,8 +489,8 @@ async function gestorDocumento(p: Resueltas, tope: number): Promise<string> {
         (arts.length ? `Artículos detectados: ${arts.join(', ')}. Repite con articulo= y uno de esos.` : 'No se detectó ningún artículo en el texto.')
       )
     }
-    cuerpo = art
-  } else if (p.buscar_en_texto) {
+  }
+  if (p.buscar_en_texto && !art) {
     const f = fragmentos(n.texto, p.buscar_en_texto, 400, p.max_pasajes ?? 10, tope)
     if (!f.total) {
       // El vacío enseña: dice qué se buscó, sobre cuánto texto, y por dónde
@@ -506,19 +508,21 @@ async function gestorDocumento(p: Resueltas, tope: number): Promise<string> {
       `${f.total} aparición(es) de "${p.buscar_en_texto}", agrupadas en ${f.pasajes} pasaje(s); se muestran ${f.mostrados}` +
       (f.mostrados < f.pasajes ? ` (los demás no caben en ${tope} caracteres: sube limite_caracteres o afina el término).` : '.')
   } else {
-    const t = trocear(n.texto, p.desde, tope)
+    const t = trocear(art ?? n.texto, p.desde, tope)
     cuerpo = t.texto
-    const arts = indiceArticulos(n.texto)
+    const arts = art ? [] : indiceArticulos(n.texto)
     avisoTexto =
       `Texto total: ${t.total} caracteres. Se muestran ${t.texto.length} desde la posición ${t.desde}` +
       (t.omitido > 0 ? `; quedan ${t.omitido} sin mostrar.\n${reanudar(p, t.desde + t.texto.length)}.` : '.') +
       (t.texto.length === 0 && t.total > 0
-        ? `\nEl "desde" (${p.desde}) está más allá del final del texto: pide uno menor o usa buscar_en_texto.`
+        ? `\nEl "desde" (${p.desde}) está más allá del final del ${art ? 'artículo' : 'texto'}: pide uno menor${art ? '' : ' o usa buscar_en_texto'}.`
         : '') +
       (arts.length ? `\nArtículos detectados: ${arts.join(', ')}` : '')
   }
 
-  const avisos = advertenciasVigencia(cuerpo)
+  // Las notas de vigencia van al final del artículo: se leen sobre el artículo
+  // completo, no sobre el trozo mostrado, o se perderían al recortarlo.
+  const avisos = advertenciasVigencia(art ?? cuerpo)
   const aguja = sinTildes(p.buscar_en_texto ?? p.articulo ?? '').toLowerCase().trim()
   const pertinente = (t: (typeof n.temas)[number]) =>
     Number(sinTildes(`${t.tema} ${t.subtema} ${t.restrictor}`).toLowerCase().includes(aguja))
@@ -532,7 +536,7 @@ async function gestorDocumento(p: Resueltas, tope: number): Promise<string> {
       ? p.sin_temas
         ? '\n\n(Bloque de temas asociados omitido con sin_temas=true.)'
         : ''
-      : `\n\nTemas asociados (${Math.min(10, ordenados.length)} de ${ordenados.length}` +
+      : `\n\nTemas asociados (${Math.min(cuantosTemas, ordenados.length)} de ${ordenados.length}` +
         `${aguja ? ', primero los que mencionan lo buscado' : ', sin ordenar por relevancia'}):\n` +
         ordenados
           .slice(0, cuantosTemas)

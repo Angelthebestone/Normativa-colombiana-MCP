@@ -15,7 +15,7 @@
  */
 import { z } from 'zod'
 
-import { historial, type Cambio } from '../nucleo/parse.ts'
+import { articulo as extraerArticulo, historial, indiceArticulos, type Cambio } from '../nucleo/parse.ts'
 import { idTipo, parsearCita, candidatosAmbiguos } from '../nucleo/citas.ts'
 import { estricto, numeroDeArticulo } from '../nucleo/normalizar.ts'
 
@@ -36,7 +36,7 @@ const esquema = z.object({
   cita: z.string().describe('Cita de la norma, ej. "Ley 100 de 1993"'),
   articulo: z
     .preprocess(numeroDeArticulo, z.string().optional())
-    .describe('Filtra a los cambios que afectaron ese artículo (ej. "6"); sin él se devuelven todos'),
+    .describe('Filtra a las notas de reforma de ese artículo de la norma (ej. "6"); sin él se devuelven todas'),
   desde: z.coerce
     .number()
     .int()
@@ -89,21 +89,15 @@ export function ultimaReforma(ordenados: Cambio[]): Cambio | null {
 }
 
 /**
- * El filtro por artículo y la página, en un solo sitio: el texto y el json
- * tienen que contar, ordenar y recortar igual, o dejarían de ser la misma
- * respuesta con otro traje.
+ * El orden y la página, en un solo sitio: el texto y el json tienen que contar,
+ * ordenar y recortar igual, o dejarían de ser la misma respuesta con otro traje.
+ * El filtro por artículo ya se hizo antes, sobre el texto del artículo.
  */
-function acotar(
-  cambios: Cambio[],
-  opts: { articulo?: string | undefined; desde?: number | undefined; limite?: number | undefined },
-) {
-  const porArticulo = opts.articulo
-    ? cambios.filter((c) => c.articulo.replace(/\.$/, '') === opts.articulo!.replace(/\.$/, ''))
-    : cambios
-  const ordenados = ordenarCambios(porArticulo)
+function acotar(cambios: Cambio[], opts: { desde?: number | undefined; limite?: number | undefined }) {
+  const ordenados = ordenarCambios(cambios)
   const desde = Math.max(0, opts.desde ?? 0)
   const limite = Math.min(Math.max(opts.limite ?? 20, 1), 100)
-  return { porArticulo, ordenados, desde, limite, tramo: ordenados.slice(desde, desde + limite) }
+  return { ordenados, desde, limite, tramo: ordenados.slice(desde, desde + limite) }
 }
 
 /**
@@ -135,15 +129,14 @@ export function formatearHistorial(
   url: string,
   opts: { articulo?: string | undefined; desde?: number | undefined; limite?: number | undefined } = {},
 ): string {
-  const { porArticulo, ordenados, desde, tramo } = acotar(cambios, opts)
-  if (opts.articulo && !porArticulo.length) {
+  const { ordenados, desde, tramo } = acotar(cambios, opts)
+  if (opts.articulo && !ordenados.length) {
     return (
-      `${titulo} (${url})\n\nEl Gestor anota ${cambios.length} cambio(s) sobre esta norma, pero ninguno sobre el ` +
-      `artículo ${opts.articulo}. Eso NO equivale a que siga intacto: el portal no siempre anota las reformas; ` +
-      `la vigencia se consulta con resolver_cita.`
+      `${titulo} (${url})\n\nEl Gestor no anota cambios sobre el artículo ${opts.articulo}. Eso NO equivale a que ` +
+      `siga intacto: el portal no siempre anota las reformas; la vigencia se consulta con resolver_cita.`
     )
   }
-  if (!porArticulo.length) {
+  if (!ordenados.length) {
     return (
       `${titulo} (${url})\n\nEl Gestor no anota reformas sobre esta norma. Eso NO equivale a que esté intacta: ` +
       `el portal no siempre anota las reformas; la vigencia se consulta con resolver_cita.`
@@ -152,7 +145,7 @@ export function formatearHistorial(
   const fin = desde + tramo.length
   if (!tramo.length) {
     return (
-      `${titulo} (${url})\n\nEl filtro reúne ${porArticulo.length} cambio(s)` +
+      `${titulo} (${url})\n\nEl filtro reúne ${ordenados.length} cambio(s)` +
       `${opts.articulo ? ` sobre el artículo ${opts.articulo}` : ''}, pero "desde" (${desde}) está más allá del final. ` +
       `Pide un "desde" menor.`
     )
@@ -168,7 +161,7 @@ export function formatearHistorial(
     lineas.push(`- ${ficha(c)}${c.anio ? '' : ' — sin año en la nota'}\n  Nota literal: «${c.literal}»`)
   }
   return (
-    `${titulo} (${url})\n\n${porArticulo.length} cambio(s) anotado(s) en el texto del portal${ambito}; ` +
+    `${titulo} (${url})\n\n${ordenados.length} cambio(s) anotado(s) en el texto del portal${ambito}; ` +
     `se muestran ${desde + 1}–${fin}:\n\n` +
     lineas.join('\n') +
     (fin < ordenados.length ? `\n\nQuedan ${ordenados.length - fin}: repite con desde=${fin}.` : '') +
@@ -185,7 +178,7 @@ export type DatosHistorial = {
   alcance: string
   titulo: string
   url: string
-  /** Cambios anotados que cumplen el filtro, antes de paginar. */
+  /** Cambios anotados de la norma (o del artículo pedido), antes de paginar. */
   total: number
   /** La página: los cambios ya ordenados que caben entre `desde` y `limite`. */
   cambios: Cambio[]
@@ -195,17 +188,17 @@ export type DatosHistorial = {
 
 /** Los avisos del json: lo mismo que el texto dice al lector, en frases sueltas. */
 function avisosDe(
-  d: { porArticulo: Cambio[]; ordenados: Cambio[]; tramo: Cambio[]; desde: number; totalNorma: number },
+  d: { ordenados: Cambio[]; tramo: Cambio[]; desde: number },
   articulo?: string | undefined,
 ): string[] {
   const avisos = [
     'Son las notas literales del portal, ordenadas por el año de la norma que las introduce; los cambios sin año ' +
       'van al final, sin ordenar. No se deduce vigencia: el estado actual se consulta con resolver_cita.',
   ]
-  if (!d.porArticulo.length) {
+  if (!d.ordenados.length) {
     avisos.push(
       articulo
-        ? `El Gestor anota ${d.totalNorma} cambio(s) sobre esta norma, pero ninguno sobre el artículo ${articulo}; eso no equivale a que siga intacto.`
+        ? `El Gestor no anota cambios sobre el artículo ${articulo}; eso no equivale a que siga intacto.`
         : 'El Gestor no anota reformas sobre esta norma; eso no equivale a que esté intacta.',
     )
     return avisos
@@ -223,7 +216,7 @@ function avisosDe(
   if (sinAnio) avisos.push(`${sinAnio} cambio(s) no traen año en la nota y van al final, sin ordenar.`)
   const fin = d.desde + d.tramo.length
   if (!d.tramo.length) {
-    avisos.push(`"desde" (${d.desde}) está más allá del final: el filtro reúne ${d.porArticulo.length} cambio(s).`)
+    avisos.push(`"desde" (${d.desde}) está más allá del final: el filtro reúne ${d.ordenados.length} cambio(s).`)
   } else if (fin < d.ordenados.length) {
     avisos.push(`Quedan ${d.ordenados.length - fin}: repite con desde=${fin}.`)
   }
@@ -253,16 +246,16 @@ export function datosDe(
   alcanceLinea: string,
   opts: { articulo?: string | undefined; desde?: number | undefined; limite?: number | undefined } = {},
 ): DatosHistorial {
-  const { porArticulo, ordenados, desde, tramo } = acotar(cambios, opts)
+  const { ordenados, desde, tramo } = acotar(cambios, opts)
   return {
     fecha_consulta: hoy(),
     alcance: alcanceLinea,
     titulo,
     url,
-    total: porArticulo.length,
+    total: ordenados.length,
     cambios: tramo,
     ultima_reforma: ultimaReforma(ordenados),
-    avisos: avisosDe({ porArticulo, ordenados, tramo, desde, totalNorma: cambios.length }, opts.articulo),
+    avisos: avisosDe({ ordenados, tramo, desde }, opts.articulo),
   }
 }
 
@@ -301,7 +294,17 @@ export async function escribir(
     return json ? JSON.stringify(sinDatos(linea, aviso)) : `${linea}\n\n${aviso}`
   }
   const n = await obtenerNorma(primero.id)
-  const cambios = historial(n.texto)
+  // Como obtener_documento y comparar_articulos: las notas del artículo se leen
+  // en SU texto. `Cambio.articulo` es el de la norma modificadora, no este.
+  const ambito = articulo ? extraerArticulo(n.texto, articulo) : n.texto
+  if (articulo && !ambito) {
+    const linea = alcance(['gestor'])
+    const aviso = `No encontré el artículo ${articulo}. Artículos detectados: ${indiceArticulos(n.texto).join(', ') || '(ninguno)'}`
+    return json
+      ? JSON.stringify({ ...datosDe([], n.titulo, n.url, linea, {}), avisos: [aviso] })
+      : `${linea}\n\n${n.titulo} (${n.url})\n\n${aviso}`
+  }
+  const cambios = historial(ambito!)
   const linea = alcance([{ clave: 'gestor', detalle: `${cambios.length} cambio(s)` }])
   if (json) return JSON.stringify(datosDe(cambios, n.titulo, n.url, linea, { articulo, desde, limite }))
   return `${linea}\n\n${formatearHistorial(cambios, n.titulo, n.url, { articulo, desde, limite })}`

@@ -9,7 +9,8 @@ import test from 'node:test'
 import { contienenTodos, pertinenciaDe, quitarStopwords } from '../src/fuentes/gestor.ts'
 import type { Resultado } from '../src/nucleo/parse.ts'
 import { contienenTodas, type Providencia } from '../src/fuentes/jurisprudencia/consejoestado.ts'
-import { buscarEnIndice, buscarEnSuin, type ResultadoSuin } from '../src/fuentes/suin.ts'
+import { buscar as buscarSuin, buscarEnIndice, buscarEnSuin, type ResultadoSuin } from '../src/fuentes/suin.ts'
+import { escribir as escribirSuin } from '../src/herramientas/buscar_en_suin.ts'
 import { conAlternativas, desarrollarAbreviaturas } from '../src/nucleo/alternativas.ts'
 
 function resultado(titulo: string, resumen = ''): Resultado {
@@ -171,4 +172,60 @@ test('conAlternativas con abreviatura desconocida usa solo el término literal',
   )
   assert.deepEqual(vistos, ['ABC'])
   assert.deepEqual(r.variantesUsadas, [])
+})
+
+// --- buscar_en_suin: una variante que sustituye la búsqueda conserva la pertinencia ---
+
+const docSuin = (titulo: string, epigrafe = ''): ResultadoSuin => ({
+  id: titulo,
+  titulo,
+  subtipo: 'Ley',
+  epigrafe,
+  vigencia: 'Vigente',
+  entidad: '',
+  url: `https://suin.test/${encodeURIComponent(titulo)}`,
+})
+
+/** SUIN de mentira: «teletrabajo» da 0 (el hueco conocido) y «trabajo remoto» arrastra lo que dice «trabajo». */
+const suinConHueco = (porTermino: Record<string, ResultadoSuin[]>) =>
+  ({
+    buscar: async ({ texto }: { texto: string }) => {
+      const items = porTermino[texto] ?? []
+      return { total: items.length, items }
+    },
+  }) as { buscar: typeof buscarSuin }
+
+test('SUIN: «trabajo remoto» que solo casa con «trabajo» devuelve el vacío con aviso y orientación', async () => {
+  const s = await escribirSuin(
+    { texto: 'teletrabajo', desde: 0, limite: 15 },
+    suinConHueco({ 'trabajo remoto': [docSuin('Ley 50 de 1990', 'Reforma laboral y del trabajo'), docSuin('Decreto 2 de 2000', 'Sobre el trabajo')] }),
+  )
+  assert.match(s, /No encontré documentos en SUIN para "teletrabajo"/)
+  assert.match(s, /índice tiene huecos/)
+  assert.match(s, /buscar_por_tema/)
+  assert.doesNotMatch(s, /Ley 50 de 1990|Decreto 2 de 2000/)
+})
+
+test('SUIN: una variante que aparece completa en el título o el epígrafe se conserva y se anuncia', async () => {
+  const s = await escribirSuin(
+    { texto: 'teletrabajo', desde: 0, limite: 15 },
+    suinConHueco({
+      'trabajo remoto': [
+        docSuin('Ley 1221 de 2008', 'Normas para promover el Trabajo Remoto'),
+        docSuin('Ley 50 de 1990', 'Reforma laboral y del trabajo'),
+      ],
+    }),
+  )
+  assert.match(s, /se usó «trabajo remoto»/)
+  assert.match(s, /Ley 1221 de 2008/)
+  assert.doesNotMatch(s, /Ley 50 de 1990/)
+})
+
+test('SUIN: la búsqueda literal que sí rinde no se filtra', async () => {
+  const s = await escribirSuin(
+    { texto: 'Buenaventura', desde: 0, limite: 15 },
+    suinConHueco({ Buenaventura: [docSuin('Ley 1 de 1990', 'Sobre otra cosa')] }),
+  )
+  assert.match(s, /Ley 1 de 1990/)
+  assert.doesNotMatch(s, /se usó/)
 })

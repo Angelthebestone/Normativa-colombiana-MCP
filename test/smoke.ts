@@ -73,6 +73,19 @@ test('el parser de citas entiende las formas colombianas', () => {
   assert.equal(idTipo('Decreto'), 11)
 })
 
+test('la Constitución se cita por su nombre; la Corte Constitucional no es la Constitución', () => {
+  const constitucion = { tipo: 'constitucion politica', numero: '1', anio: '1991' }
+  assert.deepEqual(parsearCita('art. 53 de la Constitución Política'), { ...constitucion, articulo: '53' })
+  assert.deepEqual(parsearCita('Constitución de 1991'), { ...constitucion, articulo: undefined })
+  assert.deepEqual(parsearCita('la Constitución'), { ...constitucion, articulo: undefined })
+  assert.equal(parsearCita('Constitución Política de Colombia')?.tipo, 'constitucion politica')
+  assert.equal(parsearCita('Corte Constitucional'), null)
+  assert.equal(parsearCita('es inconstitucional'), null)
+  // Gana lo que aparece antes, como con los códigos.
+  assert.equal(parsearCita('art. 6 de la Ley 1221 de 2008, conforme a la Constitución')?.numero, '1221')
+  assert.equal(parsearCita('la Constitución Política 1 de 1991')?.numero, '1')
+})
+
 test('una cita corta de sentencia se convierte en la ruta de la relatoría', () => {
   assert.equal(rutaDeSentencia('C-337/11'), '2011/C-337-11.htm')
   assert.equal(rutaDeSentencia('T-099 de 2024'), '2024/T-099-24.htm')

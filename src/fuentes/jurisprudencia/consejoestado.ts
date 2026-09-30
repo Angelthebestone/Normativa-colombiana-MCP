@@ -180,6 +180,7 @@ export async function buscar(
   limite = 5,
   pagina = 1,
   exacto = true,
+  deps: { pedir?: typeof pedir } = {},
 ): Promise<{
   paginas: number
   pagina: number
@@ -191,12 +192,13 @@ export async function buscar(
 }> {
   const q = limpiarTermino(texto)
   if (!q) throw new Error('Indica un término para buscar en el Consejo de Estado.')
+  const pedirHttp = deps.pedir ?? pedir
 
   // El enlace cuenta las páginas desde cero; hacia fuera se numeran desde uno,
   // que es como las rotula la propia página ("Página 1 de 15406").
   const n = Math.max(1, Math.trunc(pagina))
   const url = enlaceBusqueda(q, n - 1, exacto)
-  const r = await pedir(url, 120_000)
+  const r = await pedirHttp(url, 120_000)
 
   // Un 500 de SAMAI no es un cambio de marcado. Su backend responde
   // «The wait operation timed out» cuando la consulta agota el tiempo en su
@@ -213,12 +215,17 @@ export async function buscar(
   const res = parsear(r.cuerpo, Math.min(Math.max(limite, 1), 10), url)
 
   // Un 200 no prueba nada, así que el canario mira el contenido. Sin el rótulo
-  // de paginación la respuesta ni siquiera es la página de resultados: eso es
-  // un cambio de marcado, no un "no hay nada".
+  // de paginación ni el armazón de resultados la respuesta ni siquiera es la
+  // página de resultados: eso es un cambio de marcado, no un "no hay nada". Con
+  // armazón y sin filas es cero resultados (medido con «qwertyzzz»: 200, sin
+  // rótulo, con `ResultadoBusqueda1`), el mismo criterio que `porRadicado`.
   if (res.paginas < 0) {
-    throw new CanarioError(
-      'SAMAI respondió sin el rótulo de paginación: el enlace permanente de búsqueda dejó de devolver resultados',
-    )
+    if (/ResultadoBusqueda1/.test(r.cuerpo) && !new RegExp(`${RAIZ}HypRadicado_\\d+"`).test(r.cuerpo)) res.paginas = 0
+    else {
+      throw new CanarioError(
+        'SAMAI respondió sin el rótulo de paginación: el enlace permanente de búsqueda dejó de devolver resultados',
+      )
+    }
   }
   // Con paginación pero sin ninguna fila legible el fallo es del parseo, y este
   // es el caso traicionero: parece "no hay providencias" y no lo es.
@@ -235,7 +242,7 @@ export async function buscar(
   // "no hay nada sobre esto", que son cosas distintas y la segunda es falsa.
   if (!res.items.length && exacto && q.trim().split(/\s+/).length > 1) {
     const urlOr = enlaceBusqueda(q, n - 1, false)
-    const r2 = await pedir(urlOr, 120_000)
+    const r2 = await pedirHttp(urlOr, 120_000)
     if (r2.status >= 500) {
       throw new Error(
         `SAMAI no respondió a tiempo (error ${r2.status}) en la búsqueda ampliada. Vuelve a intentarlo.`,
@@ -253,7 +260,8 @@ export async function buscar(
           nota:
             `AVISO: la frase exacta "${q}" no apareció en ninguna providencia de esta página. Lo que sigue es una ` +
             `búsqueda AMPLIADA, con las palabras unidas por OR, así que puede incluir providencias que solo ` +
-            `comparten alguna palabra suelta. Verifica la pertinencia de cada una antes de citarla.`,
+            `comparten alguna palabra suelta y el número de páginas NO mide pertinencia. Verifica la pertinencia ` +
+            `de cada una antes de citarla.`,
         }
       }
     }
@@ -263,19 +271,19 @@ export async function buscar(
   // el texto que el buscador publica. De la página pedida solo quedan las
   // providencias que tratan todo el asunto, no las que rozan una palabra.
   // En el modo ampliado (OR) no se exigen todos: la ampliación ya es el aviso.
-  const { items: exigidos, omitidos } = exacto
+  const { items, exigidos, omitidos } = exacto
     ? contienenTodas(res.items, q)
-    : { items: res.items, omitidos: 0 }
+    : { items: res.items, exigidos: [] as string[], omitidos: 0 }
   const nota =
     exacto && exigidos.length >= 2
       ? `Se exigieron TODOS los términos (${exigidos.join(', ')}) sobre el problema jurídico, la respuesta y la nota ` +
-        `de relatoría: SAMAI los une con OR, así que esto es un filtro local de pertinencia.`
+        `de relatoría: esto es un filtro local de pertinencia.`
       : !exacto
         ? `Modo ampliado (OR): el número de páginas NO mide pertinencia, solo cuántas providencias contienen ` +
           `alguna de las palabras. Repite con exacto=true para contar la frase.`
         : undefined
 
-  return { ...res, items: exigidos, pagina: n, url, ...(nota ? { nota } : {}), omitidos }
+  return { ...res, items, pagina: n, url, ...(nota ? { nota } : {}), omitidos }
 }
 
 /**

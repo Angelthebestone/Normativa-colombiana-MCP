@@ -95,7 +95,7 @@ export async function escribir({ texto, sala, anio, magistrado, exacto, desde, l
       r.items
         .map(
           (p) =>
-            `- ${p.titulo} (${p.clase || 'providencia'}, ${p.fecha})\n` +
+            `- ${p.titulo} (${p.clase || 'providencia'}, registrada el ${p.fecha})\n` +
             (p.magistrado ? `  Ponente: ${p.magistrado}\n` : '') +
             (p.normasCitadas.length
               ? `  Normas citadas (resolubles con resolver_cita): ${p.normasCitadas.slice(0, 8).join(' · ')}` +
@@ -105,6 +105,8 @@ export async function escribir({ texto, sala, anio, magistrado, exacto, desde, l
             `  Texto completo: obtener_documento con fuente="suprema" y sala="${sala}" y ruta="${p.ruta}"`,
         )
         .join('\n') +
-      (fin < r.total ? `\n\nQuedan ${r.total - fin}: repite con desde=${fin}.` : '')
+      (fin < r.total ? `\n\nQuedan ${r.total - fin}: repite con desde=${fin}.` : '') +
+      `\n\nLa fecha es la de REGISTRO de la providencia en el índice, no la de la providencia: esa se lee en su ` +
+      `texto. Para citar usa el título o la referencia, no esta fecha.`
   )
 }

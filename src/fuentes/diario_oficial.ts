@@ -321,5 +321,6 @@ export async function buscar(opts: Opciones, deps: { pedir?: typeof pedir } = {}
     salida.push(...mas)
   }
 
-  return { items: salida, total }
+  // El portal sirve de 10 en 10: la última página puede pasarse del límite.
+  return { items: salida.slice(0, limite), total }
 }

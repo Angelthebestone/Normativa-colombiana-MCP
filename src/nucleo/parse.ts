@@ -130,7 +130,10 @@ export function cargar(html: string): cheerio.CheerioAPI {
   const limpio = html
     .replace(/<!--[\s\S]*?-->/g, ' ')
     .replace(/<(script|style|xml|o:p)\b[\s\S]*?<\/\1>/gi, ' ')
-  return cheerio.load(limpio)
+  const $ = cheerio.load(limpio)
+  // Los iconos de la interfaz («developer_guide», «search»…) son texto para cheerio.
+  $('.material-symbols-outlined').remove()
+  return $
 }
 
 export function textoDe($: cheerio.CheerioAPI, selector: string): string {
@@ -527,6 +530,11 @@ export function historial(texto: string): Cambio[] {
       const norma = detalle.match(NORMA_CITADA)
       const sentencia = detalle.match(SENTENCIA_CITADA)
       if (exigeReferencia && !norma && !sentencia) continue
+      // La prosa de una ley que transcribe un artículo ya modificado («modificado
+      // por la Ley 2101 de 2021, el cual quedará así:») describe a OTRA norma; las
+      // notas del portal no llevan esa frase.
+      // ponytail: heurística por frase; el techo es otra redacción de la misma prosa; el salto sería aceptar la pasiva solo entre paréntesis, a costa de perder notas del portal que no los llevan.
+      if (!exigeReferencia && /\bqued(?:ar[áa]|a)\s+as[ií]/i.test(m[0])) continue
 
       // La nota se lee hasta 160 caracteres. Cuando ahí se corta hay que
       // decirlo: una cita literal truncada en silencio se lee como completa.
