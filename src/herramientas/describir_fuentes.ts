@@ -1,4 +1,5 @@
 /** `describir_fuentes`: qué cubre este servidor y, sobre todo, qué NO cubre. */
+import type { ToolAnnotations } from '@modelcontextprotocol/sdk/types.js'
 import { z } from 'zod'
 
 import { estricto } from '../nucleo/normalizar.ts'
@@ -23,6 +24,13 @@ export const DESCRIPCION =
   'una búsqueda vacía, y para saber si el índice de vigencia sigue fresco. No consulta la red. ' +
   'Con el parámetro `fuente` devuelve SOLO el alcance de esa fuente, que es lo que suele hacer falta; sin él, ' +
   'el cuadro completo, que es largo.'
+
+export const ANOTACIONES: ToolAnnotations = {
+  readOnlyHint: true,
+  destructiveHint: false,
+  idempotentHint: true,
+  openWorldHint: false,
+}
 
 const esquema = z.object({
   fuente: z

@@ -57,8 +57,12 @@ const existe = async (ruta: string): Promise<boolean> => {
   }
 }
 
-/** Nombre con sufijo numérico que no exista en disco: `norma.pdf` → `norma_1.pdf`. */
-async function sinColision(archivo: string): Promise<string> {
+/**
+ * Nombre con sufijo numérico que no exista en disco: `norma.pdf` → `norma_1.pdf`.
+ * Lo usan todas las escrituras de la extensión (descargas, `obtener_documento`
+ * con `entero`, `expediente` al exportar): ninguna reemplaza un archivo que ya existe.
+ */
+export async function sinColision(archivo: string): Promise<string> {
   const sinExt = archivo.replace(/\.\w+$/, '')
   const ext = archivo.slice(sinExt.length)
   let sufijo = 0

@@ -7,6 +7,7 @@
  * Reutiliza `listar` de `fuentes/anla.ts`, que es quien habla con Eureka. Aquí
  * solo va el esquema y el texto de la respuesta.
  */
+import type { ToolAnnotations } from '@modelcontextprotocol/sdk/types.js'
 import { z } from 'zod'
 
 import { estricto } from '../nucleo/normalizar.ts'
@@ -20,7 +21,19 @@ export const DESCRIPCION =
   'La ANLA mantiene en su sistema "Eureka" una CURADURÍA de la normativa nacional que aplica al licenciamiento ' +
   'ambiental, agrupada por tema. Lo que aporta es la CLASIFICACIÓN, no documentos nuevos: casi todo lo que ' +
   'lista son leyes y decretos que resolver_cita ya resuelve mejor, con texto completo y con vigencia. ' +
-  'Úsala para descubrir QUÉ normas aplican a un tema ambiental, y resuelve cada una con resolver_cita.'
+  'Devuelve título, resumen y enlace de cada entrada, y avisa cuando el número del título no cuadra con el ' +
+  'resumen. seccion elige el tema (por defecto, "leyes"); texto filtra SOLO la página que trae desde, no ' +
+  'la sección entera, así que un vacío no es definitivo: repite sin texto para ver la página y el desde ' +
+  'siguiente. Úsala para descubrir QUÉ normas aplican a un tema ambiental y resuelve cada una con ' +
+  'resolver_cita; para filtrar de una vez la primera página de todas las secciones, consultar_perfil con ' +
+  'perfil="ambiental".'
+
+export const ANOTACIONES: ToolAnnotations = {
+  readOnlyHint: true,
+  destructiveHint: false,
+  idempotentHint: true,
+  openWorldHint: true,
+}
 
 const esquema = z.object({
   seccion: z.enum(Object.keys(anla.SECCIONES) as [anla.SeccionAnla, ...anla.SeccionAnla[]]).default('leyes'),

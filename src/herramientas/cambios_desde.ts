@@ -2,6 +2,7 @@
  * cambios_desde.ts: cambios que el Gestor anota sobre una lista de normas,
  * filtrados por el año de la norma modificadora.
  */
+import type { ToolAnnotations } from '@modelcontextprotocol/sdk/types.js'
 import { z } from 'zod'
 import { estricto } from '../nucleo/normalizar.ts'
 import { idTipo, parsearCita, candidatosAmbiguos } from '../nucleo/citas.ts'
@@ -12,8 +13,19 @@ import { alcance } from '../nucleo/alcance.ts'
 export const TITULO = 'Cambios registrados sobre normas desde una fecha'
 
 export const DESCRIPCION =
-  'Resume los cambios (modificación, derogación, adición) que el Gestor anota sobre LAS NORMAS QUE SE LISTAN, ' +
-  'filtrándolos por el año de la norma modificadora. NO rastrea novedades automáticamente ni descubre normas nuevas.'
+  'Resume los cambios (modificación, derogación, adición) que el Gestor anota sobre LAS NORMAS QUE SE LISTAN: ' +
+  'por norma, la acción, la norma modificadora, el artículo y la nota literal. De desde solo cuenta el año, ' +
+  'así que "2019-12-31" incluye todo 2019, y las notas sin año se descartan. Cada cita necesita su año y se ' +
+  'resuelve por separado: una que falla se anota y no frena a las demás. NO rastrea novedades ni descubre ' +
+  'normas nuevas: para lo recién publicado usa buscar_diario_oficial; para la historia completa de una sola ' +
+  'norma, incluidas las notas sin año, historial_norma.'
+
+export const ANOTACIONES: ToolAnnotations = {
+  readOnlyHint: true,
+  destructiveHint: false,
+  idempotentHint: true,
+  openWorldHint: true,
+}
 
 export const schema = estricto({
   normas: z.array(z.string()).min(1).describe('Citas de normas a revisar, ej. ["Ley 909 de 2004"]'),

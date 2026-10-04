@@ -1,4 +1,5 @@
 /** Buscador general del Gestor Normativo: el de palabras del portal, con sus filtros. */
+import type { ToolAnnotations } from '@modelcontextprotocol/sdk/types.js'
 import { z } from 'zod'
 
 import { estricto } from '../nucleo/normalizar.ts'
@@ -17,6 +18,13 @@ export const DESCRIPCION =
   'IMPORTANTE: el buscador del portal indexa solo los resúmenes temáticos, NO el articulado completo, ' +
   'y une los términos con OR. Usa pocas palabras y muy distintivas. Para buscar dentro del texto de una ' +
   'norma concreta, usa obtener_documento con fuente="gestor" y buscar_en_texto. Para una cita exacta, usa resolver_cita.'
+
+export const ANOTACIONES: ToolAnnotations = {
+  readOnlyHint: true,
+  destructiveHint: false,
+  idempotentHint: true,
+  openWorldHint: true,
+}
 
 const esquema = z.object({
   palabras: z.string().optional().describe('Términos distintivos; evita frases largas'),

@@ -11,6 +11,7 @@
  * portal (sesión JSF por llamada, canario por forma). Aquí solo va el esquema,
  * las validaciones que evitan consultar en vano y el texto de la respuesta.
  */
+import type { ToolAnnotations } from '@modelcontextprotocol/sdk/types.js'
 import { z } from 'zod'
 
 import { estricto } from '../nucleo/normalizar.ts'
@@ -23,7 +24,15 @@ export const DESCRIPCION =
   'Tributario) y fecha de publicación. Sirve para saber qué salió publicado y cuándo, incluso el mismo día, ' +
   'antes de que el Gestor Normativo lo catalogue. Filtra por número de diario, por rango de fechas y por el tipo ' +
   'y el número de una norma (encuentra el diario que la publicó: tipo="LEY" y numero_norma="2466" devuelve el ' +
-  '53.160). NO dice qué normas contiene cada diario ni trae su texto, y el PDF del diario no tiene enlace estable.'
+  '53.160). NO dice qué normas contiene cada diario ni trae su texto, y el PDF del diario no tiene enlace ' +
+  'estable: para el texto de una norma usa resolver_cita; para buscarla por materia, buscar_normas.'
+
+export const ANOTACIONES: ToolAnnotations = {
+  readOnlyHint: true,
+  destructiveHint: false,
+  idempotentHint: true,
+  openWorldHint: true,
+}
 
 const esquema = z.object({
   numero: z.string().optional().describe('Número del diario, ej. "53.640"; identifica uno solo'),

@@ -1,4 +1,5 @@
 /** Los valores válidos de los filtros de `buscar_normas`, que el portal no documenta. */
+import type { ToolAnnotations } from '@modelcontextprotocol/sdk/types.js'
 import { z } from 'zod'
 
 import { estricto } from '../nucleo/normalizar.ts'
@@ -19,6 +20,13 @@ export const DESCRIPCION =
   'buscar_normas; no cubren la DIAN (su normograma está en buscar_normativa_tributaria), ni SUIN-Juriscol, ' +
   'ni las tres altas cortes. Que "DIAN" no aparezca entre las entidades no significa que no haya normativa ' +
   'suya: significa que el Gestor no la cataloga como entidad emisora.'
+
+export const ANOTACIONES: ToolAnnotations = {
+  readOnlyHint: true,
+  destructiveHint: false,
+  idempotentHint: true,
+  openWorldHint: true,
+}
 
 const esquema = z.object({
   catalogo: z.enum(['tipos', 'anios', 'entidades', 'temas', 'subtemas', 'conceptos_fp', 'normas_fp']),

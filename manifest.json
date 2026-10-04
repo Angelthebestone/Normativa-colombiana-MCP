@@ -44,7 +44,7 @@
   "tools": [
     {
       "name": "resolver_cita",
-      "description": "Ruta rápida y exacta para citas como \"Ley 909 de 2004\", \"Decreto 1083\", \"C-337/11\" o \"artículo 6 de la Ley 1221 de 2008\"."
+      "description": "Ruta rápida y exacta para citas de leyes, decretos, sentencias, artículos y códigos citados por su nombre (\"art."
     },
     {
       "name": "buscar_normas",
@@ -52,7 +52,7 @@
     },
     {
       "name": "buscar_por_tema",
-      "description": "Consulta temática oficial: devuelve tema, subtema y las normas, sentencias y conceptos asociados, desde un índice empaquetado (instantáneo, funciona aunque el portal esté caído)."
+      "description": "Consulta temática oficial: devuelve tema, subtema y las normas, sentencias y conceptos asociados (hasta 8 por fila)."
     },
     {
       "name": "listar_catalogos",
@@ -68,11 +68,11 @@
     },
     {
       "name": "buscar_jurisprudencia_suprema",
-      "description": "Providencias de la Corte Suprema por sala: Tutelas, Civil, Laboral o Penal, desde 1991."
+      "description": "Providencias de la Corte Suprema por sala (Tutelas, Civil, Laboral o Penal), desde 1991."
     },
     {
       "name": "buscar_jurisprudencia_consejo_estado",
-      "description": "Providencias tituladas del Consejo de Estado, el supremo de lo contencioso administrativo (nulidad y restablecimiento, contratación estatal, nulidad electoral, reparación directa, conceptos de la Sala de Consulta): tribunal DISTINTO de la Corte Constitucional y de la Suprema."
+      "description": "Providencias tituladas del Consejo de Estado, el supremo de lo contencioso administrativo (nulidad y restablecimiento, contratación estatal, nulidad electoral, reparación directa, conceptos de la Sala de Consulta)."
     },
     {
       "name": "buscar_en_suin",
@@ -108,27 +108,27 @@
     },
     {
       "name": "consultar_por_jerarquia",
-      "description": "Busca normativa colombiana por nivel de autoridad (constitución, ley, decreto, resolución, concepto o jurisprudencia) y explica el carácter de cada nivel: vinculante, orientador o informativo."
+      "description": "Busca normativa colombiana de UN nivel de autoridad y explica su carácter: vinculante, orientador o informativo."
     },
     {
       "name": "analizar_conflicto",
-      "description": "Reúne para dos normas la EVIDENCIA de un posible conflicto: identificación en el Gestor, vigencia según SUIN cuando consta, nivel en la jerarquía y carácter, notas de reforma del texto (de cualquier artículo de la norma) y pasajes que mencionanun tema."
+      "description": "Reúne para dos normas la EVIDENCIA de un posible conflicto."
     },
     {
       "name": "cambios_desde",
-      "description": "Resume los cambios (modificación, derogación, adición) que el Gestor anota sobre LAS NORMAS QUE SE LISTAN, filtrándolos por el año de la norma modificadora."
+      "description": "Resume los cambios (modificación, derogación, adición) que el Gestor anota sobre LAS NORMAS QUE SE LISTAN: por norma, la acción, la norma modificadora, el artículo y la nota literal."
     },
     {
       "name": "comparar_articulos",
-      "description": "Compara el texto de un artículo entre dos normas, marca lo añadido y lo eliminado, clasifica cada diferencia por patrones de texto (plazo, sanción, excepción, sujeto obligado, prohibición u obligación) y detecta cambios editoriales por similitud léxica (Dice bigramas, ≥0,92); lo que no encaja se marca «revisar manualmente»."
+      "description": "Compara el texto de un artículo entre dos normas y marca lo añadido y lo eliminado."
     },
     {
       "name": "consultar_perfil",
-      "description": "Ejecuta la consulta con las fuentes y los filtros preconfigurados de un perfil sectorial (laboral, tributario, ambiental, contratación estatal o energía) y devuelve los resultados con el sector y la advertencia del perfil, que es lo que declara sus límites."
+      "description": "Ejecuta la consulta en la ÚNICA fuente que fija cada perfil sectorial: laboral → Gestor Normativo, tributario → DIAN, ambiental → ANLA, contratación estatal → Consejo de Estado, energía → CREG (solo el año en curso)."
     },
     {
       "name": "consultar_vigencia",
-      "description": "Devuelve el estado de vigencia de una norma (\"Vigente\", \"Derogado\", \"Vigencia en Estudio\", \"Compilado\".."
+      "description": "Devuelve el estado de vigencia de una ley o un decreto tal como lo publica la ficha de SUIN: \"Vigente\", \"Derogado\", \"Vigencia en Estudio\", \"Compilado\" u otro."
     },
     {
       "name": "historial_norma",
@@ -136,11 +136,11 @@
     },
     {
       "name": "buscar_unificado",
-      "description": "Busca en paralelo en Gestor Normativo, Corte Constitucional, SUIN-Juriscol y DIAN, y agrega los resultados con su fuente y su enlace (con perfil \"salud\" añade INVIMA y Supersalud; con \"mineria\", la ANM)."
+      "description": "Busca en paralelo en Gestor Normativo, Corte Constitucional, SUIN-Juriscol y DIAN, y agrega los resultados con su fuente y su enlace."
     },
     {
       "name": "linea_jurisprudencial",
-      "description": "Devuelve las providencias que la relatoría registra como CITANTES de una sentencia de la Corte Constitucional (el bloque \"citaciones\" de su ficha oficial), con tipo, fecha, tema, la ruta para obtener_documento y el enlace, en cabeza las SU y las C."
+      "description": "Devuelve las providencias que la relatoría registra como CITANTES de una sentencia de la Corte Constitucional (el bloque \"citaciones\" de su ficha oficial), con tipo, fecha, tema, la ruta para obtener_documento y el enlace."
     },
     {
       "name": "buscar_diario_oficial",

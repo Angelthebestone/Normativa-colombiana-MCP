@@ -162,6 +162,19 @@ test('entero=true sin ruta_destino usa un directorio temporal', async () => {
   assert.deepEqual(readFileSync(ruta!), PDF)
 })
 
+test('entero=true dos veces con la misma ruta_destino deja dos archivos y nombra el sufijo', async () => {
+  const carpeta = mkdtempSync(join(dir, 'dos-'))
+  const norma = (texto: string) =>
+    (async () => ({ texto, url: 'https://www.funcionpublica.gov.co/eva/gestornormativo/norma.php?i=1' })) as never
+  const primera = await escribir({ fuente: 'gestor', id: '1', entero: true, ruta_destino: carpeta }, { obtenerNorma: norma('PRIMERA') })
+  const segunda = await escribir({ fuente: 'gestor', id: '1', entero: true, ruta_destino: carpeta }, { obtenerNorma: norma('SEGUNDA') })
+  const ruta1 = primera.match(/Archivo guardado en: (.+?) \(/)?.[1]
+  const ruta2 = segunda.match(/Archivo guardado en: (.+?) \(/)?.[1]
+  assert.match(ruta2 ?? '', /texto-gestor_1\.txt$/)
+  assert.equal(readFileSync(ruta1!, 'utf8'), 'PRIMERA')
+  assert.equal(readFileSync(ruta2!, 'utf8'), 'SEGUNDA')
+})
+
 // --- ruta_destino sin entero (descarga) ------------------------------------
 
 test('ruta_destino sin entero descarga el archivo y no devuelve el texto', async () => {

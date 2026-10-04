@@ -12,6 +12,7 @@
  * orden Gestor → Corte → SUIN → DIAN. No hay reranking LLM ni router: es un
  * fan-out explícito y testeable.
  */
+import type { ToolAnnotations } from '@modelcontextprotocol/sdk/types.js'
 import { z } from 'zod'
 
 import { estricto } from '../nucleo/normalizar.ts'
@@ -27,13 +28,20 @@ export const TITULO = 'Buscar en varias fuentes a la vez'
 
 export const DESCRIPCION =
   'Busca en paralelo en Gestor Normativo, Corte Constitucional, SUIN-Juriscol y DIAN, y agrega los ' +
-  'resultados con su fuente y su enlace (con perfil "salud" añade INVIMA y Supersalud; con "mineria", la ' +
-  'ANM). Úsala cuando la consulta es abierta o por materia y no hay herramienta obvia; para una cita exacta ' +
-  'sigue siendo mejor resolver_cita y para un tribunal concreto, su buscador propio. Cada resultado declara ' +
-  'su fuente; la vigencia de SUIN se rotula SEGÚN EL BUSCADOR y no es la ficha oficial. Cuando la fuente ' +
-  'sirve su texto, cada resultado trae "Para leer", la llamada lista a obtener_documento. Con formato="json" ' +
-  'devuelve un objeto con fecha_consulta, alcance, texto, resultados (cada uno con su "Para leer" cuando ' +
-  'existe), sin_resultados, fallidas y avisos.'
+  'resultados con su fuente y su enlace. Úsala cuando la consulta es abierta o por materia y no hay ' +
+  'herramienta obvia; para una cita exacta sigue siendo mejor resolver_cita y para un tribunal concreto, su ' +
+  'buscador propio. perfil elige las fuentes ("salud" añade INVIMA y Supersalud; "mineria", la ANM) y el ' +
+  'orden; si pasas fuentes, esa lista manda y el perfil solo ordena. limite es POR fuente, así que el total ' +
+  'puede multiplicarse. La vigencia de SUIN se rotula SEGÚN EL BUSCADOR y no es la ficha oficial. Cuando la ' +
+  'fuente sirve su texto, cada resultado trae "Para leer", la llamada lista a obtener_documento. Una fuente ' +
+  'caída se declara como fallo, no como vacío.'
+
+export const ANOTACIONES: ToolAnnotations = {
+  readOnlyHint: true,
+  destructiveHint: false,
+  idempotentHint: true,
+  openWorldHint: true,
+}
 
 /**
  * Clave de la línea de alcance para cada fuente consultable. Los tres

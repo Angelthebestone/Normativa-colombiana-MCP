@@ -255,7 +255,7 @@ function articulosAnunciados(intro: string): Set<string> {
 export function indiceArticulos(texto: string, max = 60): string[] {
   const vistos = new Set<string>()
   const citados = new Set<string>()
-  const re = new RegExp(String.raw`(?:^|\n)\s*(?:ART[IÍ]CULO|Art[ií]culo)\s+(${NUM_ARTICULO})`, 'g')
+  const re = new RegExp(String.raw`(?:^|\n)\s*(?:ART[IÍ]CULO|Art[ií]culo)\s*(?=\d)(${NUM_ARTICULO})`, 'g')
   let m: RegExpExecArray | null
   while ((m = re.exec(texto)) && vistos.size < max) {
     const num = m[1]!.replace(/\.$/, '')
@@ -273,7 +273,11 @@ export function indiceArticulos(texto: string, max = 60): string[] {
   return [...vistos]
 }
 
-const RE_ENCABEZADO = new RegExp(String.raw`\n\s*(?:ART[IÍ]CULO|Art[ií]culo)\s+(${NUM_ARTICULO})`)
+// `\s*` y no `\s+` entre la palabra y el número: el Gestor escribe a veces el
+// encabezado pegado («ARTÍCULO3°.» en la Ley 769 de 2002), y con `\s+` el
+// artículo 2 se comía el 3 entero. El `(?=\d)` impide que «Artículos» o un
+// «ARTÍCULO.» suelto pasen por encabezado: `NUM_ARTICULO` admite un punto inicial.
+const RE_ENCABEZADO = new RegExp(String.raw`\n\s*(?:ART[IÍ]CULO|Art[ií]culo)\s*(?=\d)(${NUM_ARTICULO})`)
 
 export function articulo(texto: string, numero: string): string | null {
   const n = numero.replace(/[^\d.\-A-Za-z]/g, '').replace(/[.]+$/, '')
@@ -289,7 +293,7 @@ export function articulo(texto: string, numero: string): string | null {
   // de Comercio. Medido el 2026-09-28 sobre 3.397 artículos de 14 normas:
   // 3.387 se extraen idénticos y 10 cambian, todos de una cita en prosa al
   // encabezado real.
-  const re = new RegExp(`(?:^|\\n)\\s*(?:ART[IÍ]CULO|Art[ií]culo)\\s+${esc}(?![\\d\\-A-Za-z])`, 'g')
+  const re = new RegExp(`(?:^|\\n)\\s*(?:ART[IÍ]CULO|Art[ií]culo)\\s*${esc}(?![\\d\\-A-Za-z])`, 'g')
   const m = re.exec(texto)
   if (!m) return null
   const desde = m.index + m[0].length

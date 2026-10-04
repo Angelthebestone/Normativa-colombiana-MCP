@@ -1,4 +1,5 @@
 /** `buscar_normativa_sectorial`: el contrato común de los reguladores, una sola herramienta. */
+import type { ToolAnnotations } from '@modelcontextprotocol/sdk/types.js'
 import { z } from 'zod'
 
 import { estricto } from '../nucleo/normalizar.ts'
@@ -26,6 +27,13 @@ export const DESCRIPCION =
   'LOS FILTROS NO SE COMPORTAN IGUAL EN TODAS: el Invima exige texto o año; la Superfinanciera y la ' +
   'Supertransporte se quedan en el año en curso si no indicas otro; la ANM no aplica el año a las ' +
   'circulares. Cada respuesta dice qué hizo, pero no lo adivines: indica el año si lo esperabas.'
+
+export const ANOTACIONES: ToolAnnotations = {
+  readOnlyHint: true,
+  destructiveHint: false,
+  idempotentHint: true,
+  openWorldHint: true,
+}
 
 const esquema = z.object({
   entidad: z

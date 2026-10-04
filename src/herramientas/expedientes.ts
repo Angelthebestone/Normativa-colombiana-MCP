@@ -4,11 +4,13 @@
  * discriminador `accion`. Se enciende con EXPEDIENTES=1; con EXPEDIENTES_DIR
  * persiste en disco (y entonces no expira por TTL fijo ni se pierde al reiniciar).
  */
+import type { ToolAnnotations } from '@modelcontextprotocol/sdk/types.js'
 import { stat, writeFile } from 'node:fs/promises'
 import * as path from 'node:path'
 import { z } from 'zod'
 
 import { estricto } from '../nucleo/normalizar.ts'
+import { sinColision } from '../nucleo/descargas.ts'
 import { agregar, crear, enDisco, habilitado, leer, type Expediente } from '../nucleo/expediente.ts'
 
 const AVISO_DESACTIVADO =
@@ -29,11 +31,20 @@ export const TITULO = 'Expediente temporal de investigación'
 
 export const DESCRIPCION =
   'Crea, agrega, lee o exporta un expediente para agrupar consultas, citas y observaciones de una ' +
-  'investigación. Se activa con EXPEDIENTES=1 (DESACTIVADO por defecto). En memoria es TEMPORAL ' +
-  '(expira según EXPEDIENTES_TTL_MS; por defecto no expira); con EXPEDIENTES_DIR persiste en disco y ' +
-  'sobrevive a reinicios. accion="crear" devuelve el id; "agregar" guarda una entrada en la sección ' +
-  'de un expediente YA CREADO; "leer" lo devuelve agrupado; "exportar" lo escribe como markdown en ' +
-  'la ruta pedida.'
+  'investigación. No consulta ninguna fuente: guarda lo que le pasas. Se activa con EXPEDIENTES=1 ' +
+  '(DESACTIVADO por defecto). En memoria es TEMPORAL (expira según EXPEDIENTES_TTL_MS; por defecto no ' +
+  'expira); con EXPEDIENTES_DIR persiste en disco y sobrevive a reinicios. El flujo empieza siempre en ' +
+  '"crear", SIN id: devuelve el id que piden las demás; "agregar" exige campo y texto juntos; "leer" lo devuelve ' +
+  'agrupado por sección. "exportar" escribe markdown: si ruta es un directorio crea <id>.md dentro, el ' +
+  'directorio padre tiene que existir, y un archivo que ya existe no se sobrescribe: se escribe al lado con ' +
+  'sufijo numérico y la respuesta da la ruta final. Para guardar el texto de una norma usa obtener_documento.'
+
+export const ANOTACIONES: ToolAnnotations = {
+  readOnlyHint: false,
+  destructiveHint: false,
+  idempotentHint: false,
+  openWorldHint: false,
+}
 
 export const schema = estricto({
   accion: z
@@ -146,19 +157,24 @@ async function cuerpo(args: Args): Promise<string> {
         `accion="crear" sin id y los devuelve su propia respuesta.`
       )
     }
-    const destino = (await esDirectorio(args.ruta))
+    const pedido = (await esDirectorio(args.ruta))
       ? path.join(args.ruta, `${nombreSeguro(args.id)}.md`)
       : args.ruta
-    const padre = path.dirname(destino)
+    const padre = path.dirname(pedido)
     if (!(await esDirectorio(padre))) {
       return `No existe el directorio ${padre} para exportar. Créalo antes o pasa otra ruta. No se creó ningún archivo.`
     }
+    // Un archivo que ya existe no se reemplaza: se escribe al lado, con sufijo.
+    const destino = await sinColision(pedido)
     try {
       await writeFile(destino, exportar(datos, args.id), 'utf8')
     } catch {
       return `No se pudo escribir el expediente ${args.id} en ${destino}. No se creó ningún archivo.`
     }
-    return `Expediente ${args.id} exportado a ${path.resolve(destino)} (${(await stat(destino)).size} bytes).`
+    return (
+      `Expediente ${args.id} exportado a ${path.resolve(destino)} (${(await stat(destino)).size} bytes).` +
+      (destino === pedido ? '' : ` ${path.resolve(pedido)} ya existía y no se tocó.`)
+    )
   }
 
   return AVISO_DESACTIVADO

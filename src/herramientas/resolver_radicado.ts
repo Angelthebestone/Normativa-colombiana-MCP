@@ -18,8 +18,9 @@
  * separado cada una se lee como «no existe».
  */
 import * as consejo from '../fuentes/jurisprudencia/consejoestado.ts'
-import { activa, alcance, avisoApagada } from '../nucleo/alcance.ts'
+import { activa, avisoApagada, type Uso } from '../nucleo/alcance.ts'
 import type { Radicado } from '../nucleo/citas.ts'
+import type { Resuelta } from './resolver_cita.ts'
 
 /** Sin resultado en SAMAI para un radicado del Consejo: las tres verdades. */
 const SIN_RESULTADO =
@@ -98,26 +99,31 @@ function ficha(p: consejo.Providencia): string {
   return lineas.join('\n')
 }
 
+/**
+ * Un radicado no es una norma: su resultado nunca se agrupa con otra cita del
+ * lote (`clave: null`) y la forma la pone `componer` de `resolver_cita`.
+ */
 export async function resolverRadicado(
   cita: string,
   r: Radicado,
   deps: { porRadicado?: typeof consejo.porRadicado } = {},
-): Promise<string> {
+): Promise<Resuelta> {
   const porRadicado = deps.porRadicado ?? consejo.porRadicado
-  const cab = `### ${cita}`
   const cuerpo = `${componentes(r)}\n${corporacionMedida(r)}`
+  const bloque = (usos: Uso[], ficha: string): Resuelta => ({ cita, clave: null, usos, avisos: [], ficha, articulos: [] })
 
   // Solo la Corte Suprema no busca: no expone el radicado en su buscador.
-  if (r.corporacion === 'corte-suprema') return `${cab}\n${alcance([])}\n${cuerpo}\n\n${CORTE_SUPREMA}`
+  if (r.corporacion === 'corte-suprema') return bloque([], `${cuerpo}\n\n${CORTE_SUPREMA}`)
 
   // El Consejo —y también un radicado de corporación desconocida, porque el
   // Consejo conoce procesos que nacieron en tribunales— se consulta en SAMAI.
   // La fuente apagada no cae a otra: ninguna otra tiene este proceso, y salir
   // por un «no encontré» se leería como «no existe».
   if (!activa('consejo')) {
-    return (
-      `${cab}\n${alcance([])}\n${cuerpo}\n\n${avisoApagada('consejo')} Sin ella no se pudo comprobar si SAMAI ` +
-      `tiene titulada alguna providencia de este radicado: no se puede afirmar ni negar nada sobre el proceso.`
+    return bloque(
+      [],
+      `${cuerpo}\n\n${avisoApagada('consejo')} Sin ella no se pudo comprobar si SAMAI ` +
+        `tiene titulada alguna providencia de este radicado: no se puede afirmar ni negar nada sobre el proceso.`,
     )
   }
 
@@ -126,17 +132,17 @@ export async function resolverRadicado(
     ;({ items } = await porRadicado(r.formateado))
   } catch (e) {
     const motivo = e instanceof Error ? e.message : String(e)
-    return (
-      `${cab}\n${alcance([{ clave: 'consejo', detalle: 'no respondió' }])}\n${cuerpo}\n\n` +
-      `La consulta a SAMAI FALLÓ: ${motivo}\nNo se puede concluir nada —ni que el proceso tenga providencias ` +
-      `tituladas ni que no las tenga—. Vuelve a intentarlo.`
+    return bloque(
+      [{ clave: 'consejo', detalle: 'no respondió' }],
+      `${cuerpo}\n\nLa consulta a SAMAI FALLÓ: ${motivo}\nNo se puede concluir nada —ni que el proceso tenga ` +
+        `providencias tituladas ni que no las tenga—. Vuelve a intentarlo.`,
     )
   }
 
-  const linea = alcance([{ clave: 'consejo', detalle: items.length ? `${items.length} providencia(s)` : '0 tituladas' }])
+  const usos = [{ clave: 'consejo', detalle: items.length ? `${items.length} providencia(s)` : '0 tituladas' }]
   if (!items.length) {
     const sin = r.corporacion === 'consejo-de-estado' ? SIN_RESULTADO : SIN_RESULTADO_DESCONOCIDA
-    return `${cab}\n${linea}\n${cuerpo}\n\n${sin}`
+    return bloque(usos, `${cuerpo}\n\n${sin}`)
   }
 
   // Para un radicado cuya corporación los dígitos no fijan, se dice DÓNDE se
@@ -145,9 +151,10 @@ export async function resolverRadicado(
     r.corporacion === 'consejo-de-estado'
       ? ''
       : 'Encontrado en el buscador de providencias tituladas de SAMAI (Consejo de Estado):\n\n'
-  return (
-    `${cab}\n${linea}\n${cuerpo}\n\n${intro}` +
-    items.map(ficha).join('\n\n') +
-    `\n\nLOS TOKENS CADUCAN EN UNA HORA: sirven para leer, no para citar. Para citar usa el radicado.`
+  return bloque(
+    usos,
+    `${cuerpo}\n\n${intro}` +
+      items.map(ficha).join('\n\n') +
+      `\n\nLOS TOKENS CADUCAN EN UNA HORA: sirven para leer, no para citar. Para citar usa el radicado.`,
   )
 }

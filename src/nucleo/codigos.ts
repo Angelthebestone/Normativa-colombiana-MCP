@@ -151,6 +151,17 @@ export function codigoCitado(texto: string): { codigo: Codigo; indice: number } 
 export const referencia = (c: Codigo): string =>
   `${c.tipo.charAt(0).toUpperCase()}${c.tipo.slice(1)} ${c.numero} de ${c.anio}`
 
+/**
+ * Nadie cita "Decreto 410 de 1971": cita el Código de Comercio. Cuando la cita
+ * llegó por el nombre del código se dice contra qué norma se resolvió, porque
+ * es la que hay que escribir en un escrito judicial. `norma` es la forma
+ * oficial: el título del Gestor cuando lo hay, porque `referencia` escribe el
+ * tipo con que se BUSCA («Decreto 624 de 1989» para el Estatuto Tributario,
+ * que es un Decreto Ley).
+ */
+export const equivalencia = (c: Codigo, norma: string): string =>
+  `«${c.nombre}» se cita aquí como ${norma}, que es su norma contenedora y lo que hay que escribir en un escrito.`
+
 /** El código que corresponde a un tipo/número/año, si es uno de los de la tabla. */
 export const codigoDe = (tipo: string, numero: string, anio: string | undefined): Codigo | undefined =>
   CODIGOS.find(

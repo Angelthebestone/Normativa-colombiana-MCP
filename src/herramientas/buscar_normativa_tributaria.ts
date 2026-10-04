@@ -3,6 +3,7 @@
  * cubre la materia tributaria, aduanera y cambiaria. Reutiliza `buscar` de
  * `fuentes/normograma.ts`; aquí solo van el esquema y el texto de la respuesta.
  */
+import type { ToolAnnotations } from '@modelcontextprotocol/sdk/types.js'
 import { z } from 'zod'
 
 import { estricto } from '../nucleo/normalizar.ts'
@@ -15,10 +16,18 @@ export const TITULO = 'Buscar normativa tributaria, aduanera y cambiaria (DIAN)'
 export const DESCRIPCION =
   'Normograma de la DIAN: decretos, resoluciones, conceptos y circulares en materia tributaria, aduanera y ' +
   'cambiaria, que ninguna otra herramienta cubre. Devuelve el extracto y el enlace; para leer el documento ' +
-  'usa obtener_documento con fuente="dian". ' +
+  'usa obtener_documento con fuente="dian". Para una ley o un decreto que ya tienes citado, también el ' +
+  'Estatuto Tributario y sus artículos, usa resolver_cita; buscar_normas no mira este normograma. ' +
   'AVISO: la primera búsqueda de cada término tarda ~20 s (el portal devuelve el resultado completo y no ' +
   'admite tope), pero las páginas siguientes del MISMO término son instantáneas: pagina con desde en vez de ' +
   'lanzar búsquedas nuevas.'
+
+export const ANOTACIONES: ToolAnnotations = {
+  readOnlyHint: true,
+  destructiveHint: false,
+  idempotentHint: true,
+  openWorldHint: true,
+}
 
 const esquema = z.object({
   texto: z.string().describe('Términos a buscar, ej. "retención en la fuente", "declaración de importación"'),

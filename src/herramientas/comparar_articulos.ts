@@ -16,6 +16,7 @@
  * (Ley 1960 de 2019 art. 6: «el numeral 4»), y de esa distinción depende que el
  * diff sea legible o engañoso; el modo lo declara en cada caso.
  */
+import type { ToolAnnotations } from '@modelcontextprotocol/sdk/types.js'
 import { z } from 'zod'
 
 import { agruparEditoriales, clasificarDiferencia, diffArticulos } from './diff.ts'
@@ -34,12 +35,21 @@ import { alcance } from '../nucleo/alcance.ts'
 export const TITULO = 'Comparar dos artículos de normas distintas'
 
 export const DESCRIPCION =
-  'Compara el texto de un artículo entre dos normas, marca lo añadido y lo eliminado, clasifica cada ' +
+  'Compara el texto de un artículo entre dos normas y marca lo añadido y lo eliminado. Clasifica cada ' +
   'diferencia por patrones de texto (plazo, sanción, excepción, sujeto obligado, prohibición u obligación) y ' +
   'detecta cambios editoriales por similitud léxica (Dice bigramas, ≥0,92); lo que no encaja se marca ' +
-  '«revisar manualmente». Con con_reforma=true no hace falta la segunda norma: busca la última reforma que el ' +
-  'portal anota al artículo, extrae el artículo de la norma modificadora y lo contrasta con el texto vigente ' +
-  '(la página consolida; no publica la redacción anterior). Sin modelo semántico.'
+  '«revisar manualmente». Sin modelo semántico. Con con_reforma=true no hace falta la segunda norma: busca la ' +
+  'última reforma que el portal anota al artículo, extrae el artículo de la norma modificadora y lo contrasta ' +
+  'con el texto vigente, porque la página consolida y no publica la redacción anterior. Para ver todas las ' +
+  'reformas de la norma usa historial_norma; para reunir evidencia de un conflicto entre dos normas enteras, ' +
+  'analizar_conflicto.'
+
+export const ANOTACIONES: ToolAnnotations = {
+  readOnlyHint: true,
+  destructiveHint: false,
+  idempotentHint: true,
+  openWorldHint: true,
+}
 
 const esquema = z.object({
   norma_a: z.string().describe('Cita de la norma base, ej. "Ley 909 de 2004"'),

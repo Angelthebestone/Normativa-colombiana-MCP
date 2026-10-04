@@ -3,6 +3,7 @@
  * Constitucional. Reutiliza `buscar` de `fuentes/jurisprudencia/corte.ts`, que es
  * quien habla con la relatoría; aquí solo van el esquema y el texto de la respuesta.
  */
+import type { ToolAnnotations } from '@modelcontextprotocol/sdk/types.js'
 import { z } from 'zod'
 
 import { estricto } from '../nucleo/normalizar.ts'
@@ -19,8 +20,15 @@ export const DESCRIPCION =
   'publicados el mismo año). Es la vía para jurisprudencia constitucional: el Gestor tiene muy poca. ' +
   'Devuelve sentencia, tipo, fecha, síntesis y la ruta para obtener_documento con fuente="corte". La ' +
   'relatoría no indexa frases largas: con varias palabras se reintenta con la más distintiva y la respuesta ' +
-  'lo anuncia ("se buscó con el núcleo «X»"). Es la CORTE CONSTITUCIONAL, no la Suprema ni el Consejo de ' +
-  'Estado: para esos, usa su buscador propio.'
+  'lo anuncia ("se buscó con el núcleo «X»"). Es la CORTE CONSTITUCIONAL: para la Suprema usa ' +
+  'buscar_jurisprudencia_suprema; para el Consejo de Estado, buscar_jurisprudencia_consejo_estado.'
+
+export const ANOTACIONES: ToolAnnotations = {
+  readOnlyHint: true,
+  destructiveHint: false,
+  idempotentHint: true,
+  openWorldHint: true,
+}
 
 const esquema = z.object({
   termino: z.string().describe('Obligatorio. Términos a buscar en la relatoría, ej. "teletrabajo"'),

@@ -98,7 +98,8 @@ test('el 946 y el 2341 llegan de la fuente real', RED, async () => {
     )
     assert.equal(a.url, `${BASE_SENADO}/codigo_civil_pr029.html#946`)
     assert.equal(a.tachados, false)
-    assert.match(a.actualizacion, /15 de septiembre de 2026/)
+    // La fecha la cambia el portal con cada actualización: se comprueba que se lea, no cuál es.
+    assert.match(a.actualizacion, /^\d{1,2} de [a-z]+ de \d{4}/)
   }
   if (b.ok) {
     assert.ok(b.texto.startsWith('ARTÍCULO 2341.'))

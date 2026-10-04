@@ -97,7 +97,7 @@ test('el Consejo de Estado entrega token y texto con tope', LENTO, async () => {
   const b = await c.tool('buscar_jurisprudencia_consejo_estado', { texto: 'liquidación del contrato estatal', limite: 3 })
   assert.equal(b.esError, false)
   assert.match(b.texto, /CADUCAN EN UNA HORA/)
-  const token = b.texto.match(/token="([^"]+)"/)?.[1]
+  const token = b.texto.match(/^ {2}token: (\S+)$/m)?.[1]
   assert.ok(token, 'la búsqueda debe entregar el token')
 
   const t = await c.tool('obtener_documento', { fuente: 'consejo', token, limite_caracteres: 1000 })

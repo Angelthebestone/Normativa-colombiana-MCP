@@ -2,6 +2,7 @@
  * Analiza un posible conflicto entre dos normas: reúne evidencia verificable
  * (metadatos, vigencia si consta, jerarquía, reformas) para cada una.
  */
+import type { ToolAnnotations } from '@modelcontextprotocol/sdk/types.js'
 import { z } from 'zod'
 
 import { estricto } from '../nucleo/normalizar.ts'
@@ -15,12 +16,20 @@ import { activa, alcance } from '../nucleo/alcance.ts'
 export const TITULO = 'Analizar un posible conflicto entre dos normas'
 
 export const DESCRIPCION =
-  'Reúne para dos normas la EVIDENCIA de un posible conflicto: identificación en el Gestor, vigencia según ' +
-  'SUIN cuando consta, nivel en la jerarquía y carácter, notas de reforma del texto (de cualquier artículo de la norma) y pasajes que mencionan' +
-  'un tema. NO detecta contradicciones semánticas: el resultado es un conflicto POTENCIAL, no una conclusión ' +
-  'jurídica; verifica en los enlaces antes de actuar. Con formato="json" devuelve un objeto con ' +
-  'fecha_consulta, alcance, sobre (si se pidió), evidencias (una por norma, con los mismos campos del texto) y ' +
-  'avisos.'
+  'Reúne para dos normas la EVIDENCIA de un posible conflicto. Por cada una: identificación en el Gestor, ' +
+  'vigencia según SUIN cuando consta, nivel en la jerarquía y su carácter, y notas de reforma de cualquier ' +
+  'artículo. Con sobre añade los pasajes de ambas que mencionan ese tema. NO detecta contradicciones ' +
+  'semánticas: el resultado es un conflicto POTENCIAL, no una conclusión jurídica; verifica en los enlaces ' +
+  'antes de actuar. Para confrontar el texto de dos artículos concretos usa comparar_articulos. Con ' +
+  'formato="json" devuelve un objeto con fecha_consulta, alcance, sobre (si se pidió), evidencias (una por ' +
+  'norma, con los mismos campos del texto) y avisos.'
+
+export const ANOTACIONES: ToolAnnotations = {
+  readOnlyHint: true,
+  destructiveHint: false,
+  idempotentHint: true,
+  openWorldHint: true,
+}
 
 export const schema = estricto({
   norma_a: z.string().describe('Cita de la primera norma, ej. "Ley 909 de 2004"'),

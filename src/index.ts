@@ -1,6 +1,7 @@
 import './arranque.ts'
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
+import type { ToolAnnotations } from '@modelcontextprotocol/sdk/types.js'
 import { z } from 'zod'
 
 import { apagadas, DESCARGO, herramientaActiva, NOMBRE_FUENTE } from './nucleo/alcance.ts'
@@ -206,10 +207,12 @@ registrarHerramienta('describir_fuentes', describirFuentes)
 // --- herramientas V2 (módulos de la Ola 1) -------------------------------
 
 // El formato común (fecha, descargo, aviso de versión, logging) lo pone `txt`;
-// cada módulo solo exporta título, descripción, esquema y el texto puro.
+// cada módulo solo exporta título, descripción, anotaciones, esquema y el texto puro.
+// `ANOTACIONES` es obligatorio: que falte en un módulo es un error de tipos.
 type HerramientaV2 = {
   TITULO: string
   DESCRIPCION: string
+  ANOTACIONES: ToolAnnotations
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   schema: any
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -219,7 +222,7 @@ type HerramientaV2 = {
 function registrarHerramienta(nombre: string, m: HerramientaV2) {
   return server.registerTool(
     nombre,
-    { title: m.TITULO, description: m.DESCRIPCION, inputSchema: m.schema },
+    { title: m.TITULO, description: m.DESCRIPCION, annotations: m.ANOTACIONES, inputSchema: m.schema },
     // Con `formato: "json"` la respuesta es SOLO el JSON: el pie de fecha y descargo lo rompería, así
     // que ese modo lleva dentro `fecha_consulta`, `alcance` y `avisos` (lo escribe cada herramienta).
     //

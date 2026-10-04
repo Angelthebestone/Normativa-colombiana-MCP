@@ -6,7 +6,7 @@
  *   node --test test/expedientes-herramientas.ts
  */
 import { strict as assert } from 'node:assert'
-import { mkdtempSync, readFileSync, rmSync, statSync } from 'node:fs'
+import { mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import * as os from 'node:os'
 import * as path from 'node:path'
 import test from 'node:test'
@@ -143,6 +143,28 @@ test('exportar un expediente inexistente avisa y no crea archivo', async () => {
     assert.match(r, /No existe un expediente con id no-existe/)
     assert.match(r, /No se creó ningún archivo/)
     assert.throws(() => statSync(ruta))
+  } finally {
+    rmSync(dir, { recursive: true, force: true })
+  }
+})
+
+test('exportar sobre un archivo existente lo deja intacto y escribe con sufijo', async () => {
+  const dir = mkdtempSync(path.join(os.tmpdir(), 'expedientes-'))
+  delete process.env['EXPEDIENTES_DIR']
+  process.env['EXPEDIENTES'] = '1'
+  try {
+    const m = (await escribir({ accion: 'crear' })).match(/Expediente (\w+) creado/)
+    assert.ok(m)
+    const id = m[1]!
+    await escribir({ accion: 'agregar', id, campo: 'decisiones', texto: 'resolver' })
+
+    const ruta = path.join(dir, 'informe.md')
+    writeFileSync(ruta, 'PREVIO', 'utf8')
+    const r = await escribir({ accion: 'exportar', id, ruta })
+    assert.equal(readFileSync(ruta, 'utf8'), 'PREVIO')
+    const conSufijo = path.join(dir, 'informe_1.md')
+    assert.ok(r.includes(conSufijo), r)
+    assert.ok(readFileSync(conSufijo, 'utf8').includes('- resolver'))
   } finally {
     rmSync(dir, { recursive: true, force: true })
   }

@@ -172,3 +172,39 @@ test('el anuncio terminado en punto también viaja con su transcripción', () =>
 test('el índice no ofrece como propio el artículo transcrito tras un anuncio con punto', () => {
   assert.deepEqual(indiceArticulos(LEY_2418), ['3', '4'])
 })
+
+/**
+ * La Ley 769 de 2002 escribe en el Gestor «ARTÍCULO3°.», sin espacio: con `\s+`
+ * el artículo 2 —que ya mide unos 22 KB— arrastraba el 3 y el capítulo II.
+ */
+const LEY_769 = [
+  'ARTÍCULO 2°. DEFINICIONES. Para la aplicación e interpretación de este código, se tendrán en cuenta las siguientes definiciones:',
+  '',
+  'Vía: Zona de uso público o privado, abierta al público, destinada al tránsito de vehículos, personas y animales.',
+  '',
+  'CAPITULO II.',
+  '',
+  'AUTORIDADES.',
+  '',
+  'ARTÍCULO3°. AUTORIDADES DE TRÁNSITO. Son autoridades de tránsito, en su orden, las siguientes:',
+  '',
+  'Artículos 1 y 2 de este código: remisión que no es encabezado.',
+  '',
+  'ARTÍCULO 4°. SUJECIÓN A ESTE CÓDIGO.',
+].join('\n')
+
+test('un encabezado sin espacio («ARTÍCULO3°.») cierra el artículo anterior', () => {
+  const art = articulo(LEY_769, '2')!
+  assert.match(art, /Zona de uso público/)
+  assert.doesNotMatch(art, /AUTORIDADES DE TRÁNSITO/)
+})
+
+test('el artículo escrito sin espacio se puede pedir y figura en el índice', () => {
+  assert.match(articulo(LEY_769, '3')!, /^ARTÍCULO3°\. AUTORIDADES DE TRÁNSITO/)
+  assert.deepEqual(indiceArticulos(LEY_769), ['2', '3', '4'])
+})
+
+test('«Artículos 1 y 2» al inicio de renglón no es un encabezado', () => {
+  // Si lo fuera, el artículo 3 se cortaría en la remisión y no llegaría al 4.
+  assert.match(articulo(LEY_769, '3')!, /remisión que no es encabezado/)
+})

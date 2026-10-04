@@ -8,6 +8,7 @@
  *
  *   npm run build && node --test test/e2e.ts
  */
+import type { ToolAnnotations } from '@modelcontextprotocol/sdk/types.js'
 import { strict as assert } from 'node:assert'
 import test, { after, before } from 'node:test'
 
@@ -88,6 +89,29 @@ test('las 28 herramientas se declaran con esquemas utilizables', CONTRATO, async
   const props = catalogos.inputSchema.properties
   assert.ok(props.desde, 'listar_catalogos necesita desde para paginar')
   assert.deepEqual(props.catalogo.enum, ['tipos', 'anios', 'entidades', 'temas', 'subtemas', 'conceptos_fp', 'normas_fp'])
+
+  // Las anotaciones dicen al cliente qué efectos tiene cada una sin abrir la descripción.
+  const anotaciones = new Map<string, ToolAnnotations | undefined>()
+  const sinAnotar: string[] = []
+  for (const t of tools) {
+    anotaciones.set(t.name, t.annotations)
+    for (const h of ['readOnlyHint', 'destructiveHint', 'idempotentHint', 'openWorldHint']) {
+      if (typeof t.annotations?.[h] !== 'boolean') sinAnotar.push(`${t.name}.${h}`)
+    }
+  }
+  assert.deepEqual(sinAnotar, [], `anotaciones ausentes: ${sinAnotar.join(', ')}`)
+  assert.equal(anotaciones.get('describir_fuentes')?.openWorldHint, false, 'describir_fuentes no consulta la red')
+  assert.equal(anotaciones.get('describir_fuentes')?.readOnlyHint, true)
+  for (const n of ['obtener_documento', 'expediente']) {
+    assert.equal(anotaciones.get(n)?.readOnlyHint, false, `${n} escribe en disco`)
+    assert.equal(anotaciones.get(n)?.destructiveHint, false, `${n} no sobrescribe`)
+  }
+  assert.deepEqual(anotaciones.get('buscar_jurisprudencia_consejo_estado'), {
+    readOnlyHint: true,
+    destructiveHint: false,
+    idempotentHint: true,
+    openWorldHint: true,
+  })
 })
 
 test('los prompts se declaran y se resuelven', CONTRATO, async () => {
@@ -516,7 +540,7 @@ test('el Consejo de Estado ya no dice que no puede dar el texto', LENTO, async (
   assert.doesNotMatch(b.texto, /texto completo de la providencia no se entrega/i, 'ya no es cierto')
   // El token caduca en una hora: la respuesta tiene que decirlo, o se citará.
   assert.match(b.texto, /CADUCAN EN UNA HORA/, 'un token caduco citado como fuente es una cita rota')
-  const token = b.texto.match(/token="([^"]+)"/)?.[1]
+  const token = b.texto.match(/^ {2}token: (\S+)$/m)?.[1]
   assert.ok(token, 'la búsqueda debe entregar el token con el que pedir el texto')
 
   const t = await c.tool('obtener_documento', { fuente: 'consejo', token, limite_caracteres: 1000 })

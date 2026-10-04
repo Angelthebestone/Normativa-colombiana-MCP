@@ -68,22 +68,22 @@ test('articulos gana sobre el artículo de la cita, y se anuncia', LENTO, async 
   assert.doesNotMatch(r.texto, /--- Artículo 1 ---/)
 })
 
-test('contexto: false omite el extracto de tema y lo dice', LENTO, async () => {
+test('contexto: false omite el extracto de tema y la respuesta es más corta', LENTO, async () => {
   const con = await c.tool('resolver_cita', { cita: 'Ley 909 de 2004' })
   const sin = await c.tool('resolver_cita', { cita: 'Ley 909 de 2004', contexto: false })
   assert.equal(sin.esError, false)
   assert.match(con.texto, /Extracto de un tema asociado/)
-  assert.doesNotMatch(sin.texto, /Extracto de un tema asociado \(NO resume/)
-  // El hueco se declara: callarlo se lee como que la norma no tiene tema asociado.
-  assert.match(sin.texto, /omitido con contexto=false/)
+  assert.doesNotMatch(sin.texto, /Extracto de un tema asociado/)
   assert.ok(sin.texto.length < con.texto.length, `${sin.texto.length} >= ${con.texto.length}`)
 })
 
-test('lote: el extracto de tema no se repite por cada cita de la misma norma', LENTO, async () => {
+test('lote: dos artículos de la misma norma comparten ficha y extracto de tema', LENTO, async () => {
   const r = await c.tool('resolver_cita', { citas: ['art. 1 de la Ley 909 de 2004', 'art. 2 de la Ley 909 de 2004'] })
   assert.equal(r.esError, false)
   assert.equal(r.texto.match(/Extracto de un tema asociado \(NO resume/g)?.length, 1)
-  assert.match(r.texto, /ya emitido más arriba para esta misma norma/)
+  assert.equal(r.texto.match(/^id: /gm)?.length, 1)
+  assert.match(r.texto, /--- Artículo 1 ---/)
+  assert.match(r.texto, /--- Artículo 2 ---/)
 })
 
 test('validar en lote corrige el tipo igual que la consulta individual', LENTO, async () => {

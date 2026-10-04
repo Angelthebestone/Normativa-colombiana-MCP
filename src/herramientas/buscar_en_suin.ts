@@ -3,6 +3,7 @@
  * documentos que el Gestor no tiene. Reutiliza `buscar` de `fuentes/suin.ts`; aquí
  * solo van el esquema y el texto de la respuesta.
  */
+import type { ToolAnnotations } from '@modelcontextprotocol/sdk/types.js'
 import { z } from 'zod'
 
 import { estricto } from '../nucleo/normalizar.ts'
@@ -18,12 +19,21 @@ export const TITULO = 'Buscar en SUIN-Juriscol'
 export const DESCRIPCION =
   'Busca en los 56.832 documentos de SUIN-Juriscol (MinJusticia) por título, epígrafe, materia o entidad ' +
   'emisora: leyes, decretos y resoluciones desde 1844, incluidos documentos que el Gestor Normativo no tiene. ' +
-  'NO busca dentro del articulado ni sirve para citas exactas ("LEY 909 DE 2004" no devuelve nada): para una ' +
-  'cita usa resolver_cita. El campo de vigencia que devuelve es el del BUSCADOR y NO es fiable: contradice la ' +
-  'ficha del propio documento; para el estado real usa resolver_cita. ' +
+  'Devuelve título, epígrafe, enlace y la vigencia del BUSCADOR, que NO es fiable (contradice la ficha). ' +
+  'NO busca dentro del articulado ni sirve para citas exactas ("LEY 909 DE 2004" no devuelve nada): para ' +
+  'una cita, y para el estado real de vigencia, ' +
+  'usa resolver_cita. vigencia y sector acotan la búsqueda de texto, no la sustituyen; para el tramo ' +
+  'siguiente repite la misma llamada con desde = desde + limite. ' +
   'SU ÍNDICE TIENE HUECOS: "Teletrabajo" devuelve cero pese a estar en el título de la Ley 1221 de 2008, y ' +
   'una frase larga empareja por palabras comunes. Ante un vacío, NO concluyas que no existe: prueba ' +
   'buscar_por_tema.'
+
+export const ANOTACIONES: ToolAnnotations = {
+  readOnlyHint: true,
+  destructiveHint: false,
+  idempotentHint: true,
+  openWorldHint: true,
+}
 
 const esquema = z.object({
   texto: z.string().describe('Palabras del título, epígrafe o materia. Ej.: "servicio militar", "Buenaventura"'),

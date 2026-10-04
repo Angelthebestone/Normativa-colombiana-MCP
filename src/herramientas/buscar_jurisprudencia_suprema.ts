@@ -3,6 +3,7 @@
  * sala. Reutiliza `buscar` de `fuentes/jurisprudencia/cortesuprema.ts`, que es quien
  * habla con su buscador; aquí solo van el esquema y el texto de la respuesta.
  */
+import type { ToolAnnotations } from '@modelcontextprotocol/sdk/types.js'
 import { z } from 'zod'
 
 import { estricto } from '../nucleo/normalizar.ts'
@@ -13,12 +14,20 @@ import * as suprema from '../fuentes/jurisprudencia/cortesuprema.ts'
 export const TITULO = 'Buscar jurisprudencia de la Corte Suprema de Justicia'
 
 export const DESCRIPCION =
-  'Providencias de la Corte Suprema por sala: Tutelas, Civil, Laboral o Penal, desde 1991. Complementa a ' +
-  'buscar_jurisprudencia, que es de la Corte CONSTITUCIONAL: son tribunales distintos. Cada resultado trae ' +
-  'las NORMAS QUE CITA (resolubles con resolver_cita) y una RUTA con la que obtener_documento con ' +
-  'fuente="suprema" devuelve el texto. ' +
-  'CÓMO BUSCA: sobre el texto completo y sin descartar palabras comunes, así que "de" devuelve 69.454 ' +
-  'resultados; por eso busca la FRASE EXACTA por defecto. Usa términos distintivos.'
+  'Providencias de la Corte Suprema por sala (Tutelas, Civil, Laboral o Penal), desde 1991. NO es la Corte ' +
+  'CONSTITUCIONAL (usa buscar_jurisprudencia) ni el Consejo de Estado (buscar_jurisprudencia_consejo_estado). ' +
+  'Cada resultado trae las NORMAS QUE CITA (resolubles con resolver_cita) y una RUTA con la que ' +
+  'obtener_documento con fuente="suprema" devuelve el texto. Cada llamada mira UNA sala y, si no la indicas, ' +
+  'solo Tutelas: una pregunta civil, laboral o penal tiene que nombrar su sala; anio y magistrado acotan ' +
+  'dentro de ella. Si la frase exacta no da nada, se repite sola con OR y la respuesta lo avisa: no pases ' +
+  'exacto=false para eso. Busca en el texto completo sin descartar palabras comunes: usa términos distintivos.'
+
+export const ANOTACIONES: ToolAnnotations = {
+  readOnlyHint: true,
+  destructiveHint: false,
+  idempotentHint: true,
+  openWorldHint: true,
+}
 
 const esquema = z.object({
   texto: z.string().describe('Términos a buscar, ej. "despido sin justa causa"'),

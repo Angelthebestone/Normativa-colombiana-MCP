@@ -10,9 +10,14 @@
 import { strict as assert } from 'node:assert'
 import test from 'node:test'
 
-import { resolverRadicado } from '../src/herramientas/resolver_radicado.ts'
+import { componer } from '../src/herramientas/resolver_cita.ts'
+import { resolverRadicado as resolverDatos } from '../src/herramientas/resolver_radicado.ts'
 import { parsearRadicado } from '../src/nucleo/citas.ts'
 import { porRadicado, type Providencia } from '../src/fuentes/jurisprudencia/consejoestado.ts'
+
+/** La respuesta tal como la ve quien llama a `resolver_cita` con un radicado. */
+const resolverRadicado = async (...a: Parameters<typeof resolverDatos>): Promise<string> =>
+  componer([await resolverDatos(...a)])
 
 /** Sin red: los casos que consultan portales se saltan con SIN_RED=1. */
 const SIN_RED = process.env['SIN_RED'] === '1'
@@ -54,7 +59,7 @@ const devolver =
 
 test('Consejo con providencia: la ficha, el problema jurídico y el asa con token', async () => {
   const r = await resolverRadicado(CITA, radicadoConsejo, { porRadicado: devolver([PROVIDENCIA]) })
-  assert.match(r, /^### 11001-03-28-000-2022-00132-00/)
+  assert.match(r, /^Alcance: .*\n\n### 11001-03-28-000-2022-00132-00\n/)
   assert.match(r, /Alcance: consulté Consejo de Estado \(1 providencia\(s\)\)/)
   assert.match(r, /Corporación según los dígitos \(medido\): Consejo de Estado — Sección Quinta/)
   assert.match(r, /DANE 11001 \(Bogotá D\.C\.\)/)

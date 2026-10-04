@@ -2,6 +2,7 @@
  * Herramienta de perfiles: ejecuta la consulta del usuario con la fuente y los
  * filtros que el perfil trae preconfigurados.
  */
+import type { ToolAnnotations } from '@modelcontextprotocol/sdk/types.js'
 import { z } from 'zod'
 import { estricto } from '../nucleo/normalizar.ts'
 import { alcance, proyectar } from '../nucleo/alcance.ts'
@@ -10,10 +11,19 @@ import { perfil, perfiles } from '../nucleo/perfiles.ts'
 export const TITULO = 'Consultar un perfil sectorial preconfigurado'
 
 export const DESCRIPCION =
-  'Ejecuta la consulta con las fuentes y los filtros preconfigurados de un perfil sectorial (laboral, ' +
-  'tributario, ambiental, contratación estatal o energía) y devuelve los resultados con el sector y la ' +
-  'advertencia del perfil, que es lo que declara sus límites. NO uses un perfil para lo que no cubre: si ' +
-  'la materia es otra, usa buscar_normas o resolver_cita.'
+  'Ejecuta la consulta en la ÚNICA fuente que fija cada perfil sectorial: laboral → Gestor Normativo, ' +
+  'tributario → DIAN, ambiental → ANLA, contratación estatal → Consejo de Estado, energía → CREG (solo el ' +
+  'año en curso). Devuelve una línea por resultado, con el sector y la advertencia del perfil, que ' +
+  'declara sus límites. El perfil no admite año, página ni otros filtros: para eso usa la herramienta propia ' +
+  'de la fuente (p. ej. buscar_resoluciones_creg con anio). Solo consulta, no guarda nada. NO uses un perfil ' +
+  'para lo que no cubre: si la materia es otra, usa buscar_normas o resolver_cita.'
+
+export const ANOTACIONES: ToolAnnotations = {
+  readOnlyHint: true,
+  destructiveHint: false,
+  idempotentHint: true,
+  openWorldHint: true,
+}
 
 /**
  * Los ids salen del registro de perfiles: no se escriben a mano, no se

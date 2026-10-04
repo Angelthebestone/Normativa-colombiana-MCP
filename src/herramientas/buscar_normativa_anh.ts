@@ -7,6 +7,7 @@
  * Reutiliza `buscar` de `fuentes/anh.ts`, que es quien habla con el portal.
  * Aquí solo va el esquema y el texto de la respuesta.
  */
+import type { ToolAnnotations } from '@modelcontextprotocol/sdk/types.js'
 import { z } from 'zod'
 
 import { estricto } from '../nucleo/normalizar.ts'
@@ -22,6 +23,13 @@ export const DESCRIPCION =
   'devuelve el texto (publica en PDF), solo el epígrafe, el PDF y la ficha. Para leyes o decretos nacionales ' +
   'de cualquier sector usa resolver_cita. Por defecto OCULTA los actos de personal, que son dos de cada ' +
   'tres; pídelos con incluir_administrativos=true si de verdad los buscas.'
+
+export const ANOTACIONES: ToolAnnotations = {
+  readOnlyHint: true,
+  destructiveHint: false,
+  idempotentHint: true,
+  openWorldHint: true,
+}
 
 const esquema = z.object({
   texto: z.string().optional().describe('Palabra clave, ej. "regalías", "fiscalización"'),

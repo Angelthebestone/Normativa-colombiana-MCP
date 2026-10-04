@@ -6,6 +6,7 @@
  * Reutiliza `buscar` de `fuentes/upme.ts`, que es quien habla con el portal.
  * Aquí solo va el esquema y el texto de la respuesta.
  */
+import type { ToolAnnotations } from '@modelcontextprotocol/sdk/types.js'
 import { z } from 'zod'
 
 import { estricto } from '../nucleo/normalizar.ts'
@@ -17,9 +18,20 @@ export const TITULO = 'Buscar circulares y resoluciones de la UPME'
 
 export const DESCRIPCION =
   'Circulares y resoluciones de la Unidad de Planeación Minero Energética: convocatorias de transmisión y de ' +
-  'gas, planes de expansión y actos administrativos. NO devuelve el texto: son PDF. ' +
+  'gas, planes de expansión y actos administrativos. Devuelve título, resumen, fecha de publicación y enlace ' +
+  'al PDF; NO el texto. ' +
+  'Para la CREG usa buscar_resoluciones_creg; para leyes y decretos, resolver_cita. pagina cuenta en bloques ' +
+  'de limite: no cambies limite mientras paginas. Los actos de personal se quitan DESPUÉS de traer la página, ' +
+  'así que una página puede mostrar menos de limite sin ser la última. ' +
   'OJO CON LAS FECHAS: la fecha que publica su portal es la de PUBLICACIÓN EN LA WEB, no la de la norma — la ' +
   '"Resolución 1163 de 2024" figura publicada en 2025. El número y el año reales están en el título.'
+
+export const ANOTACIONES: ToolAnnotations = {
+  readOnlyHint: true,
+  destructiveHint: false,
+  idempotentHint: true,
+  openWorldHint: true,
+}
 
 const esquema = z.object({
   texto: z.string().optional().describe('Términos a buscar, ej. "transmisión", "plan de expansión"'),

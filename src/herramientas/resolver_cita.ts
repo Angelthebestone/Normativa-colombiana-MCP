@@ -2,12 +2,13 @@
  * `resolver_cita`: de una cita escrita como la escribe un abogado al documento
  * oficial. Es la puerta exacta del MCP; el buscador por palabras no lo es.
  */
+import type { ToolAnnotations } from '@modelcontextprotocol/sdk/types.js'
 import { z } from 'zod'
 
-import { activa, alcance, avisoApagada } from '../nucleo/alcance.ts'
+import { activa, alcance, avisoApagada, type Uso } from '../nucleo/alcance.ts'
 import { citaCorteConstitucional } from '../nucleo/cita_oficial.ts'
 import { parsearCita, parsearRadicado } from '../nucleo/citas.ts'
-import { codigoDe, referencia as refCodigo } from '../nucleo/codigos.ts'
+import { codigoDe, equivalencia, referencia as refCodigo } from '../nucleo/codigos.ts'
 import { esCompiladora } from '../nucleo/compiladas.ts'
 import { validarUrl } from '../nucleo/evidencia.ts'
 import { advertenciasVigencia, articulo as extraerArticulo } from '../nucleo/parse.ts'
@@ -20,21 +21,125 @@ import { resolverCodigo } from './codigo_senado.ts'
 import { resolverRadicado } from './resolver_radicado.ts'
 import * as validarCita from './validar_cita.ts'
 
-
-
 type OpcionesCita = {
   /** Artículos de la MISMA norma: se resuelve y se descarga una vez, y se extrae cada uno. */
   articulos?: string[] | undefined
   /** Con false se omite el extracto de tema asociado, que es lo más caro de la respuesta. */
   contexto?: boolean | undefined
-  /**
-   * Ids de norma cuyo extracto ya salió en ESTA respuesta. Un lote de citas de
-   * la misma norma repetía el mismo extracto en cada bloque —en el Estatuto
-   * Tributario son unas 90 palabras cada vez—; se emite una vez y las demás lo
-   * dicen en una línea. Es deduplicación por respuesta, sin estado entre
-   * llamadas: una caché haría que la misma llamada devolviera cosas distintas.
-   */
-  yaConExtracto?: Set<string> | undefined
+}
+
+/** Las fuentes que consulta la rama del Gestor, inyectables para probar sin red. */
+export type Deps = {
+  buscar?: typeof gestor.buscar
+  obtenerNorma?: typeof gestor.obtenerNorma
+  fichaSuin?: typeof suin.ficha
+}
+
+/**
+ * Una cita resuelta, antes de darle forma. Cada rama devuelve DATOS y no texto
+ * porque la forma depende del resto de la respuesta: en un lote, las citas de
+ * la misma norma comparten ficha, y la línea de alcance es una para todas. Con
+ * cada rama componiendo su texto, agrupar obligaba a volver a parsear lo que el
+ * propio código acababa de escribir.
+ */
+export type Resuelta = {
+  /** La cita tal como llegó: encabeza el bloque cuando la norma se cita una sola vez. */
+  cita: string
+  /** Identidad de la norma (`gestor:<id>`, `senado:<archivo>`, `corte:<sentencia>`); null si no resolvió. */
+  clave: string | null
+  /** Título oficial: encabeza el bloque cuando varias citas del lote dan con la misma norma. */
+  titulo?: string
+  /** Lo que recibe `alcance()`. */
+  usos: Uso[]
+  /** Lo propio de ESTA cita (equivalencia del código, tipo corregido, artículo ignorado). */
+  avisos: string[]
+  /** Todo lo que no es artículo: identificación, vigencia, siguiente paso, enlace. */
+  ficha: string
+  /** Un bloque por artículo pedido, sin la URL de la norma, que ya está en la ficha. */
+  articulos: string[]
+  /** Advertencias que cierran el bloque, después de los artículos. */
+  pie?: string[]
+}
+
+/** Una cita sin norma: su bloque propio, con el motivo en la ficha. */
+const sinNorma = (cita: string, usos: Uso[], ficha: string, avisos: string[] = []): Resuelta => ({
+  cita,
+  clave: null,
+  usos,
+  avisos,
+  ficha,
+  articulos: [],
+})
+
+/**
+ * Línea de alcance de toda la respuesta: una fuente consultada para alguna cita
+ * cuenta como consultada, porque la línea describe la respuesta entera y no
+ * cada cita. El detalle se acumula: tres normas resueltas en el Gestor son
+ * «norma resuelta ×3», no tres menciones del Gestor.
+ */
+function unirUsos(usos: Uso[]): Uso[] {
+  const porClave = new Map<string, Map<string, number>>()
+  for (const u of usos) {
+    const detalles = porClave.get(u.clave) ?? new Map<string, number>()
+    detalles.set(u.detalle ?? '', (detalles.get(u.detalle ?? '') ?? 0) + 1)
+    porClave.set(u.clave, detalles)
+  }
+  return [...porClave].map(([clave, detalles]) => {
+    const detalle = [...detalles]
+      .filter(([d]) => d)
+      .map(([d, n]) => (n > 1 ? `${d} ×${n}` : d))
+      .join('; ')
+    return detalle ? { clave, detalle } : { clave }
+  })
+}
+
+/**
+ * El bloque de una norma. Con una sola cita, el encabezado es la cita, como
+ * siempre; con varias, el título oficial y la lista de citas, para que quien
+ * pidió «art. 817 del Estatuto Tributario» reconozca la suya bajo «Decreto Ley
+ * 624 de 1989». La ficha va una vez y los artículos en el orden pedido.
+ */
+function bloqueDeNorma(grupo: Resuelta[]): string {
+  const p = grupo[0]!
+  const cabecera =
+    grupo.length === 1 ? `### ${p.cita}` : `### ${p.titulo ?? p.cita}\nCitas: ${grupo.map((g) => g.cita).join('; ')}`
+  const unicos = (xs: string[]) => [...new Set(xs.filter(Boolean))]
+  const articulos = unicos(grupo.flatMap((g) => g.articulos))
+  const pie = unicos(grupo.flatMap((g) => g.pie ?? []))
+  return (
+    [cabecera, ...unicos(grupo.flatMap((g) => g.avisos)), p.ficha].join('\n') +
+    articulos.map((a) => `\n\n${a}`).join('') +
+    (pie.length ? `\n\n${pie.join('\n')}` : '')
+  )
+}
+
+/**
+ * El único compositor de `resolver_cita`: la cita suelta y el lote salen por
+ * aquí, así que ambas vías dan la misma forma. Primero el alcance, una vez;
+ * después un bloque por norma en el orden de su primera cita, y las citas que
+ * no resolvieron, cada una en el suyo. `preambulo` son los avisos sobre los
+ * parámetros, que se leen antes que los bloques.
+ */
+export function componer(piezas: Resuelta[], preambulo = ''): string {
+  const grupos: Resuelta[][] = []
+  const porClave = new Map<string, Resuelta[]>()
+  for (const p of piezas) {
+    const grupo = p.clave ? porClave.get(p.clave) : undefined
+    if (grupo) {
+      grupo.push(p)
+      continue
+    }
+    const nuevo = [p]
+    grupos.push(nuevo)
+    if (p.clave) porClave.set(p.clave, nuevo)
+  }
+  return `${alcance(unirUsos(piezas.flatMap((p) => p.usos)))}\n\n${preambulo}${grupos.map(bloqueDeNorma).join('\n\n')}`
+}
+
+/** La línea de cita judicial ya compuesta, con lo que la relatoría no da declarado (nada se inventa). */
+function citaOficial(p: Parameters<typeof citaCorteConstitucional>[0]): string {
+  const c = citaCorteConstitucional(p)
+  return c ? `Cita oficial: ${c.cita}${c.faltan.length ? ` (no consta: ${c.faltan.join(', ')})` : ''}` : ''
 }
 
 /**
@@ -42,35 +147,31 @@ type OpcionesCita = {
  * aparece. La ruta de artículo único y la de `articulos` comparten esta función
  * porque el formato tiene que ser idéntico, y porque un artículo que falte se
  * marca en su propio bloque sin abortar los demás.
- *
- * La URL va pegada al ENCABEZADO, no al final: el articulado trae líneas en
- * blanco dentro, así que un `URL:` al pie queda en otro párrafo y el fragmento
- * citable se copia sin su origen. Aquí se lee antes del texto y viaja con él.
  */
-/** La línea de cita judicial ya compuesta, con lo que la relatoría no da declarado (nada se inventa). */
-function citaOficial(p: Parameters<typeof citaCorteConstitucional>[0]): string {
-  const c = citaCorteConstitucional(p)
-  return c ? `Cita oficial: ${c.cita}${c.faltan.length ? ` (no consta: ${c.faltan.join(', ')})` : ''}` : ''
-}
-
-function bloqueArticulo(texto: string, numero: string, url: string): string {
+function bloqueArticulo(texto: string, numero: string): string {
   const art = extraerArticulo(texto, numero)
   return art
-    ? `\n\n--- Artículo ${numero} ---\nURL: ${url}\n${art}\n${advertenciasVigencia(art).join('\n')}`
-    : `\n\nNo encontré un "artículo ${numero}" en el texto. Usa obtener_documento con fuente="gestor" y buscar_en_texto.`
+    ? [`--- Artículo ${numero} ---`, art, ...advertenciasVigencia(art)].join('\n')
+    : `No encontré un "artículo ${numero}" en el texto. Usa obtener_documento con fuente="gestor" y buscar_en_texto.`
 }
 
 /**
- * Resuelve UNA cita de `resolver_cita` en texto puro (sin el envoltorio `txt`,
- * que lo pone quien llama). La ruta individual llama con una sola cita; el
- * lote itera sobre esta misma función, así que ambas vías resuelven igual.
+ * Resuelve UNA cita de `resolver_cita` en datos (la forma la pone `componer`).
+ * La ruta individual llama con una sola cita; el lote itera sobre esta misma
+ * función, así que ambas vías resuelven igual.
  */
-async function resolverUnaCita(cita: string, opciones: OpcionesCita = {}): Promise<string> {
+async function resolverUnaCita(cita: string, opciones: OpcionesCita = {}, deps: Deps = {}): Promise<Resuelta> {
   // Un radicado judicial de 23 dígitos no es una cita normativa: se identifica y se enruta a la corte.
   const radicado = parsearRadicado(cita)
   if (radicado) return resolverRadicado(cita, radicado)
   const c = parsearCita(cita)
-  if (!c) return `### ${cita}\nNo encontré una cita normativa en "${cita}". Escríbela como "Ley 909 de 2004", "art. 191 del Código de Comercio" o "C-337/11", o usa buscar_normas.`
+  if (!c) {
+    return sinNorma(
+      cita,
+      [],
+      `No encontré una cita normativa en "${cita}". Escríbela como "Ley 909 de 2004", "art. 191 del Código de Comercio" o "C-337/11", o usa buscar_normas.`,
+    )
+  }
 
   /**
    * `articulos` manda sobre el artículo escrito en la cita, y se anuncia:
@@ -79,47 +180,51 @@ async function resolverUnaCita(cita: string, opciones: OpcionesCita = {}): Promi
   const pedidos = opciones.articulos?.length ? opciones.articulos : c.articulo ? [c.articulo] : []
   const articuloIgnorado =
     opciones.articulos?.length && c.articulo
-      ? `Se ignoró el "artículo ${c.articulo}" de la cita: manda el parámetro articulos (${opciones.articulos.join(', ')}).\n`
+      ? `Se ignoró el "artículo ${c.articulo}" de la cita: manda el parámetro articulos (${opciones.articulos.join(', ')}).`
       : ''
 
-  /**
-   * Nadie cita "Decreto 410 de 1971": cita el Código de Comercio. Cuando la
-   * cita llegó por el nombre del código se dice contra qué norma se resolvió,
-   * porque es la que hay que escribir en un escrito judicial.
-   */
   const cod = codigoDe(c.tipo, c.numero, c.anio)
-  const equivalencia =
-    c.codigo && cod
-      ? `\n«${cod.nombre}» se cita aquí como ${refCodigo(cod)}, que es su norma contenedora y lo que hay que escribir en un escrito.`
-      : ''
   // El Código Civil no está en el Gestor: su texto sale de la Secretaría del Senado.
   if (cod?.senado) return resolverCodigo({ cita, c, codigo: cod, pedidos, articuloIgnorado })
+  // La equivalencia solo procede si la cita llegó por el nombre del código.
+  const porCodigo = c.codigo ? cod : undefined
 
   // Las sentencias de la Corte se resuelven contra su relatoría, que está al día.
   // Con la Corte apagada no se cae al Gestor —que no publica sentencias— para
   // salir por un «no encontré» que se leería como «no existe».
   if (c.sentencia && !activa('corte')) {
-    return `### ${cita}\n${alcance([])}\n\n${avisoApagada('corte')} Por eso no se puede ni afirmar ni negar que exista la sentencia ${c.sentencia}.`
+    return sinNorma(
+      cita,
+      [],
+      `${avisoApagada('corte')} Por eso no se puede ni afirmar ni negar que exista la sentencia ${c.sentencia}.`,
+    )
   }
   if (c.sentencia) {
     const v = await corte.verificar(c.sentencia)
     if (v.estado === 'existe' && v.providencia) {
       const p = v.providencia
-      return [
-        `### ${cita}`,
-        alcance([{ clave: 'corte', detalle: 'providencia verificada por su número' }]),
-        `${p.sentencia} (${p.tipo}) — Corte Constitucional`,
-        `Fecha: ${p.fecha} · Publicación: ${p.publicacion} · Expediente: ${p.expediente}`,
-        // El campo de la relatoría es el PONENTE, no la Sala (medido: 238 de 240 aciertos traen un solo nombre).
-        p.magistrados.length ? `Ponente${p.magistrados.length > 1 ? 's' : ''} (según la relatoría): ${p.magistrados.join(', ')}` : '',
-        citaOficial(p),
-        p.tema ? `Tema: ${p.tema}` : '',
-        p.sintesis ? `Síntesis: ${p.sintesis}` : '',
-        `Texto completo: usa obtener_documento con fuente="corte" y ruta="${p.ruta}"`,
-        `URL: ${p.url}`,
-      ]
-        .filter(Boolean)
-        .join('\n')
+      const titulo = `${p.sentencia} (${p.tipo}) — Corte Constitucional`
+      return {
+        cita,
+        clave: `corte:${p.sentencia}`,
+        titulo,
+        usos: [{ clave: 'corte', detalle: 'providencia verificada por su número' }],
+        avisos: [],
+        ficha: [
+          titulo,
+          `Fecha: ${p.fecha} · Publicación: ${p.publicacion} · Expediente: ${p.expediente}`,
+          // El campo de la relatoría es el PONENTE, no la Sala (medido: 238 de 240 aciertos traen un solo nombre).
+          p.magistrados.length ? `Ponente${p.magistrados.length > 1 ? 's' : ''} (según la relatoría): ${p.magistrados.join(', ')}` : '',
+          citaOficial(p),
+          p.tema ? `Tema: ${p.tema}` : '',
+          p.sintesis ? `Síntesis: ${p.sintesis}` : '',
+          `Texto completo: usa obtener_documento con fuente="corte" y ruta="${p.ruta}"`,
+          `URL: ${p.url}`,
+        ]
+          .filter(Boolean)
+          .join('\n'),
+        articulos: [],
+      }
     }
     /**
      * Negativa firme. Antes, una sentencia que la relatoría no tiene caía a la
@@ -130,21 +235,22 @@ async function resolverUnaCita(cita: string, opciones: OpcionesCita = {}): Promi
      * la ausencia ya es un dato.
      */
     if (v.estado === 'no-existe') {
-      return (
-        `### ${cita}\n` +
-        `${alcance([{ clave: 'corte', detalle: `sondeada con ${v.sondeos.map((s) => `«${s}»`).join(' y ')}` }])}\n\n` +
+      return sinNorma(
+        cita,
+        [{ clave: 'corte', detalle: `sondeada con ${v.sondeos.map((s) => `«${s}»`).join(' y ')}` }],
         `No existe ninguna providencia con el número ${c.sentencia} en la relatoría de la Corte Constitucional.\n\n` +
-        `Se buscó por el NÚMERO, no por el contenido, así que esto no dice nada sobre si hay una sentencia ` +
-        `parecida: para eso, buscar_jurisprudencia por materia.`
+          `Se buscó por el NÚMERO, no por el contenido, así que esto no dice nada sobre si hay una sentencia ` +
+          `parecida: para eso, buscar_jurisprudencia por materia.`,
       )
     }
     if (v.estado === 'no-medido') {
-      return (
-        `### ${cita}\n` +
+      return sinNorma(
+        cita,
+        [{ clave: 'corte', detalle: 'no respondió' }],
         `No pude comprobar la sentencia ${c.sentencia} contra la relatoría de la Corte Constitucional: ` +
-        `${v.motivo ?? 'la fuente no respondió'}.\n\n` +
-        `Esto NO significa que no exista —significa que no se pudo comprobar—. Vuelve a intentarlo, o búscala ` +
-        `por materia con buscar_jurisprudencia.`
+          `${v.motivo ?? 'la fuente no respondió'}.\n\n` +
+          `Esto NO significa que no exista —significa que no se pudo comprobar—. Vuelve a intentarlo, o búscala ` +
+          `por materia con buscar_jurisprudencia.`,
       )
     }
   }
@@ -152,48 +258,55 @@ async function resolverUnaCita(cita: string, opciones: OpcionesCita = {}): Promi
   // La corrección del tipo escrito vive en validar_cita.ts para que el lote con
   // validar=true la aplique también: allí no se hacía, y devolvía "no fue
   // posible validar" para citas que esta ruta resolvía sin problema.
-  const { r, tipoOficial, otroTitulo } = await validarCita.buscarCorrigiendoTipo(c)
-  const tipoCorregido = tipoOficial
-    ? `\nNo existe un «${c.tipo} ${c.numero} de ${c.anio}»; el tipo oficial es «${tipoOficial}».\n`
-    : ''
+  const { r, tipoOficial, otroTitulo } = await validarCita.buscarCorrigiendoTipo(c, deps.buscar)
+  // Solo se corrige el tipo que escribió el usuario. En «art. 817 del Estatuto
+  // Tributario» el tipo «decreto» lo puso la tabla de códigos para buscar, y
+  // decir «No existe un decreto 624 de 1989» le atribuía un error que no cometió.
+  const tipoCorregido =
+    tipoOficial && !c.codigo ? `No existe un «${c.tipo} ${c.numero} de ${c.anio}»; el tipo oficial es «${tipoOficial}».` : ''
   const otroTipo = otroTitulo
     ? ` Con ese número y año el Gestor sí tiene «${otroTitulo}», que es de otro tipo: si te referías` +
       ` a esa, pídela con su tipo exacto.`
     : ''
+  const fichaSuin = deps.fichaSuin ?? suin.ficha
 
   if (!r.items.length) {
+    // Sin norma resuelta no hay título oficial: la equivalencia sale de la tabla.
+    const avisos = [porCodigo ? equivalencia(porCodigo, refCodigo(porCodigo)) : '', articuloIgnorado]
     // Que el Gestor no la tenga no significa que no exista: su corpus no
     // cubre todo el país. Antes de decir "no encontré" —que se lee como "esa
     // norma no existe"— se pregunta a SUIN, que sí la puede registrar.
-    const f = c.anio && activa('suin') ? await suin.ficha(c.tipo, c.numero, c.anio) : null
+    const f = c.anio && activa('suin') ? await fichaSuin(c.tipo, c.numero, c.anio) : null
     if (f?.ok) {
       const v = f.ficha
-      return (
-        `### ${cita}${equivalencia}\n` +
-        `${alcance([{ clave: 'gestor', detalle: '0 documentos' }, { clave: 'suin', detalle: 'ficha encontrada' }])}\n` +
-        `${articuloIgnorado}${cita} no está en el Gestor Normativo de Función Pública, pero SUIN-Juriscol sí la registra.\n` +
-        (v.epigrafe ? `${v.epigrafe}\n` : '') +
-        `Estado de vigencia según SUIN-Juriscol (ficha consultada hoy): ${v.estado || 'SUIN no publica el estado de esta norma'}\n` +
-        `URL: ${v.url}\n\n` +
-        suin.TEXTO_NO_PUBLICO +
-        (pedidos.length ? ` Por eso no se puede devolver el artículo ${pedidos.join(', ')}: búscalo en el Diario Oficial.` : '')
+      return sinNorma(
+        cita,
+        [{ clave: 'gestor', detalle: '0 documentos' }, { clave: 'suin', detalle: 'ficha encontrada' }],
+        `${cita} no está en el Gestor Normativo de Función Pública, pero SUIN-Juriscol sí la registra.\n` +
+          (v.epigrafe ? `${v.epigrafe}\n` : '') +
+          `Estado de vigencia según SUIN-Juriscol (ficha consultada hoy): ${v.estado || 'SUIN no publica el estado de esta norma'}\n` +
+          `URL: ${v.url}\n\n` +
+          suin.TEXTO_NO_PUBLICO +
+          (pedidos.length ? ` Por eso no se puede devolver el artículo ${pedidos.join(', ')}: búscalo en el Diario Oficial.` : ''),
+        avisos,
       )
     }
     const suinCayo = f?.ok === false && f.razon === 'ficha-caida'
-    return (
-      `### ${cita}${equivalencia}\n` +
-      `${alcance([
+    return sinNorma(
+      cita,
+      [
         { clave: 'gestor', detalle: '0 documentos' },
         ...(f ? [{ clave: 'suin', detalle: suinCayo ? 'no respondió' : 'sin ficha' }] : []),
-      ])}\n\n` +
-      `${articuloIgnorado}No encontré la cita "${cita}" en las fuentes consultadas.\n\n` +
-      ((c.anio ? `Prueba sin el año, o verifica el número.` : `Prueba indicando el año.`) + otroTipo) +
-      (f?.ok === false && f.detalle
-        ? suinCayo
-          ? `\n\nSUIN-Juriscol no respondió (${f.detalle}): no se pudo comprobar si la registra. Vuelve a intentarlo antes de concluir que no existe.`
-          : `\n\nSUIN-Juriscol: ${f.detalle}.`
-        : '') +
-      (c.anio && !activa('suin') ? `\n\n${avisoApagada('suin')} Una norma que el Gestor no tiene solo la podía registrar SUIN.` : '')
+      ],
+      `No encontré la cita "${cita}" en las fuentes consultadas.\n\n` +
+        ((c.anio ? `Prueba sin el año, o verifica el número.` : `Prueba indicando el año.`) + otroTipo) +
+        (f?.ok === false && f.detalle
+          ? suinCayo
+            ? `\n\nSUIN-Juriscol no respondió (${f.detalle}): no se pudo comprobar si la registra. Vuelve a intentarlo antes de concluir que no existe.`
+            : `\n\nSUIN-Juriscol: ${f.detalle}.`
+          : '') +
+        (c.anio && !activa('suin') ? `\n\n${avisoApagada('suin')} Una norma que el Gestor no tiene solo la podía registrar SUIN.` : ''),
+      avisos,
     )
   }
   /**
@@ -210,16 +323,18 @@ async function resolverUnaCita(cita: string, opciones: OpcionesCita = {}): Promi
       .map((i) => ({ i, anio: i.titulo.match(/\bde\s+(\d{4})\b/i)?.[1] ?? '' }))
       .filter((x) => x.anio)
     if (new Set(conAnio.map((x) => x.anio)).size > 1) {
-      return (
-        `### ${cita}\nLa cita "${cita}" es ambigua: el Gestor tiene ${conAnio.length} normas con ese tipo y número, de años ` +
-        `distintos. No se elige una por ti.\n\n` +
-        conAnio
-          .sort((a, b) => Number(b.anio) - Number(a.anio))
-          .map(({ i }) => `- ${i.titulo} (id ${i.id})\n  ${i.url}`)
-          .join('\n') +
-        `\n\nRepite la cita con el año ("${c.tipo} ${c.numero} de ${conAnio[0]!.anio}")` +
-        (c.articulo ? `, conservando el artículo ("art. ${c.articulo} de …")` : '') +
-        `. Si no sabes cuál es, díselo a quien pregunta en vez de escoger: el número solo no identifica la norma.`
+      return sinNorma(
+        cita,
+        [{ clave: 'gestor', detalle: `${conAnio.length} candidatos` }],
+        `La cita "${cita}" es ambigua: el Gestor tiene ${conAnio.length} normas con ese tipo y número, de años ` +
+          `distintos. No se elige una por ti.\n\n` +
+          conAnio
+            .sort((a, b) => Number(b.anio) - Number(a.anio))
+            .map(({ i }) => `- ${i.titulo} (id ${i.id})\n  ${i.url}`)
+            .join('\n') +
+          `\n\nRepite la cita con el año ("${c.tipo} ${c.numero} de ${conAnio[0]!.anio}")` +
+          (c.articulo ? `, conservando el artículo ("art. ${c.articulo} de …")` : '') +
+          `. Si no sabes cuál es, díselo a quien pregunta en vez de escoger: el número solo no identifica la norma.`,
       )
     }
   }
@@ -251,7 +366,7 @@ async function resolverUnaCita(cita: string, opciones: OpcionesCita = {}): Promi
     // concluir de más. Por eso va con el motivo literal: quince consultas
     // seguidas devolvieron "no respondió" sin decir si era el corte del cliente,
     // un HTTP de error o el portal caído, que es justo lo que hay que comprobar.
-    const f = await suin.ficha(c.tipo, c.numero, anio)
+    const f = await fichaSuin(c.tipo, c.numero, anio)
     if (f.ok) {
       detalleSuin = 'estado consultado'
       vig =
@@ -273,26 +388,20 @@ async function resolverUnaCita(cita: string, opciones: OpcionesCita = {}): Promi
   // La norma se descarga UNA vez, cualesquiera que sean los artículos pedidos:
   // seis llamadas separadas bajaban seis veces el mismo documento y repetían
   // seis veces la ficha y el bloque de vigencia.
-  let extra = ''
+  let articulos: string[] = []
   if (pedidos.length) {
-    const norma = await gestor.obtenerNorma(n.id)
-    extra = pedidos.map((num) => bloqueArticulo(norma.texto, num, n.url)).join('')
+    const norma = await (deps.obtenerNorma ?? gestor.obtenerNorma)(n.id)
+    articulos = pedidos.map((num) => bloqueArticulo(norma.texto, num))
   }
   // No es un resumen de la norma: el Gestor no publica uno. Es el extracto de
   // UN tema al que está asociada, y en normas compiladoras como el Decreto 1083
-  // describe una porción mínima del contenido. Sale una sola vez por norma y
-  // por respuesta; cuando se omite se dice con qué parámetro vuelve, porque
-  // callarlo se lee como que la norma no tiene tema asociado (mismo criterio
-  // que sin_temas en obtener_documento).
-  const repetido = opciones.yaConExtracto?.has(String(n.id)) ?? false
-  opciones.yaConExtracto?.add(String(n.id))
-  const contextoTema = !n.resumen
-    ? ''
-    : opciones.contexto === false
-      ? '(Extracto de tema asociado omitido con contexto=false; vuelve con contexto=true.)\n'
-      : repetido
-        ? '(Extracto de tema asociado ya emitido más arriba para esta misma norma.)\n'
-        : `Extracto de un tema asociado (NO resume la norma; usa obtener_documento con fuente="gestor" para su objeto y articulado): ${n.resumen}\n`
+  // describe una porción mínima del contenido. Sale una vez por norma y por
+  // respuesta porque `componer` emite una sola ficha por norma. Con
+  // contexto=false se omite sin nota: quien llama ya pidió omitirlo.
+  const contextoTema =
+    n.resumen && opciones.contexto !== false
+      ? `Extracto de un tema asociado (NO resume la norma; usa obtener_documento con fuente="gestor" para su objeto y articulado): ${n.resumen}\n`
+      : ''
   const conSuin = conVigencia ? [{ clave: 'suin', detalle: detalleSuin }] : []
   /**
    * La llamada siguiente, escrita para poder copiarla. El id ya está en la
@@ -304,26 +413,46 @@ async function resolverUnaCita(cita: string, opciones: OpcionesCita = {}): Promi
     ? `Siguiente paso: la norma completa está con obtener_documento con fuente="gestor", id="${n.id}".`
     : `Siguiente paso: el articulado, con obtener_documento con fuente="gestor", id="${n.id}"` +
       ` (o pide un artículo concreto en la cita: "art. 3 de ${cita}").`
-  return (
-    `### ${cita}${equivalencia}\n` +
-    `${alcance([{ clave: 'gestor', detalle: 'norma resuelta' }, ...conSuin])}\n` +
-    `${articuloIgnorado}${n.titulo}\n${tipoCorregido}id: ${n.id}\n` +
-    contextoTema +
-    (esCompiladora(n.titulo, 0) ? '\nAVISO: esta es una norma compilada que incorpora reformas; para un tema concreto usa obtener_documento con fuente="gestor" y buscar_en_texto.\n' : '') +
-    `${siguiente}\n` +
-    `URL: ${n.url}${avisoDominio}${vig}${extra}`
-  )
+  // El título sin el emisor: «Decreto Ley 624 de 1989 Presidencia…» → «Decreto Ley 624 de 1989».
+  const titulo = n.titulo.match(/^.*?\bde\s+\d{4}\b/i)?.[0] ?? n.titulo
+  return {
+    cita,
+    clave: `gestor:${n.id}`,
+    titulo,
+    usos: [{ clave: 'gestor', detalle: 'norma resuelta' }, ...conSuin],
+    // La equivalencia se compone DESPUÉS de resolver, con el título que publica
+    // el Gestor: la tabla de códigos guarda el tipo con que se busca («decreto»
+    // para el Estatuto Tributario), no el oficial («Decreto Ley»).
+    avisos: [porCodigo ? equivalencia(porCodigo, titulo) : '', articuloIgnorado, tipoCorregido],
+    ficha:
+      `${n.titulo}\nid: ${n.id}\n` +
+      contextoTema +
+      (esCompiladora(n.titulo, 0) ? '\nAVISO: esta es una norma compilada que incorpora reformas; para un tema concreto usa obtener_documento con fuente="gestor" y buscar_en_texto.\n' : '') +
+      `${siguiente}\n` +
+      `URL: ${n.url}${avisoDominio}${vig}`,
+    articulos,
+  }
 }
 
 export const TITULO = 'Resolver una cita normativa'
 
 export const DESCRIPCION =
-  'Ruta rápida y exacta para citas como "Ley 909 de 2004", "Decreto 1083", "C-337/11" o "artículo 6 de la ' +
-  'Ley 1221 de 2008". Úsala SIEMPRE que la pregunta mencione una norma concreta: el buscador por palabras ' +
-  'es impreciso. Los CÓDIGOS se citan por su nombre ("art. 191 del Código de Comercio", "art. 164 del ' +
-  'CPACA") y la respuesta dice contra qué norma se resolvió. Acepta un LOTE con citas (["Ley 909 de 2004", ' +
-  '"C-337/11"]), que resuelve cada una en una sola llamada, y varios ARTÍCULOS de la MISMA norma con ' +
-  'articulos (["705", "710"]) y cita apuntando a la norma: se descarga una vez y la ficha no se repite.'
+  'Ruta rápida y exacta para citas de leyes, decretos, sentencias, artículos y códigos citados por su nombre ' +
+  '("art. 191 del Código de Comercio"). Úsala SIEMPRE que la pregunta mencione una norma concreta: ' +
+  'buscar_normas y buscar_por_tema son para cuando no la hay. Devuelve la identificación oficial con su ' +
+  'enlace, la vigencia y el texto pedido, y dice contra qué norma resolvió. Solo consulta, no guarda nada. ' +
+  'Tres modos: cita sola; citas, un lote que manda sobre cita y se agrupa por norma; o articulos con cita ' +
+  'apuntando a UNA norma, que se descarga una vez (con citas, articulos se ignora). validar=true cambia la ' +
+  'respuesta a un VEREDICTO sobre la cita (validada, parcialmente validada o no validable), sin texto ni ' +
+  'vigencia; url y formato solo valen con validar. Para las reformas de una norma usa historial_norma; para ' +
+  'quién cita una sentencia, linea_jurisprudencial.'
+
+export const ANOTACIONES: ToolAnnotations = {
+  readOnlyHint: true,
+  destructiveHint: false,
+  idempotentHint: true,
+  openWorldHint: true,
+}
 
 const esquema = z.object({
   cita: z
@@ -369,7 +498,10 @@ export const schema = estricto(esquema.shape)
 
 type Params = z.infer<typeof esquema>
 
-export async function escribir({ cita, citas, articulos, contexto, validar, url, formato }: Params): Promise<string> {
+export async function escribir(
+  { cita, citas, articulos, contexto, validar, url, formato }: Params,
+  deps: Deps = {},
+): Promise<string> {
   if (validar) {
     const datos = await validarCita.escribir({
       ...(cita !== undefined ? { cita } : {}),
@@ -382,21 +514,22 @@ export async function escribir({ cita, citas, articulos, contexto, validar, url,
     // este bloque cuando el registro estaba en línea.
     return datos
   }
-  // Lote sin validación: cada cita se resuelve por la misma vía que una
-  // cita individual, con su bloque propio. Un fallo de red de una cita se
-  // anota en su bloque y no tumba a las demás.
+  // Lote sin validación: cada cita se resuelve por la misma vía que una cita
+  // individual, y `componer` agrupa las de la misma norma bajo una ficha. Un
+  // fallo de red de una cita se anota en su bloque y no tumba a las demás.
   if (citas?.length) {
-    // El extracto de tema sale una vez por norma en toda la respuesta: un
-    // lote de citas de la misma norma lo repetía íntegro en cada bloque.
-    const yaConExtracto = new Set<string>()
-    const bloques: string[] = []
+    const piezas: Resuelta[] = []
     for (const una of citas) {
       try {
-        bloques.push(await resolverUnaCita(una, { contexto, yaConExtracto }))
+        piezas.push(await resolverUnaCita(una, { contexto }, deps))
       } catch (e) {
-        bloques.push(
-          `### ${una}\nLa fuente no respondió en esta consulta (${(e as Error).message}). ` +
-            `Vuelve a intentarlo antes de afirmar nada.\nEnlace: (sin enlace)`
+        piezas.push(
+          sinNorma(
+            una,
+            [],
+            `La fuente no respondió en esta consulta (${(e as Error).message}). ` +
+              `Vuelve a intentarlo antes de afirmar nada.\nEnlace: (sin enlace)`,
+          ),
         )
       }
     }
@@ -411,7 +544,7 @@ export async function escribir({ cita, citas, articulos, contexto, validar, url,
     const citaSuelta = cita
       ? `cita ("${cita}") se ignoró: manda el lote citas (${citas.length}). Usa una vía u otra, no las dos.\n\n`
       : ''
-    return (citaSuelta + sobrante + bloques.join('\n\n'))
+    return componer(piezas, citaSuelta + sobrante)
   }
   if (!cita) {
     return vacio(
@@ -419,5 +552,5 @@ export async function escribir({ cita, citas, articulos, contexto, validar, url,
       'Escríbela como "Ley 909 de 2004", "art. 191 del Código de Comercio" o "C-337/11" (y varias a la vez con citas), o usa buscar_normas.'
     )
   }
-  return (await resolverUnaCita(cita, { articulos, contexto }))
+  return componer([await resolverUnaCita(cita, { articulos, contexto }, deps)])
 }

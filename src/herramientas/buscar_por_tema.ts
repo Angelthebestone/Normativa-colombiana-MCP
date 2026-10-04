@@ -1,4 +1,5 @@
 /** Consulta temática desde el índice empaquetado: instantánea y sin depender del portal. */
+import type { ToolAnnotations } from '@modelcontextprotocol/sdk/types.js'
 import { z } from 'zod'
 
 import { estricto } from '../nucleo/normalizar.ts'
@@ -12,11 +13,22 @@ import * as gestor from '../fuentes/gestor.ts'
 export const TITULO = 'Buscar por tema y subtema'
 
 export const DESCRIPCION =
-  'Consulta temática oficial: devuelve tema, subtema y las normas, sentencias y conceptos asociados, desde ' +
-  'un índice empaquetado (instantáneo, funciona aunque el portal esté caído). Cada resultado trae temsubid ' +
-  '("ts-38872") y normid para pedir después explicar_relacion_tema. El prefijo "ts-" es parte del id: ' +
-  'pégalo tal cual y no lo cruces con el "sub-" ni el "tema-" de listar_catalogos, que son otras dos ' +
-  'taxonomías del portal con los mismos números.'
+  'Consulta temática oficial: devuelve tema, subtema y las normas, sentencias y conceptos asociados (hasta 8 ' +
+  'por fila). Responde desde un índice empaquetado, instantáneo y sin red; solo si el índice no tiene el ' +
+  'término consulta el portal del Gestor. limite cuenta filas de tema/subtema, no documentos. Cada fila trae ' +
+  'temsubid ("ts-38872") y normid: pásalos juntos, de la MISMA fila, a explicar_relacion_tema. El prefijo ' +
+  '"ts-" es parte del id: pégalo tal cual y no lo cruces con el "sub-" ni el "tema-" de listar_catalogos, que ' +
+  'son otras dos taxonomías del portal con los mismos números. Para una norma concreta usa resolver_cita; ' +
+  'para buscar palabras en los resúmenes, buscar_normas.'
+
+// openWorldHint va en true: sin red mientras el índice empaquetado tenga el término, pero si no
+// lo tiene cae al portal del Gestor (`gestor.tematica`).
+export const ANOTACIONES: ToolAnnotations = {
+  readOnlyHint: true,
+  destructiveHint: false,
+  idempotentHint: true,
+  openWorldHint: true,
+}
 
 const esquema = z.object({
   texto: z.string().describe('Tema a buscar, ej. "teletrabajo", "encargo", "prima de servicios"'),

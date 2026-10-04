@@ -17,6 +17,7 @@
  * encargo no toca `src/fuentes/**`; si otra herramienta necesita la ficha, el
  * salto es mover `citantesDe` a `corte.ts`, junto a `verificar`.
  */
+import type { ToolAnnotations } from '@modelcontextprotocol/sdk/types.js'
 import { z } from 'zod'
 
 import { estricto } from '../nucleo/normalizar.ts'
@@ -33,11 +34,22 @@ const TOPE_PORTAL = 100
 export const TITULO = 'Línea jurisprudencial: quién cita una sentencia'
 
 export const DESCRIPCION =
-  'Devuelve las providencias que la relatoría registra como CITANTES de una sentencia de la Corte Constitucional ' +
-  '(el bloque "citaciones" de su ficha oficial), con tipo, fecha, tema, la ruta para obtener_documento y el enlace, ' +
-  'en cabeza las SU y las C. Son citas, no una línea verificada: la respuesta repite que mencionar no es reiterar y ' +
-  'que la relación puede estar incompleta. La sentencia se identifica con la relatoría, con su ponente y su fecha ' +
-  'tal como los da la ficha.'
+  'Devuelve las providencias que la relatoría registra como CITANTES de una sentencia de la Corte ' +
+  'Constitucional (el bloque "citaciones" de su ficha oficial), con tipo, fecha, tema, la ruta para ' +
+  'obtener_documento y el enlace. Son citas, no una línea verificada: mencionar no es reiterar y la relación ' +
+  'puede estar incompleta. Se ordenan con las SU y las C en cabeza ANTES de aplicar limite, así que un limite ' +
+  'bajo deja fuera primero las T y los autos; el portal no registra más de 100 y no hay paginación. ' +
+  'Úsala cuando ya tienes ' +
+  'la sentencia y quieres saber quién la cita. Para encontrar sentencias sobre un tema usa ' +
+  'buscar_jurisprudencia; para leer o verificar la propia sentencia citada, resolver_cita. Solo cubre la ' +
+  'Corte Constitucional.'
+
+export const ANOTACIONES: ToolAnnotations = {
+  readOnlyHint: true,
+  destructiveHint: false,
+  idempotentHint: true,
+  openWorldHint: true,
+}
 
 const esquema = z.object({
   sentencia: z.string().describe('Cita de la sentencia, ej. "C-337/11", "T-099/24" o "SU-371/21"'),

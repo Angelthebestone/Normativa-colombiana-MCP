@@ -13,6 +13,7 @@
  * la resolución de citas de comparar_articulos (parsearCita → gestor.buscar →
  * obtenerNorma). No reimplementa nada.
  */
+import type { ToolAnnotations } from '@modelcontextprotocol/sdk/types.js'
 import { z } from 'zod'
 
 import { articulo as extraerArticulo, historial, indiceArticulos, type Cambio } from '../nucleo/parse.ts'
@@ -28,9 +29,18 @@ export const DESCRIPCION =
   'Devuelve la cadena de reformas que el Gestor anota sobre una norma: qué norma la modificó, adicionó, ' +
   'derogó, sustituyó... y qué artículo afectó cada cambio, con la nota literal citable. Las ordena por el año ' +
   'de la norma que introduce cada cambio (las notas sin año van al final, sin ordenar) y señala la última ' +
-  'reforma ANOTADA, que no es necesariamente la que rige: el portal no siempre anota todas las reformas. La ' +
-  'vigencia se consulta con resolver_cita. Con formato="json" devuelve {fecha_consulta, alcance, titulo, url, ' +
-  'total, cambios, ultima_reforma, avisos}, solo el objeto.'
+  'reforma ANOTADA, que no es necesariamente la que rige: el portal no siempre anota todas. articulo filtra ' +
+  'primero; desde y limite recortan después esa lista ya ordenada, y la última reforma se calcula sobre todo ' +
+  'lo filtrado, no sobre el tramo mostrado. Para la vigencia usa resolver_cita; para los cambios de varias ' +
+  'normas a partir de un año, cambios_desde; para comparar el texto antes y después, comparar_articulos. ' +
+  'Con formato="json" el objeto trae titulo, url, total, cambios, ultima_reforma y avisos.'
+
+export const ANOTACIONES: ToolAnnotations = {
+  readOnlyHint: true,
+  destructiveHint: false,
+  idempotentHint: true,
+  openWorldHint: true,
+}
 
 const esquema = z.object({
   cita: z.string().describe('Cita de la norma, ej. "Ley 100 de 1993"'),

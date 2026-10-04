@@ -1,4 +1,5 @@
 /** El restrictor: por qué una norma es pertinente para ESE subtema y no para otro. */
+import type { ToolAnnotations } from '@modelcontextprotocol/sdk/types.js'
 import { z } from 'zod'
 
 import { estricto } from '../nucleo/normalizar.ts'
@@ -16,6 +17,14 @@ export const DESCRIPCION =
   'concreto. Ambos identificadores deben salir de la MISMA fila de buscar_por_tema, y el temsubid va con su ' +
   'prefijo ("ts-38872"): un id de listar_catalogos (catalogo="subtemas") o de otros catálogos se rechaza aquí. Para ver todos los ' +
   'restrictores de una norma de una vez, usa obtener_documento con fuente="gestor" y mira su bloque "Temas asociados".'
+
+// El restrictor no viaja en el índice empaquetado: cada llamada lo pide al portal (`gestor.restrictor`).
+export const ANOTACIONES: ToolAnnotations = {
+  readOnlyHint: true,
+  destructiveHint: false,
+  idempotentHint: true,
+  openWorldHint: true,
+}
 
 const esquema = z.object({
   temsubid: z.string().describe('temsubid de buscar_por_tema, con su prefijo: "ts-38872"'),

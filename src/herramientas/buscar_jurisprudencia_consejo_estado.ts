@@ -1,4 +1,5 @@
 /** `buscar_jurisprudencia_consejo_estado`: providencias de SAMAI, con su radicado. */
+import type { ToolAnnotations } from '@modelcontextprotocol/sdk/types.js'
 import { z } from 'zod'
 
 import { estricto } from '../nucleo/normalizar.ts'
@@ -17,10 +18,20 @@ export const TITULO = 'Buscar jurisprudencia del Consejo de Estado'
 export const DESCRIPCION =
   'Providencias tituladas del Consejo de Estado, el supremo de lo contencioso administrativo (nulidad y ' +
   'restablecimiento, contratación estatal, nulidad electoral, reparación directa, conceptos de la Sala de ' +
-  'Consulta): tribunal DISTINTO de la Corte Constitucional y de la Suprema. Cada resultado trae el problema ' +
-  'jurídico y su respuesta, más el enlace a la ficha en SAMAI. ' +
+  'Consulta). Para la Corte Constitucional usa buscar_jurisprudencia; para la Suprema, ' +
+  'buscar_jurisprudencia_suprema; con un radicado concreto, resolver_cita. Cada resultado trae el problema ' +
+  'jurídico y su respuesta, el enlace a la ficha en SAMAI y el token con el que obtener_documento ' +
+  '(fuente="consejo") devuelve el texto. ' +
   'CÓMO BUSCA: con exacto=true (activado) busca la FRASE EXACTA y, si no aparece, se amplía solo a OR ' +
-  'avisándolo; en modo OR el número de páginas mide el corpus, no la pertinencia. Avanza con pagina.'
+  'avisándolo; en modo OR el número de páginas mide el corpus, no la pertinencia. Avanza con pagina; limite ' +
+  'recorta DENTRO de la página y lo que deja fuera no sale en la siguiente.'
+
+export const ANOTACIONES: ToolAnnotations = {
+  readOnlyHint: true,
+  destructiveHint: false,
+  idempotentHint: true,
+  openWorldHint: true,
+}
 
 const esquema = z.object({
   texto: z.string().describe('Términos a buscar, ej. "nulidad electoral", "liquidación del contrato"'),
@@ -80,49 +91,69 @@ export async function escribir(
         : 'Prueba con un término más general.'
     )
   }
+  // Sentencia y salvamento, o dos tesis de la misma providencia, llegan como
+  // entradas distintas del mismo radicado en la misma página: repetían entera la
+  // cabecera del proceso. Se agrupan por radicado en el orden de primera
+  // aparición, y cada documento conserva su token y sus tesis.
+  const porRadicado = new Map<string, consejo.Providencia[]>()
+  for (const p of r.items) {
+    const docs = porRadicado.get(p.radicado)
+    if (docs) docs.push(p)
+    else porRadicado.set(p.radicado, [p])
+  }
+  const documentos = r.items.length
+  const radicados = porRadicado.size
+  const conToken = r.items.some((p) => p.token)
+
+  const bloques = [...porRadicado.values()].map((docs) => {
+    const p = docs[0]!
+    const yaSalio = repetidos.get(p.radicado)
+    const cabecera = [
+      `- ${p.radicado}${p.clase ? ` (${p.clase})` : ''}` +
+        (yaSalio ? ` — REPETIDA: ya salió en la página ${yaSalio} con otras tesis; no la cuentes dos veces` : ''),
+      p.fecha ? `  Fecha del proceso: ${p.fecha}` : '',
+      p.sala ? `  Sala: ${p.sala}` : '',
+      p.ponente ? `  Ponente: ${p.ponente}` : '',
+      p.actor || p.demandado ? `  ${p.actor} contra ${p.demandado || '(sin demandado)'}` : '',
+      `  Ficha del proceso: ${p.url}`,
+    ].filter(Boolean)
+    const cuerpo = docs.flatMap((d) => [
+      // El token, una vez: cómo leerlo (obtener_documento o el enlace del
+      // navegador, que no pide la verificación anti-robot de la ficha) se
+      // explica una sola vez en el pie. Repetido por entrada, era la mitad del listado.
+      d.token ? `  token: ${d.token}` : '',
+      ...d.titulaciones.map(
+        (t) =>
+          `  · Problema jurídico: ${t.problema.slice(0, 400)}` +
+          (t.respuesta ? `\n    Respuesta: ${t.respuesta}` : '') +
+          (t.nota ? `\n    Nota de relatoría: ${t.nota.slice(0, 300)}` : '')
+      ),
+    ])
+    return [...cabecera, ...cuerpo].filter(Boolean).join('\n')
+  })
+
   return (
-    `${alcance([{ clave: 'consejo', detalle: `${r.items.length} providencia(s)` }])}\n\n` +
+    `${alcance([{ clave: 'consejo', detalle: `${documentos} providencia(s)` }])}\n\n` +
       `Página ${r.pagina} de ${r.paginas}${exacto && !r.ampliada ? ' (con la frase exacta)' : ''} en el Consejo de Estado; ` +
-      `se muestran ${r.items.length} providencia(s).\n` +
+      (documentos === radicados
+        ? `se muestran ${documentos} providencia(s).\n`
+        : `se muestran ${documentos} documento(s) de ${radicados} radicado(s).\n`) +
       // Lo dice la fuente según el modo: el aviso de OR solo acompaña a una búsqueda hecha en OR.
       `${r.nota ? `${r.nota}\n` : ''}\n` +
-      r.items
-        .map((p) => {
-          const yaSalio = repetidos.get(p.radicado)
-          const cabecera = [
-            `- ${p.radicado}${p.clase ? ` (${p.clase})` : ''}` +
-              (yaSalio ? ` — REPETIDA: ya salió en la página ${yaSalio} con otras tesis; no la cuentes dos veces` : ''),
-            p.fecha ? `  Fecha del proceso: ${p.fecha}` : '',
-            p.sala ? `  Sala: ${p.sala}` : '',
-            p.ponente ? `  Ponente: ${p.ponente}` : '',
-            p.actor || p.demandado ? `  ${p.actor} contra ${p.demandado || '(sin demandado)'}` : '',
-            `  Ficha del proceso: ${p.url}`,
-            // La ficha pide una verificación anti-robot; este enlace, que emite
-            // el propio buscador, abre la providencia sin pedir nada. Se dan los
-            // dos porque el primero es el citable y el segundo el que se lee.
-            p.token ? `  Leerla: ${consejo.enlaceProvidencia(p.token)}` : '',
-            p.token ? `  Texto completo: obtener_documento con fuente="consejo" y token="${p.token}"` : '',
-          ].filter(Boolean)
-          const tesis = p.titulaciones.map(
-            (t) =>
-              `  · Problema jurídico: ${t.problema.slice(0, 400)}` +
-              (t.respuesta ? `\n    Respuesta: ${t.respuesta}` : '') +
-              (t.nota ? `\n    Nota de relatoría: ${t.nota.slice(0, 300)}` : '')
-          )
-          return [...cabecera, ...tesis].join('\n')
-        })
-        .join('\n\n') +
+      bloques.join('\n\n') +
       (r.pagina < r.paginas ? `\n\nHay más: repite con pagina=${r.pagina + 1}.` : '') +
+      // Solo cuando hay repetidas: en una página sin ellas el aviso no informa de nada.
       (repetidos.size
-        ? `\n\n${repetidos.size} de estas ${r.items.length} ya se devolvieron en páginas anteriores de esta misma ` +
-          `búsqueda (${[...repetidos.keys()].join(', ')}): van marcadas arriba. SAMAI pagina por problema ` +
-          `jurídico y no por caso, así que ${r.items.length - repetidos.size} son nuevas.`
-        : `\n\nUNA PROVIDENCIA PUEDE REPETIRSE ENTRE PÁGINAS: SAMAI pagina por problema jurídico, no por caso, ` +
-          `así que un radicado con varias tesis puede reaparecer en la página siguiente. Aquí se marcan las que ` +
-          `ya salieron mientras se pagine la MISMA búsqueda; en esta página no hay ninguna.`) +
+        ? `\n\nUNA PROVIDENCIA PUEDE REPETIRSE ENTRE PÁGINAS: ${repetidos.size} de estos ${radicados} radicado(s) ` +
+          `ya se devolvieron en páginas anteriores de esta misma búsqueda y van marcados arriba. SAMAI pagina por ` +
+          `problema jurídico y no por caso, así que ${radicados - repetidos.size} son nuevos.`
+        : '') +
+      (conToken
+        ? `\n\nPara leer una: obtener_documento con fuente="consejo" y token=<token de la entrada>; en el ` +
+          `navegador, ${consejo.enlaceProvidencia('<token>')}`
+        : '') +
       `\n\nLa fecha que se muestra es la del PROCESO, no la de la providencia: esa se lee en su texto. ` +
       `LOS TOKENS CADUCAN EN UNA HORA: sirven para leer, no para citar. Para citar usa el radicado, que es ` +
-      `lo que se pega en ${consejo.BUSCADOR}: ` +
-      r.items.map((p) => p.radicado).join(' · ')
+      `lo que se pega en ${consejo.BUSCADOR}.`
   )
 }

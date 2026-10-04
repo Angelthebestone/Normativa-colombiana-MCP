@@ -19,9 +19,10 @@
  */
 import { articulo as articuloDelSenado, BASE_SENADO } from '../fuentes/senado.ts'
 import * as suin from '../fuentes/suin.ts'
-import { activa, alcance, avisoApagada } from '../nucleo/alcance.ts'
-import { referencia, type Codigo } from '../nucleo/codigos.ts'
+import { activa, avisoApagada } from '../nucleo/alcance.ts'
+import { equivalencia, referencia, type Codigo } from '../nucleo/codigos.ts'
 import type { Cita } from '../nucleo/citas.ts'
+import type { Resuelta } from './resolver_cita.ts'
 
 const SIN_CIFRAR =
   'La Secretaría del Senado solo sirve HTTP sin cifrar (su puerto 443 no abre): este texto viajó sin autenticar. ' +
@@ -38,12 +39,11 @@ export async function resolverCodigo(o: {
   /** Artículos pedidos, ya resueltos entre la cita y el parámetro `articulos`. */
   pedidos: string[]
   articuloIgnorado: string
-}): Promise<string> {
+}): Promise<Resuelta> {
   const { cita, c, codigo, pedidos, articuloIgnorado } = o
   const archivo = codigo.senado!
-  const equivalencia = c.codigo
-    ? `\n«${codigo.nombre}» se cita aquí como ${referencia(codigo)}, que es su norma contenedora y lo que hay que escribir en un escrito.`
-    : ''
+  // Aquí la tabla sí da el tipo oficial (Ley 84 de 1873): no hay título del Gestor con que contrastarlo.
+  const avisos = [c.codigo ? equivalencia(codigo, referencia(codigo)) : '', articuloIgnorado]
   const indice = `${BASE_SENADO}/${archivo}.html`
 
   // El estado de vigencia es el de la norma entera, de SUIN; el del artículo, en el enlace.
@@ -56,26 +56,35 @@ export async function resolverCodigo(o: {
   const epigrafe = f?.ok && f.ficha.epigrafe ? `${f.ficha.epigrafe}\n` : ''
   const suinUso = f ? [{ clave: 'suin', detalle: f.ok ? 'estado consultado' : 'sin ficha' }] : []
   const titulo = `${referencia(codigo)} — ${codigo.nombre}`
+  const base = { cita, clave: `senado:${archivo}`, titulo, avisos }
 
   if (!activa('senado')) {
-    return (
-      `### ${cita}${equivalencia}\n${alcance(suinUso)}\n${articuloIgnorado}${titulo}\n${epigrafe}` +
-      `${avisoApagada('senado')} Sin ella no hay dónde leer el texto del ${codigo.nombre}: el Gestor Normativo no lo ` +
-      `publica y SUIN-Juriscol no sirve el texto de sus documentos. No es que el artículo no exista: consúltalo en la ` +
-      `edición oficial.${vig}`
-    )
+    return {
+      ...base,
+      usos: suinUso,
+      ficha:
+        `${titulo}\n${epigrafe}` +
+        `${avisoApagada('senado')} Sin ella no hay dónde leer el texto del ${codigo.nombre}: el Gestor Normativo no lo ` +
+        `publica y SUIN-Juriscol no sirve el texto de sus documentos. No es que el artículo no exista: consúltalo en la ` +
+        `edición oficial.${vig}`,
+      articulos: [],
+    }
   }
 
   if (!pedidos.length) {
-    return (
-      `### ${cita}${equivalencia}\n${alcance([...suinUso])}\n${articuloIgnorado}${titulo}\n${epigrafe}` +
-      `El texto del ${codigo.nombre} se lee artículo por artículo desde la Secretaría del Senado: pídelo en la ` +
-      `cita ("art. 946 del ${codigo.nombre}") o con el parámetro articulos.\n` +
-      `URL: ${indice}${vig}`
-    )
+    return {
+      ...base,
+      usos: suinUso,
+      ficha:
+        `${titulo}\n${epigrafe}` +
+        `El texto del ${codigo.nombre} se lee artículo por artículo desde la Secretaría del Senado: pídelo en la ` +
+        `cita ("art. 946 del ${codigo.nombre}") o con el parámetro articulos.\n` +
+        `URL: ${indice}${vig}`,
+      articulos: [],
+    }
   }
 
-  const bloques: string[] = []
+  const articulos: string[] = []
   let actualizacion = ''
   let leidos = 0
   let tachados = false
@@ -85,33 +94,36 @@ export async function resolverCodigo(o: {
       leidos += 1
       actualizacion ||= r.actualizacion
       tachados ||= r.tachados
-      bloques.push(`\n\n--- Artículo ${numero} ---\nURL: ${r.url}\n${r.texto}`)
+      // Esta URL no repite la de la norma: es la página del artículo, donde el
+      // portal anota su vigencia y su jurisprudencia.
+      articulos.push(`--- Artículo ${numero} ---\nURL: ${r.url}\n${r.texto}`)
     } else if (r.razon === 'no-existe') {
-      bloques.push(
-        `\n\nNo encontré un "artículo ${numero}" en el ${codigo.nombre} de la Secretaría del Senado (${r.detalle}). ` +
+      articulos.push(
+        `No encontré un "artículo ${numero}" en el ${codigo.nombre} de la Secretaría del Senado (${r.detalle}). ` +
           `Comprueba el número; el texto está en ${indice}.`,
       )
     } else {
-      bloques.push(
-        `\n\nNo pude leer el artículo ${numero} del ${codigo.nombre}: ${r.detalle}. ` +
+      articulos.push(
+        `No pude leer el artículo ${numero} del ${codigo.nombre}: ${r.detalle}. ` +
           `Esto NO significa que no exista: vuelve a intentarlo o léelo en ${indice}.`,
       )
     }
   }
 
-  const avisos = [
-    tachados
-      ? 'Los apartes entre ~~ ~~ están TACHADOS en el portal: los declaró inexequibles o los derogó; no los cites como vigentes.'
-      : '',
-    leidos ? NOTAS_EN_EL_ENLACE : '',
-    leidos ? SIN_CIFRAR : '',
-  ].filter(Boolean)
-
-  return (
-    `### ${cita}${equivalencia}\n${alcance([{ clave: 'senado', detalle: `${leidos} de ${pedidos.length} artículo(s)` }, ...suinUso])}\n` +
-    `${articuloIgnorado}${titulo}\n${epigrafe}` +
-    (actualizacion ? `Texto de la Secretaría del Senado. ${actualizacion}\n` : '') +
-    `${vig.trimStart()}${bloques.join('')}` +
-    (avisos.length ? `\n\n${avisos.join('\n')}` : '')
-  )
+  return {
+    ...base,
+    usos: [{ clave: 'senado', detalle: `${leidos} de ${pedidos.length} artículo(s)` }, ...suinUso],
+    ficha:
+      `${titulo}\n${epigrafe}` +
+      (actualizacion ? `Texto de la Secretaría del Senado. ${actualizacion}\n` : '') +
+      vig.trimStart(),
+    articulos,
+    pie: [
+      tachados
+        ? 'Los apartes entre ~~ ~~ están TACHADOS en el portal: los declaró inexequibles o los derogó; no los cites como vigentes.'
+        : '',
+      leidos ? NOTAS_EN_EL_ENLACE : '',
+      leidos ? SIN_CIFRAR : '',
+    ].filter(Boolean),
+  }
 }

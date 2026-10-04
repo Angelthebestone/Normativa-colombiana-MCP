@@ -3,6 +3,7 @@
  * Normativo (constitución, ley, decreto, resolución, concepto) o a la relatoría
  * de la Corte Constitucional (jurisprudencia) y explica el carácter del nivel.
  */
+import type { ToolAnnotations } from '@modelcontextprotocol/sdk/types.js'
 import { z } from 'zod'
 import { estricto } from '../nucleo/normalizar.ts'
 import { caracterDelNivel, NIVELES, TIPO_GESTOR, type Nivel } from '../nucleo/jerarquia.ts'
@@ -13,12 +14,21 @@ import { buscarConRefuerzo } from './buscar_normas.ts'
 export const TITULO = 'Consultar normativa por nivel de autoridad'
 
 export const DESCRIPCION =
-  'Busca normativa colombiana por nivel de autoridad (constitución, ley, decreto, resolución, ' +
-  'concepto o jurisprudencia) y explica el carácter de cada nivel: vinculante, orientador o ' +
-  'informativo. Devuelve los documentos de ese nivel con su título y su enlace, y el carácter del ' +
-  'nivel. ÚSALA cuando la pregunta pida un nivel concreto (p. ej. "¿qué leyes hay sobre X?"); para ' +
-  'buscar sin nivel usa buscar_normas o buscar_por_tema. No es asesoría jurídica: verifica siempre ' +
-  'en el enlace.'
+  'Busca normativa colombiana de UN nivel de autoridad y explica su carácter: vinculante, orientador o ' +
+  'informativo. Devuelve los documentos de ese nivel con título y enlace, y el carácter del nivel. nivel ' +
+  'decide la fuente: "jurisprudencia" busca solo en la relatoría de la Corte Constitucional (para la Suprema ' +
+  'usa buscar_jurisprudencia_suprema; para el Consejo de Estado, buscar_jurisprudencia_consejo_estado); los ' +
+  'demás, en el Gestor filtrado por tipo, donde ' +
+  'texto se busca en los resúmenes, no en el articulado. ÚSALA cuando la pregunta pida un nivel concreto ' +
+  '(p. ej. "¿qué leyes hay sobre X?"); para buscar sin nivel usa buscar_normas o buscar_por_tema, y para el ' +
+  'texto de un artículo de la Constitución, resolver_cita. No es asesoría jurídica: verifica en el enlace.'
+
+export const ANOTACIONES: ToolAnnotations = {
+  readOnlyHint: true,
+  destructiveHint: false,
+  idempotentHint: true,
+  openWorldHint: true,
+}
 
 export const schema = estricto({
   // La jurisprudencia sale de la Corte Constitucional: con ella apagada

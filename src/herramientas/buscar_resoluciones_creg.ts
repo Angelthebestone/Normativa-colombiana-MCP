@@ -7,6 +7,7 @@
  * Reutiliza `buscar` de `fuentes/creg.ts`, que es quien habla con el portal.
  * Aquí solo va el esquema y el texto de la respuesta.
  */
+import type { ToolAnnotations } from '@modelcontextprotocol/sdk/types.js'
 import { z } from 'zod'
 
 import { estricto } from '../nucleo/normalizar.ts'
@@ -18,10 +19,20 @@ export const TITULO = 'Buscar resoluciones de la CREG (energía y gas)'
 
 export const DESCRIPCION =
   'Resoluciones de la Comisión de Regulación de Energía y Gas: tarifas, conexión, comercialización, plantas ' +
-  'solares y gas natural. Es la ÚNICA fuente sectorial cuyo texto se puede leer aquí (obtener_documento con ' +
-  'fuente="creg") y la única que publica una señal de vigencia, en compilaciones separadas de no derogadas y ' +
-  'derogadas; esa señal se traslada literal, no la conviertas en un sí o un no. Para leyes o decretos ' +
-  'nacionales de otros sectores usa resolver_cita.'
+  'solares y gas natural. Devuelve número, año, epígrafe, el estado según la compilación y la ruta para leer ' +
+  'el texto con obtener_documento (fuente="creg"): es la ÚNICA fuente sectorial con texto legible aquí. ' +
+  'Cada consulta recorre UNA compilación de UN año: texto filtra dentro de ese año (por número, año o ' +
+  'epígrafe, nunca por el contenido), así que para una resolución antigua pasa anio aunque ya pongas su ' +
+  'número en texto; "todas" junta vigentes y derogadas de ese mismo año. La señal de vigencia se traslada ' +
+  'literal, no la conviertas en un sí o un no. Para la UPME usa buscar_normativa_upme; para leyes o ' +
+  'decretos nacionales, resolver_cita.'
+
+export const ANOTACIONES: ToolAnnotations = {
+  readOnlyHint: true,
+  destructiveHint: false,
+  idempotentHint: true,
+  openWorldHint: true,
+}
 
 const esquema = z.object({
   texto: z.string().optional().describe('Filtra por número, año o epígrafe. Ej.: "solar", "gas natural", "101-104"'),

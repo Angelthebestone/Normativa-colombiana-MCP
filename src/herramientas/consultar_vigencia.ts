@@ -19,6 +19,7 @@
  * - `baja` — no consta, o la fuente no respondió (ficha caída, relatoría sin
  *            respuesta).
  */
+import type { ToolAnnotations } from '@modelcontextprotocol/sdk/types.js'
 import { z } from 'zod'
 
 import { estricto } from '../nucleo/normalizar.ts'
@@ -31,11 +32,20 @@ import * as suin from '../fuentes/suin.ts'
 export const TITULO = 'Consultar la vigencia de una norma'
 
 export const DESCRIPCION =
-  'Devuelve el estado de vigencia de una norma ("Vigente", "Derogado", "Vigencia en Estudio", "Compilado"... tal ' +
-  'como lo publica la ficha de SUIN, para leyes y decretos) con un nivel de confianza: alta (la ficha respondió) o ' +
-  'baja (no consta, o la fuente no respondió). Una sentencia ("C-337/11") no se consulta en SUIN: se verifica en la ' +
-  'relatoría de la Corte Constitucional y se dice si existe. Nunca inventa el estado: si no consta, lo dice y ' +
-  'orienta. La respuesta encabeza con la línea de alcance (qué fuente se consultó y cuál no).'
+  'Devuelve el estado de vigencia de una ley o un decreto tal como lo publica la ficha de SUIN: "Vigente", ' +
+  '"Derogado", "Vigencia en Estudio", "Compilado" u otro. Añade un nivel de confianza. Alta: la ficha ' +
+  'respondió. Baja: no consta, o la fuente no respondió. Nunca inventa el estado. Una sentencia como ' +
+  '"C-337/11" no tiene vigencia: se comprueba en la relatoría de la Corte Constitucional si existe. El estado ' +
+  'es el de la norma entera, aunque la cita nombre un artículo. Para las reformas de un artículo usa ' +
+  'historial_norma; para su texto, resolver_cita. Si la cita no trae año y hay varias candidatas, las lista en ' +
+  'vez de elegir. La respuesta empieza con la línea de alcance: qué fuente se consultó y cuál no.'
+
+export const ANOTACIONES: ToolAnnotations = {
+  readOnlyHint: true,
+  destructiveHint: false,
+  idempotentHint: true,
+  openWorldHint: true,
+}
 
 const esquema = z.object({
   cita: z.string().describe('Cita de la norma, ej. "Ley 909 de 2004" o "Decreto 1072 de 2015"'),

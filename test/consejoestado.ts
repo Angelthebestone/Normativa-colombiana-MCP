@@ -7,7 +7,7 @@ import { strict as assert } from 'node:assert'
 import { readFileSync } from 'node:fs'
 import test from 'node:test'
 
-import { buscar, enlaceBusqueda } from '../src/fuentes/jurisprudencia/consejoestado.ts'
+import { buscar, enlaceBusqueda, type Providencia } from '../src/fuentes/jurisprudencia/consejoestado.ts'
 import { escribir } from '../src/herramientas/buscar_jurisprudencia_consejo_estado.ts'
 import type { pedir, Respuesta } from '../src/nucleo/http.ts'
 import { CanarioError } from '../src/nucleo/parse.ts'
@@ -137,4 +137,67 @@ test('una frase sin resultados que se amplía antepone el aviso y declara el mod
   assert.match(s, /AVISO: la frase exacta "nulidad electoral" no apareció/)
   assert.match(s, /AMPLIADA, con las palabras unidas por OR/)
   assert.doesNotMatch(s, /con la frase exacta\)/)
+})
+
+// --- forma del listado: token una vez, radicado agrupado, pie sin repeticiones ---
+
+/** Providencia FICTICIA: solo se prueba la forma del listado. */
+const doc = (radicado: string, token: string, problema: string): Providencia => ({
+  radicado,
+  fecha: '2015-03-01',
+  ponente: 'Ponente (fixture)',
+  sala: 'Sección Tercera',
+  clase: 'Reparación directa',
+  actor: 'Actor (fixture)',
+  demandado: 'Demandado (fixture)',
+  titulaciones: [{ problema, respuesta: '', nota: '' }],
+  url: `https://samai/ficha/${radicado}`,
+  token,
+})
+
+/** `buscar` inyectado que devuelve una página fija de un total de `paginas`. */
+const unaPagina = (items: Providencia[], pagina = 1, paginas = 3) => ({
+  buscar: (async () => ({ paginas, pagina, items, url: 'https://samai/x', omitidos: 0 })) as typeof buscar,
+})
+
+test('cada token sale una vez y la explicación de cómo leerlo, una vez en el pie', async () => {
+  const items = Array.from({ length: 10 }, (_, i) => doc(`5000123330002015000${10 + i}01`, `TOKEN-${i}`, `¿Tesis ${i}?`))
+  const s = await escribir({ texto: 'token unico', exacto: true, pagina: 1, limite: 10 }, unaPagina(items))
+  for (let i = 0; i < 10; i++) assert.equal(s.split(`TOKEN-${i}`).length - 1, 1, `TOKEN-${i}`)
+  assert.equal(s.match(/Para leer una: obtener_documento con fuente="consejo"/g)?.length, 1)
+  assert.equal(s.match(/Ficha del proceso:/g)?.length, 10)
+})
+
+test('dos documentos del mismo radicado comparten cabecera y conservan su token y sus tesis', async () => {
+  const RAD = '50001233300020150008801'
+  const s = await escribir(
+    { texto: 'mismo radicado', exacto: true, pagina: 1, limite: 10 },
+    unaPagina([doc(RAD, 'TOKEN-SENTENCIA', '¿Procede la reparación?'), doc(RAD, 'TOKEN-SALVAMENTO', '¿Salva el voto?')]),
+  )
+  assert.equal(s.split(`- ${RAD}`).length - 1, 1)
+  assert.equal(s.match(/Ficha del proceso:/g)?.length, 1)
+  assert.ok(s.indexOf('token: TOKEN-SENTENCIA') < s.indexOf('¿Procede la reparación?'))
+  assert.ok(s.indexOf('¿Procede la reparación?') < s.indexOf('token: TOKEN-SALVAMENTO'))
+  assert.ok(s.indexOf('token: TOKEN-SALVAMENTO') < s.indexOf('¿Salva el voto?'))
+  assert.match(s, /se muestran 2 documento\(s\) de 1 radicado\(s\)/)
+})
+
+test('el aviso de repetidas solo sale cuando la página trae alguna ya vista en esta búsqueda', async () => {
+  const A = '11001032600020190000100'
+  const B = '11001032600020190000200'
+  const primera = await escribir(
+    { texto: 'repetidas entre paginas', exacto: true, pagina: 1, limite: 10 },
+    unaPagina([doc(A, 'T-A1', '¿Uno?')], 1),
+  )
+  assert.doesNotMatch(primera, /UNA PROVIDENCIA PUEDE REPETIRSE/)
+  // La lista de radicados ya mostrados no se repite en el pie.
+  assert.equal(primera.split(A).length - 1, 2, 'el radicado sale en la cabecera y en la URL de la ficha, no en el pie')
+
+  const segunda = await escribir(
+    { texto: 'repetidas entre paginas', exacto: true, pagina: 2, limite: 10 },
+    unaPagina([doc(A, 'T-A2', '¿Otra tesis?'), doc(B, 'T-B', '¿Dos?')], 2),
+  )
+  assert.match(segunda, new RegExp(`- ${A} \\(Reparación directa\\) — REPETIDA: ya salió en la página 1`))
+  assert.match(segunda, /UNA PROVIDENCIA PUEDE REPETIRSE/)
+  assert.match(segunda, /así que 1 son nuevos/)
 })

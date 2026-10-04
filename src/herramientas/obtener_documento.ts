@@ -12,6 +12,7 @@
  * siempre. Con `entero=true` se escribe el documento a disco y se devuelve la
  * ruta con un trozo de lectura; con `ruta_destino` se descarga tal cual.
  */
+import type { ToolAnnotations } from '@modelcontextprotocol/sdk/types.js'
 import { mkdir, mkdtemp, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -37,7 +38,7 @@ import {
 } from '../nucleo/parse.ts'
 import { NoExisteError } from '../nucleo/parse.ts'
 import { pedir as pedirHttp } from '../nucleo/http.ts'
-import { descargarA } from '../nucleo/descargas.ts'
+import { descargarA, sinColision } from '../nucleo/descargas.ts'
 import { parsearCita } from '../nucleo/citas.ts'
 import { extraerTextoWord } from '../fuentes/sectorial/word.ts'
 import { textoDePdfSectorial, avisoEscaneo } from '../fuentes/sectorial/pdf.ts'
@@ -61,10 +62,21 @@ export const DESCRIPCION =
   'Devuelve el texto (troceado, nunca entero) de una de las siete fuentes con texto. CADA FUENTE EXIGE LO ' +
   'SUYO y los parámetros de otra no valen con ella: gestor necesita id; corte, ruta; suprema, ruta y sala; ' +
   'consejo, token; dian, link; creg, ruta; sectorial, entidad y url. Una combinación que no encaje se ' +
-  'rechaza antes de salir a la red, diciendo qué falta y el ejemplo mínimo que funciona. Dentro del texto: ' +
-  'buscar_en_texto localiza un término, articulo (gestor) o seccion (corte, suprema, consejo) una parte puntual, e historial ' +
-  '(gestor) los cambios anotados. Respeta limite_caracteres (200–40.000, por defecto 8000), informa ' +
-  'total/mostrado/omitido y devuelve el "desde" exacto del trozo siguiente.'
+  'rechaza antes de salir a la red, diciendo qué falta y el ejemplo mínimo que funciona. Qué parte sale: ' +
+  'historial (gestor) da los cambios anotados en vez del texto, del artículo si va con articulo; articulo ' +
+  '(gestor) o seccion (cortes) acotan y entonces buscar_en_texto no se aplica; desde solo avanza el troceo, ' +
+  'no los pasajes de buscar_en_texto. Informa total/mostrado/omitido y el "desde" del trozo siguiente. ' +
+  'ESCRIBE EN DISCO solo con entero o ruta_destino, que se imponen a todo lo anterior: dian y sectorial ' +
+  'guardan el archivo original; las demás, texto-<fuente>.txt (sin ruta_destino, en una carpeta temporal); ' +
+  'consejo no lo admite. Nunca sobrescribe: un nombre repetido lleva sufijo. Para encontrar el documento usa ' +
+  'antes resolver_cita o el buscador de su fuente.'
+
+export const ANOTACIONES: ToolAnnotations = {
+  readOnlyHint: false,
+  destructiveHint: false,
+  idempotentHint: false,
+  openWorldHint: true,
+}
 
 /** El esquema común a todas las fuentes. */
 const comun = {
@@ -688,6 +700,7 @@ export type DepsLectura = {
   pedirBytes?: typeof import('../nucleo/http.ts')['pedirBytes']
   extraerPdf?: (bytes: Uint8Array) => Promise<string>
   descomprimirZip?: (bytes: Uint8Array) => Promise<Uint8Array | null>
+  obtenerNorma?: typeof gestor.obtenerNorma
 }
 
 /**
@@ -784,7 +797,7 @@ async function enteroDocumento(p: Resueltas, tope: number, deps: DepsLectura = {
   let origen = ''
   if (p.fuente === 'gestor') {
     if (!p.id) throw new Error('Para fuente="gestor" hace falta id.')
-    const n = await gestor.obtenerNorma(p.id)
+    const n = await (deps.obtenerNorma ?? gestor.obtenerNorma)(p.id)
     texto = n.texto
     origen = n.url
   } else if (p.fuente === 'corte') {
@@ -812,7 +825,9 @@ async function enteroDocumento(p: Resueltas, tope: number, deps: DepsLectura = {
     )
   }
   await mkdir(destino, { recursive: true })
-  const txt = join(destino, `texto-${p.fuente}.txt`)
+  // Con sufijo si ya existe: guardar dos veces el texto de la misma fuente en la
+  // misma carpeta reemplazaba en silencio el primero.
+  const txt = await sinColision(join(destino, `texto-${p.fuente}.txt`))
   await writeFile(txt, texto, 'utf8')
   return `Archivo guardado en: ${txt} (${texto.length} caracteres).\n\nURL de origen: ${origen}\n\n--- Texto (primeros caracteres) ---\n${trocear(texto, 0, tope).texto}`
 }
