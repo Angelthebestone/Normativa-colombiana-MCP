@@ -45,3 +45,8 @@ command-code-session-*
 CALIDAD_HERRAMIENTAS_GLAMA.md
 HANDOFF*.md
 INFORME-*.md
+calificaciones-glama.md
+# Worktrees de otros agentes dentro del repositorio: son copias enteras del
+# proyecto. En 1.15.2 se coló .kilo/worktrees/season-barometer con los índices
+# duplicados y la extensión pasó de 1,5 a 2,3 MB.
+.kilo/
