@@ -34,7 +34,7 @@ import * as buscarNormativaSectorial from './herramientas/buscar_normativa_secto
 import * as describirFuentes from './herramientas/describir_fuentes.ts'
 import * as obtenerDocumento from './herramientas/obtener_documento.ts'
 import { redResumen, VERSION } from './nucleo/http.ts'
-import { avisoVersion } from './nucleo/actualizacion.ts'
+import { avisoVersion, iniciarAvisoVersion } from './nucleo/actualizacion.ts'
 import './fuentes/sectorial/registro.ts'
 import { fechaBogota } from './nucleo/fecha.ts'
 import { INSTRUCCIONES } from './servidor/instrucciones.ts'
@@ -202,3 +202,4 @@ registrarHerramienta('expediente', expedientes)
 registrarPrompts(server)
 
 await server.connect(new StdioServerTransport())
+iniciarAvisoVersion()

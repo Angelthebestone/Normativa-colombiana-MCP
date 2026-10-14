@@ -5,8 +5,13 @@ Este proyecto sigue [versionado semántico](https://semver.org/lang/es/).
 
 ## [Sin publicar]
 
+### Añadido
+
+- **Actualización continua para quien usa npx.** El README y todos los ejemplos de configuración lanzan `npx -y normativa-colombia-mcp@latest`. Sin `@latest`, npx reutiliza la copia de su caché y no vuelve a mirar el registro: quien instaló una vez se quedaba en esa versión indefinidamente.
+
 ### Cambiado
 
+- **El aviso de versión nueva cubre también los parches** (antes solo mayores y menores) y arranca en segundo plano al conectar, así que la primera respuesta de la sesión ya puede llevarlo en vez de la segunda. Sigue saliendo una sola vez, sigue callando si npm no contesta en 3 s y su texto ya no promete que npx «se actualiza sola»: indica `@latest` y, para el `.mcpb`, el enlace al último release. El estado del aviso vive en una instancia (`crearAvisoVersion`), no en variables del módulo.
 - **`resolver_cita` rechaza `cita` y `citas` a la vez**, con `validar` o sin él, antes de consultar ninguna fuente («Usa cita (una) o citas (un lote), no las dos»). Antes el lote mandaba y la cita suelta se descartaba con un aviso (o en silencio, con `validar: true`).
 - **El lote `citas` lleva entre 1 y 20 citas** (`MAX_LOTE`), en `resolver_cita` y en `validar_cita`. El esquema publica `minItems`/`maxItems`; un lote vacío o de 21 es un error de esquema que dice el tope. Un escrito con más citas se valida en varias llamadas.
 
