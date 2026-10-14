@@ -86,7 +86,7 @@ export function adaptadorNormograma(cfg: ConfigNormograma): Adaptador {
     const limite = Math.min(Math.max(opts.limite ?? 20, 1), 100)
     const desde = (pagina - 1) * limite
 
-    const items: ActoSectorial[] = datos.slice(desde, desde + limite).map((h) => ({
+    const todos: ActoSectorial[] = datos.map((h) => ({
       tipo: h.tipo?.trim() || 'Sin clasificar',
       numero: h.numero?.trim() ?? '',
       anio: h.year?.trim() ?? '',
@@ -99,14 +99,16 @@ export function adaptadorNormograma(cfg: ConfigNormograma): Adaptador {
     // Con solo_entidad=true se recorta a los tipos que la propia entidad expide:
     // el normograma mezcla la compilación completa del sector (leyes, decretos
     // del Ministerio, sentencias), y a veces solo interesa el acto de la entidad.
-    let filtrados = items
+    // Se filtra la lista entera ANTES de paginar: filtrar la página la dejaba
+    // corta y el total decía el tamaño de la página, no lo que reúne el filtro.
+    let filtrados = todos
     let nota: string | undefined
     if (opts.solo_entidad === true) {
-      filtrados = filtrarSoloEntidad(items, cfg.tiposDocumento)
+      filtrados = filtrarSoloEntidad(todos, cfg.tiposDocumento)
       nota = `solo_entidad=true: se filtraron los actos a los tipos propios de la entidad (${cfg.tiposDocumento.join(', ')}).`
     }
 
-    return { items: filtrados, total: filtrados.length, url, ...(nota ? { nota } : {}) }
+    return { items: filtrados.slice(desde, desde + limite), total: filtrados.length, url, ...(nota ? { nota } : {}) }
   }
 
   return {

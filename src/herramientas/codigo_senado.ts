@@ -1,7 +1,6 @@
 /**
  * Resolución de un código cuyo texto sale de la Secretaría del Senado: hoy, el
- * Código Civil (Ley 84 de 1873), que el Gestor Normativo no publica y cuya ficha
- * en SUIN no sirve el texto.
+ * Código Civil (Ley 84 de 1873), que el Gestor Normativo no publica.
  *
  * Es la rama de `resolver_cita` para los códigos con `senado` en la tabla de
  * `nucleo/codigos.ts`. Vive fuera de `index.ts` por lo mismo que `validar_cita`:
@@ -64,8 +63,8 @@ export async function resolverCodigo(o: {
       usos: suinUso,
       ficha:
         `${titulo}\n${epigrafe}` +
-        `${avisoApagada('senado')} Sin ella no hay dónde leer el texto del ${codigo.nombre}: el Gestor Normativo no lo ` +
-        `publica y SUIN-Juriscol no sirve el texto de sus documentos. No es que el artículo no exista: consúltalo en la ` +
+        `${avisoApagada('senado')} Sin ella no hay dónde leer aquí el texto del ${codigo.nombre}: el Gestor Normativo no lo ` +
+        `publica. No es que el artículo no exista: consúltalo en la ` +
         `edición oficial.${vig}`,
       articulos: [],
     }
