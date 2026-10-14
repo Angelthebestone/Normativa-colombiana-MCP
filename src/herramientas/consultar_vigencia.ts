@@ -25,7 +25,7 @@ import { z } from 'zod'
 import { estricto } from '../nucleo/normalizar.ts'
 import { activa, alcance, avisoApagada } from '../nucleo/alcance.ts'
 import { idTipo, parsearCita, candidatosAmbiguos } from '../nucleo/citas.ts'
-import * as corte from '../fuentes/jurisprudencia/corte.ts'
+import * as corte from '../fuentes/jurisprudencia/corte/index.ts'
 import * as gestor from '../fuentes/gestor/index.ts'
 import * as suin from '../fuentes/suin.ts'
 

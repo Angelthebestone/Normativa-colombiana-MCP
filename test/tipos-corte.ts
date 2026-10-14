@@ -8,7 +8,7 @@ import { strict as assert } from 'node:assert'
 import test from 'node:test'
 import { z } from 'zod'
 
-import { normalizarTipo } from '../src/fuentes/jurisprudencia/corte.ts'
+import { normalizarTipo } from '../src/fuentes/jurisprudencia/corte/index.ts'
 
 // El mismo esquema que registra index.ts para `tipos`.
 const tipos = z

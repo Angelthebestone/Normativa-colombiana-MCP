@@ -8,7 +8,7 @@ import { strict as assert } from 'node:assert'
 import test from 'node:test'
 
 import type * as anla from '../src/fuentes/anla.ts'
-import type * as consejo from '../src/fuentes/jurisprudencia/consejoestado.ts'
+import type * as consejo from '../src/fuentes/jurisprudencia/consejoestado/index.ts'
 import { consultarAmbiental, consultarContratacion, perfil, perfiles } from '../src/nucleo/perfiles.ts'
 
 test('el registro trae los cinco perfiles', () => {

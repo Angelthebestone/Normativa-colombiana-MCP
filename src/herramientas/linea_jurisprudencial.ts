@@ -23,7 +23,7 @@ import { z } from 'zod'
 import { estricto } from '../nucleo/normalizar.ts'
 import { alcance } from '../nucleo/alcance.ts'
 import { pedir as http } from '../nucleo/http.ts'
-import * as corte from '../fuentes/jurisprudencia/corte.ts'
+import * as corte from '../fuentes/jurisprudencia/corte/index.ts'
 
 const BASE = 'https://www.corteconstitucional.gov.co/relatoria'
 const BUSCADOR = `${BASE}/buscador_new/?`

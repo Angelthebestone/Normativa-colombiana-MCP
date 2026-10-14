@@ -8,7 +8,7 @@ import { z } from 'zod'
 import { estricto } from '../nucleo/normalizar.ts'
 import { caracterDelNivel, NIVELES, TIPO_GESTOR, type Nivel } from '../nucleo/jerarquia.ts'
 import { alcance, proyectar } from '../nucleo/alcance.ts'
-import * as corte from '../fuentes/jurisprudencia/corte.ts'
+import * as corte from '../fuentes/jurisprudencia/corte/index.ts'
 import { buscarConRefuerzo } from './buscar_normas.ts'
 
 export const TITULO = 'Consultar normativa por nivel de autoridad'

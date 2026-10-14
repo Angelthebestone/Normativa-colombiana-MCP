@@ -15,7 +15,7 @@ import {
   ordenarCitantes,
   type Citaciones,
 } from '../src/herramientas/linea_jurisprudencial.ts'
-import type { Providencia, VerificacionSentencia } from '../src/fuentes/jurisprudencia/corte.ts'
+import type { Providencia, VerificacionSentencia } from '../src/fuentes/jurisprudencia/corte/index.ts'
 
 const BASE: Providencia = {
   id: '2204',
