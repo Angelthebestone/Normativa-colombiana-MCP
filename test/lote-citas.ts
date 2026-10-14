@@ -8,7 +8,7 @@ import { strict as assert } from 'node:assert'
 import test from 'node:test'
 
 import type * as gestor from '../src/fuentes/gestor.ts'
-import type * as suin from '../src/fuentes/suin.ts'
+import type * as suin from '../src/fuentes/suin/index.ts'
 import * as resolverCita from '../src/herramientas/resolver_cita.ts'
 import * as validar from '../src/herramientas/validar_cita.ts'
 import type { Resultado } from '../src/nucleo/parse.ts'

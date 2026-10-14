@@ -18,7 +18,7 @@
  *   al enlace, donde están.
  */
 import { articulo as articuloDelSenado, BASE_SENADO } from '../fuentes/senado.ts'
-import * as suin from '../fuentes/suin.ts'
+import * as suin from '../fuentes/suin/index.ts'
 import { activa, avisoApagada } from '../nucleo/alcance.ts'
 import { equivalencia, referencia, type Codigo } from '../nucleo/codigos.ts'
 import type { Cita } from '../nucleo/citas.ts'

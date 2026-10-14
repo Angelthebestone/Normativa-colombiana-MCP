@@ -12,7 +12,7 @@ import test from 'node:test'
 import { gzipSync } from 'node:zlib'
 
 import { parsearCita, idTipo, rutaDeSentencia } from '../src/nucleo/citas.ts'
-import { claveSuin, ficha, fichasDe } from '../src/fuentes/suin.ts'
+import { claveSuin, ficha, fichasDe } from '../src/fuentes/suin/index.ts'
 import { mereceAviso } from '../src/nucleo/actualizacion.ts'
 import * as dian from '../src/fuentes/normograma.ts'
 import * as suprema from '../src/fuentes/jurisprudencia/cortesuprema.ts'
