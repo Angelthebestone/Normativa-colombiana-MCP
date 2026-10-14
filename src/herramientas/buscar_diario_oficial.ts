@@ -7,7 +7,7 @@
  * declarado en cada respuesta: el listado no dice qué normas trae cada diario,
  * y el PDF del diario no tiene enlace estable.
  *
- * Reutiliza `buscar` de `fuentes/diario_oficial.ts`, que es quien habla con el
+ * Reutiliza `buscar` de `fuentes/diario_oficial/index.ts`, que es quien habla con el
  * portal (sesión JSF por llamada, canario por forma). Aquí solo va el esquema,
  * las validaciones que evitan consultar en vano y el texto de la respuesta.
  */
@@ -15,7 +15,7 @@ import type { ToolAnnotations } from '@modelcontextprotocol/sdk/types.js'
 import { z } from 'zod'
 
 import { estricto } from '../nucleo/normalizar.ts'
-import { BASE, MAXIMO, TIPOS, buscar, fechaPortal, type Resultado } from '../fuentes/diario_oficial.ts'
+import { BASE, MAXIMO, TIPOS, buscar, fechaPortal, type Resultado } from '../fuentes/diario_oficial/index.ts'
 
 export const TITULO = 'Buscar en el Diario Oficial (Imprenta Nacional)'
 

@@ -45,7 +45,7 @@ import { pedir, restablecer } from '../src/nucleo/http.ts'
 import { diagnosticarRespuesta } from '../src/nucleo/portal-roto.ts'
 import { enlaceBusqueda } from '../src/fuentes/jurisprudencia/consejoestado.ts'
 import { BASE_SENADO } from '../src/fuentes/senado.ts'
-import { BASE as BASE_DIARIO } from '../src/fuentes/diario_oficial.ts'
+import { BASE as BASE_DIARIO } from '../src/fuentes/diario_oficial/index.ts'
 
 /** Límite del primer intento: por encima de esto el portal se considera lento. */
 const LIMITE_MS = 2000
@@ -209,7 +209,7 @@ export const PORTALES: Portal[] = [
   },
   {
     nombre: 'Diario Oficial (Imprenta Nacional)',
-    // Consulta pública del Diario Oficial (src/fuentes/diario_oficial.ts, `BASE`).
+    // Consulta pública del Diario Oficial (src/fuentes/diario_oficial/index.ts, `BASE`).
     // El GET sirve el formulario y la tabla; la búsqueda en sí es un POST con
     // ViewState y cookie, que el sondeo NO hace (sería caro y con estado).
     url: BASE_DIARIO,
