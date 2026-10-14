@@ -37,6 +37,7 @@ import { CanarioError, cargar, colapsarEspacios, sinTildes } from '../../nucleo/
 import { pedir } from '../../nucleo/http.ts'
 import { advertenciaPortalRoto } from '../../nucleo/portal-roto.ts'
 import type * as cheerio from 'cheerio/slim'
+import type { AnyNode } from 'domhandler'
 import type { Adaptador, ActoSectorial, OpcionesSectorial, ResultadoSectorial } from '../sectorial.ts'
 
 const BASE = 'https://www.parquesnacionales.gov.co'
@@ -62,13 +63,13 @@ function fechaDe(texto: string): string {
  * Circulares) o tarjetas del widget de "documentos" del tema gov.co
  * (Decretos). Se buscan ambas y se usa la que aparezca.
  */
-function contenedores($: cheerio.CheerioAPI, $panel: cheerio.Cheerio<any>) {
+function contenedores($: cheerio.CheerioAPI, $panel: cheerio.Cheerio<AnyNode>) {
   const filas = $panel.find('table tr').filter((_, tr) => $(tr).find('a[href]:not([href^="#"])').length > 0)
   if (filas.length) return filas
   return $panel.find('.box-docgd').filter((_, div) => $(div).find('a.documento-normativa[href]').length > 0)
 }
 
-function extraer($unidad: cheerio.Cheerio<any>, tipo: string): ActoSectorial | null {
+function extraer($unidad: cheerio.Cheerio<AnyNode>, tipo: string): ActoSectorial | null {
   // `a.documento-normativa` primero: el icono `a.url-archivo` que lo precede
   // en el DOM trae un href relativo incompleto (ver comentario de cabecera).
   const $a = $unidad.find('a.documento-normativa[href]').first().length
