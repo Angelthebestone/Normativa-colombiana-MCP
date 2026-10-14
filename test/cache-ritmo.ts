@@ -219,6 +219,26 @@ test('circuit breaker: pasada la pausa, una respuesta buena restablece el host',
   }
 })
 
+test('circuit breaker: tres redirecciones canónicas seguidas (añadir la barra final) no degradan el host', async () => {
+  // Superfinanciera responde `301 /10115974 → /10115974/` en cada listado anual; contarlas como fallo
+  // armaba la pausa de 60 s y la fuente devolvía siempre «degradada».
+  const srv = createServer((req, res) => {
+    res.writeHead(301, { location: `http://${req.headers.host}${req.url}/` })
+    res.end()
+  })
+  await new Promise<void>((ok) => srv.listen(0, '127.0.0.1', ok))
+  const host = `127.0.0.1:${(srv.address() as { port: number }).port}`
+  try {
+    for (const id of ['10115974', '10115975', '10115976', '10115977']) {
+      const r = await http.pedir(`http://${host}/${id}`)
+      assert.equal(r.status, 301, `la petición ${id} llegó a la fuente`)
+    }
+    assert.equal(http.estadoDe(host).degradado, false)
+  } finally {
+    srv.close()
+  }
+})
+
 test('circuit breaker: una petición que responde restablece el host', async () => {
   // Servidor local: antes esta prueba pedía a un portal real dentro de una suite «sin red»
   // y tragaba el fallo con un `.catch(() => {})`, así que no comprobaba nada.

@@ -49,6 +49,7 @@
  *   art. 151, que fecha un subsistema, no la norma).
  */
 import { sinTildes } from './parse/texto.ts'
+import { fechaBogota } from './fecha.ts'
 
 export type ClaseVacancia =
   | 'inmediata'
@@ -189,9 +190,6 @@ function sumarDias(iso: string, dias: number): string {
   const t = new Date(Date.UTC(a, m - 1, d + dias))
   return `${t.getUTCFullYear()}-${String(t.getUTCMonth() + 1).padStart(2, '0')}-${String(t.getUTCDate()).padStart(2, '0')}`
 }
-
-const hoyISO = (hoy: Date): string =>
-  `${hoy.getFullYear()}-${String(hoy.getMonth() + 1).padStart(2, '0')}-${String(hoy.getDate()).padStart(2, '0')}`
 
 // --- localizar el artículo de vigencia -------------------------------------
 
@@ -447,7 +445,7 @@ export function analizarVacancia(texto: string, opciones: { publicacion?: string
   if (determinaciones === 1 && fechas.length === 1) {
     const desde = fechas[0]!
     const c = todas.find((x) => x.tipo === 'fecha')!
-    const llego = hoyISO(hoy) >= desde
+    const llego = fechaBogota(hoy) >= desde
     return {
       ...base,
       clase: 'fecha-fija',
@@ -474,7 +472,7 @@ export function analizarVacancia(texto: string, opciones: { publicacion?: string
       }
     }
     const desde = c.unidad === 'dias' ? sumarDias(publicacion, c.plazo!) : sumarMeses(publicacion, c.plazo!)
-    const llego = hoyISO(hoy) >= desde
+    const llego = fechaBogota(hoy) >= desde
     return {
       ...base,
       clase: 'relativa',
@@ -515,5 +513,5 @@ export function analizarVacancia(texto: string, opciones: { publicacion?: string
 export function enVacancia(v: Vacancia, hoy: Date = new Date()): boolean | null {
   if (v.clase === 'inmediata') return false
   if (!v.desde) return null
-  return hoyISO(hoy) < v.desde
+  return fechaBogota(hoy) < v.desde
 }

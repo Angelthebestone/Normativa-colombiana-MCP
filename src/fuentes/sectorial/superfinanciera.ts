@@ -33,6 +33,7 @@ import { cargar } from '../../nucleo/parse/limpieza.ts'
 import { colapsarEspacios, limpiarTermino, sinTildes } from '../../nucleo/parse/texto.ts'
 import { pedir } from '../../nucleo/http.ts'
 import type { Adaptador, ActoSectorial } from '../sectorial.ts'
+import { anioBogota } from '../../nucleo/fecha.ts'
 
 const BASE = 'https://www.superfinanciera.gov.co'
 const INDICE = `${BASE}/publicaciones/20149/`
@@ -145,7 +146,7 @@ export default {
     'fila es solo día y mes; el año se toma de la página en la que aparece, no del propio acto. No publica vigencia.',
 
   async buscar(opts): Promise<{ items: ActoSectorial[]; total?: number; nota?: string; url: string }> {
-    const anio = opts.anio?.trim() || String(new Date().getFullYear())
+    const anio = opts.anio?.trim() || String(anioBogota())
     if (!/^\d{4}$/.test(anio)) throw new Error(`Año inválido: "${anio}". Usa cuatro dígitos, p.ej. "2024".`)
 
     const mapa = await indice()
