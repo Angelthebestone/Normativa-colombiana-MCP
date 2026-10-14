@@ -68,6 +68,7 @@ test('las 28 herramientas se declaran con esquemas utilizables', CONTRATO, async
   assert.deepEqual(documento.inputSchema.required, ['fuente'], 'la fuente debe ser obligatoria')
   assert.deepEqual(documento.inputSchema.properties.fuente.enum, [
     'gestor',
+    'suin',
     'corte',
     'suprema',
     'consejo',
