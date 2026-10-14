@@ -219,9 +219,21 @@ export function fragmentos(
  * quedará así."): la Ley 2418 de 2024 anuncia con punto sus seis artículos que
  * transcriben, y sin aceptarlo `articulo()` devolvía solo el anuncio, sin el
  * articulado transcrito (medido el 2026-09-28 contra el portal).
+ *
+ * Los dos puntos solos no bastan: la frase que los lleva tiene que hablar de
+ * una disposición o de cambiarla. «DECRETA:» y el cierre de una enumeración
+ * («…a cargo de la Ministra o Ministro de Igualdad y Equidad:») no anuncian
+ * nada, y tomarlos por anuncio borraba del índice los artículos 1 y 11 de la
+ * Ley 2281 de 2023 tal como la sirve SUIN (medido el 2026-10-14).
  */
-const abreBloqueCitado = (previo: string): boolean =>
-  previo.trimEnd().endsWith(':') || /quedar[áa]n? as[íi]\.$/.test(previo.trimEnd())
+const abreBloqueCitado = (previo: string): boolean => {
+  const t = previo.trimEnd()
+  if (/quedar[áa]n? as[íi]\.$/.test(t)) return true
+  if (!t.endsWith(':')) return false
+  // El rótulo del propio artículo («ARTÍCULO 10. DIRECCIÓN…») no cuenta como mención de un artículo.
+  const frase = t.slice(t.lastIndexOf('\n') + 1).replace(/^\s*ART[IÍ]CULO\s*\d[\d.]*[°º]?\.?/i, '')
+  return /\b(?:art[íi]culos?|incisos?|par[áa]grafos?|numerales?|literal(?:es)?|qued|as[íi]\s*:|modific|adici|sustitu|subrog|reempl|t[ée]rminos)/i.test(frase)
+}
 
 /**
  * Números que un encabezado de sustitución anuncia: "Los artículos 217 y 218
