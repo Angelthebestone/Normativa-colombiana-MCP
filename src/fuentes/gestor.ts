@@ -1,20 +1,7 @@
-import {
-  BASE_GESTOR,
-  CanarioError,
-  NoExisteError,
-  enlacesDeNormas,
-  parseNorma,
-  parseOpciones,
-  parseResultados,
-  parseTematica,
-  pdfEsEscaneo,
-  limpiarTermino,
-  sinTildes,
-  tieneTildes,
-  type FilaTema,
-  type Norma,
-  type Resultado,
-} from '../nucleo/parse.ts'
+import { CanarioError, NoExisteError } from '../nucleo/parse/errores.ts'
+import { BASE_GESTOR, enlacesDeNormas, parseNorma, parseOpciones, parseResultados, parseTematica, type FilaTema, type Norma, type Resultado } from '../nucleo/parse/gestor.ts'
+import { pdfEsEscaneo } from '../nucleo/parse/pdf.ts'
+import { limpiarTermino, sinTildes, tieneTildes } from '../nucleo/parse/texto.ts'
 
 import { obtener, poner, TTL_BUSQUEDA_MS } from '../nucleo/cache.ts'
 import { pedir } from '../nucleo/http.ts'

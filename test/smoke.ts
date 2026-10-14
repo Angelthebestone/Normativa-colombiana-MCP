@@ -22,26 +22,15 @@ import * as upme from '../src/fuentes/upme.ts'
 import * as creg from '../src/fuentes/creg.ts'
 import * as anla from '../src/fuentes/anla.ts'
 import * as sectorial from '../src/fuentes/sectorial.ts'
-import {
-  CanarioError,
-  advertenciasVigencia,
-  articulo,
-  avisoSinTexto,
-  fragmentos,
-  indiceArticulos,
-  historial,
-  seccion,
-  seccionesPresentes,
-  mapaDeSecciones,
-  etiquetaEn,
-  ENCABEZADO_PROVIDENCIA,
-  limpiarTermino,
-  pdfEsEscaneo,
-  parseResultados,
-  parseTematica,
-  sinTildes,
-  trocear,
-} from '../src/nucleo/parse.ts'
+import { articulo, indiceArticulos } from '../src/nucleo/parse/articulos.ts'
+import { CanarioError } from '../src/nucleo/parse/errores.ts'
+import { fragmentos, trocear } from '../src/nucleo/parse/fragmentos.ts'
+import { parseResultados, parseTematica } from '../src/nucleo/parse/gestor.ts'
+import { historial } from '../src/nucleo/parse/historial.ts'
+import { avisoSinTexto, pdfEsEscaneo } from '../src/nucleo/parse/pdf.ts'
+import { seccion, seccionesPresentes, mapaDeSecciones, etiquetaEn, ENCABEZADO_PROVIDENCIA } from '../src/nucleo/parse/secciones.ts'
+import { limpiarTermino, sinTildes } from '../src/nucleo/parse/texto.ts'
+import { advertenciasVigencia } from '../src/nucleo/parse/vigencia.ts'
 import { cuerpoDe, decodificar } from '../src/nucleo/http.ts'
 import * as gestor from '../src/fuentes/gestor.ts'
 import * as corte from '../src/fuentes/jurisprudencia/corte.ts'

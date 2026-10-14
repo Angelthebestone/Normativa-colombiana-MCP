@@ -48,7 +48,7 @@
  *   21 de la Ley 1955) y «Vigencia del Sistema General de Pensiones» (Ley 100,
  *   art. 151, que fecha un subsistema, no la norma).
  */
-import { sinTildes } from './parse.ts'
+import { sinTildes } from './parse/texto.ts'
 
 export type ClaseVacancia =
   | 'inmediata'

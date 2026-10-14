@@ -22,7 +22,8 @@
  * `.docx` y 1 `.pdf`—, así que una librería de docx habría fallado en el grueso,
  * y además no hace falta ninguna.
  */
-import { CanarioError, cargar, textoDe } from '../../nucleo/parse.ts'
+import { CanarioError } from '../../nucleo/parse/errores.ts'
+import { cargar, textoDe } from '../../nucleo/parse/limpieza.ts'
 import { quitarStopwords } from '../gestor.ts'
 import { pedirJson } from '../../nucleo/http.ts'
 

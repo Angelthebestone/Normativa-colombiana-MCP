@@ -21,7 +21,9 @@
  * estructurada: solo el año lo está. Se intenta recuperar el resto (día y
  * mes) quitando el "TIPO NÚMERO" del encabezado del propio portal.
  */
-import { CanarioError, cargar, colapsarEspacios, sinTildes } from '../../nucleo/parse.ts'
+import { CanarioError } from '../../nucleo/parse/errores.ts'
+import { cargar } from '../../nucleo/parse/limpieza.ts'
+import { colapsarEspacios, sinTildes } from '../../nucleo/parse/texto.ts'
 import { pedir } from '../../nucleo/http.ts'
 import { claveActo, similitudEpigrafes } from '../../nucleo/deduplicar.ts'
 import type { Adaptador, ActoSectorial, OpcionesSectorial, ResultadoSectorial } from '../sectorial.ts'

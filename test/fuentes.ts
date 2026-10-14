@@ -7,7 +7,7 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 
 import { alcance, leerFuentes } from '../src/nucleo/alcance.ts'
-import { cargar, textoDe } from '../src/nucleo/parse.ts'
+import { cargar, textoDe } from '../src/nucleo/parse/limpieza.ts'
 
 test('vacía es todas; la lista positiva lleva siempre el Gestor; la negativa quita solo esas', () => {
   assert.equal(leerFuentes('').size, 13)

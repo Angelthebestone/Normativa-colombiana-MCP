@@ -20,7 +20,9 @@
  * un refundido, el salto siguiente es `obtenerTexto` sobre su `.htm`, que ya
  * está resuelto.
  */
-import { CanarioError, cargar, colapsarEspacios, sinTildes, textoDe } from '../nucleo/parse.ts'
+import { CanarioError } from '../nucleo/parse/errores.ts'
+import { cargar, textoDe } from '../nucleo/parse/limpieza.ts'
+import { colapsarEspacios, sinTildes } from '../nucleo/parse/texto.ts'
 import { pedir } from '../nucleo/http.ts'
 
 const BASE = 'https://gestornormativo.creg.gov.co/gestor/entorno/'

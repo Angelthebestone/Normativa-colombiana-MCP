@@ -10,7 +10,7 @@
 import { strict as assert } from 'node:assert'
 import test from 'node:test'
 
-import { sinTildes } from '../src/nucleo/parse.ts'
+import { sinTildes } from '../src/nucleo/parse/texto.ts'
 import { adaptadores, registrar } from '../src/fuentes/sectorial.ts'
 import type { Adaptador } from '../src/fuentes/sectorial.ts'
 import { filtrarSoloEntidad } from '../src/fuentes/sectorial/normograma.ts'

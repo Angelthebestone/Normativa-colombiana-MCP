@@ -11,7 +11,7 @@ import type * as gestor from '../src/fuentes/gestor.ts'
 import type * as suin from '../src/fuentes/suin.ts'
 import * as resolverCita from '../src/herramientas/resolver_cita.ts'
 import * as validar from '../src/herramientas/validar_cita.ts'
-import type { Resultado } from '../src/nucleo/parse.ts'
+import type { Resultado } from '../src/nucleo/parse/gestor.ts'
 
 const item = (id: string, titulo: string, url: string): Resultado => ({ id, titulo, resumen: '', url })
 

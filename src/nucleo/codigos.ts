@@ -10,7 +10,7 @@
  * Senado (`senado`). Decir "no encontré la cita" ante "art. 946 del Código Civil"
  * se leería como que la norma no existe.
  */
-import { sinTildes } from './parse.ts'
+import { sinTildes } from './parse/texto.ts'
 
 export type Codigo = {
   /** Nombre canónico, como lo escribiría un abogado. */
