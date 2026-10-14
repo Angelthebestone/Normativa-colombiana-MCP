@@ -42,7 +42,7 @@ import { descargarA, sinColision } from '../nucleo/descargas.ts'
 import { parsearCita } from '../nucleo/citas.ts'
 import { extraerTextoWord } from '../fuentes/sectorial/word.ts'
 import { textoDePdfSectorial, avisoEscaneo } from '../fuentes/sectorial/pdf.ts'
-import { adaptador, ids } from '../fuentes/sectorial.ts'
+import { adaptador, exigirOrigen, ids } from '../fuentes/sectorial.ts'
 import { estricto, numeroDeArticulo } from '../nucleo/normalizar.ts'
 
 import * as gestor from '../fuentes/gestor.ts'
@@ -849,6 +849,10 @@ export async function escribir(p: Parametros, deps: DepsLectura = {}): Promise<s
   // como "no hay resultados".
   const r = schema.parse(p) as Resueltas
   if (!union.safeParse(r).success) throw new Error(problemaDeFuente(r))
+  // El enlace sectorial lo trae quien llama: se valida contra su regulador
+  // antes de cualquier rama (PDF, Word, HTML o descarga a disco).
+  const regulador = r.fuente === 'sectorial' ? adaptador(r.entidad ?? '') : undefined
+  if (regulador) exigirOrigen(regulador, r.url ?? '')
   const tope = topeDe(r.limite_caracteres)
   // Con ruta_destino la orden es descargar, no leer: se obedece antes que el troceo.
   const cuerpo =
