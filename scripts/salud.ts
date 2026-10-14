@@ -229,7 +229,7 @@ export const PORTALES: Portal[] = [
   },
   {
     nombre: 'SUIN-Juriscol (fichas · Elasticsearch)',
-    // Índice público del buscador nuevo (src/fuentes/suin.ts, `FICHAS`). POST
+    // Índice público del buscador nuevo (src/fuentes/suin/index.ts, `FICHAS`). POST
     // mínimo: una ficha cualquiera. Es de donde sale el estado de vigencia.
     url: 'https://lexis.minjusticia.gov.co/elasticsearch/documents_stg/_search',
     accept: 'application/json',
@@ -239,7 +239,7 @@ export const PORTALES: Portal[] = [
   },
   {
     nombre: 'SUIN-Juriscol (buscador · Azure)',
-    // Azure Cognitive Search (src/fuentes/suin.ts, `BUSCADOR`). La api-key es la
+    // Azure Cognitive Search (src/fuentes/suin/index.ts, `BUSCADOR`). La api-key es la
     // pública que el portal sirve a cualquier visitante.
     url: "https://searchmjd.search.windows.net/indexes/suinjuriscol-index/docs?api-version=2019-05-06&search=tutela&$top=1&$select=ID&$count=true",
     accept: 'application/json;odata.metadata=none',

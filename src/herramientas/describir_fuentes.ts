@@ -12,7 +12,7 @@ import { sinTildes } from '../nucleo/parse/texto.ts'
 import { advertenciaSnapshot } from '../nucleo/snapshot.ts'
 import { vacio } from '../nucleo/vacio.ts'
 import * as sectorial from '../fuentes/sectorial.ts'
-import * as suin from '../fuentes/suin.ts'
+import * as suin from '../fuentes/suin/index.ts'
 
 
 

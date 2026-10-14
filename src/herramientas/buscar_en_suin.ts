@@ -1,6 +1,6 @@
 /**
  * `buscar_en_suin`: el corpus histórico de SUIN-Juriscol (MinJusticia), incluidos
- * documentos que el Gestor no tiene. Reutiliza `buscar` de `fuentes/suin.ts`; aquí
+ * documentos que el Gestor no tiene. Reutiliza `buscar` de `fuentes/suin/index.ts`; aquí
  * solo van el esquema y el texto de la respuesta.
  */
 import type { ToolAnnotations } from '@modelcontextprotocol/sdk/types.js'
@@ -12,7 +12,7 @@ import { conAlternativas } from '../nucleo/alternativas.ts'
 import { sinTildes } from '../nucleo/parse/texto.ts'
 import { vacio } from '../nucleo/vacio.ts'
 import { terminosSignificativos } from '../fuentes/gestor.ts'
-import * as suin from '../fuentes/suin.ts'
+import * as suin from '../fuentes/suin/index.ts'
 
 export const TITULO = 'Buscar en SUIN-Juriscol'
 
