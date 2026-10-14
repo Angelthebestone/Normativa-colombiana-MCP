@@ -2,7 +2,7 @@
  * Descarga un documento a disco con el transporte de `http.ts`, sin
  * sobrescribir silenciosamente y con un nombre de archivo derivado de la URL.
  */
-import { access, mkdir, writeFile } from 'node:fs/promises'
+import { mkdir, open, rm } from 'node:fs/promises'
 import { join, resolve } from 'node:path'
 import { pedirBytes } from './http.ts'
 
@@ -48,28 +48,36 @@ export function nombreSeguro(url: string, contentType = ''): string {
   return /\.\w+$/.test(limpio) ? limpio : limpio + extSegunTipo(contentType)
 }
 
-const existe = async (ruta: string): Promise<boolean> => {
-  try {
-    await access(ruta)
-    return true
-  } catch {
-    return false
-  }
-}
-
 /**
- * Nombre con sufijo numérico que no exista en disco: `norma.pdf` → `norma_1.pdf`.
+ * Escribe `datos` en `archivo` o, si ya existe, en el primer nombre con sufijo
+ * numérico libre (`norma.pdf` → `norma_1.pdf`), y devuelve la ruta escrita.
+ * El nombre se reserva al abrirlo con creación exclusiva (`wx`): dos escrituras
+ * concurrentes nunca acaban en el mismo archivo y ninguna reemplaza uno que ya
+ * existe. Si la escritura falla a medias se borra el archivo recién creado.
  * Lo usan todas las escrituras de la extensión (descargas, `obtener_documento`
- * con `entero`, `expediente` al exportar): ninguna reemplaza un archivo que ya existe.
+ * con `entero`, `expediente` al exportar).
  */
-export async function sinColision(archivo: string): Promise<string> {
+export async function escribirSinColision(archivo: string, datos: string | Uint8Array): Promise<string> {
   const sinExt = archivo.replace(/\.\w+$/, '')
   const ext = archivo.slice(sinExt.length)
-  let sufijo = 0
-  for (;;) {
+  for (let sufijo = 0; ; sufijo++) {
     const candidato = sufijo === 0 ? archivo : `${sinExt}_${sufijo}${ext}`
-    if (!(await existe(candidato))) return candidato
-    sufijo++
+    let fh
+    try {
+      fh = await open(candidato, 'wx')
+    } catch (e) {
+      if ((e as NodeJS.ErrnoException).code === 'EEXIST') continue
+      throw e
+    }
+    try {
+      await fh.writeFile(datos)
+    } catch (e) {
+      await fh.close()
+      await rm(candidato, { force: true })
+      throw e
+    }
+    await fh.close()
+    return candidato
   }
 }
 
@@ -106,14 +114,11 @@ export async function descargarA(
   } catch (e) {
     throw new Error(`No se pudo crear el directorio de descarga ${ruta}: ${(e as Error).message}.`)
   }
-  // Con el directorio ya creado, un error aquí significa que no se puede escribir.
+  let rutaFinal: string
   try {
-    await writeFile(join(ruta, '.prueba-escritura'), Buffer.from(''))
+    rutaFinal = await escribirSinColision(join(ruta, nombreSeguro(url, r.contentType)), r.datos)
   } catch (e) {
     throw new Error(`No se puede escribir en ${ruta}: ${(e as Error).message}.`)
   }
-
-  const rutaFinal = await sinColision(join(ruta, nombreSeguro(url, r.contentType)))
-  await writeFile(rutaFinal, r.datos)
   return { rutaAbsoluta: resolve(rutaFinal), bytes: r.datos.length }
 }
