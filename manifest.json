@@ -76,7 +76,7 @@
     },
     {
       "name": "buscar_en_suin",
-      "description": "Busca en los 56.832 documentos de SUIN-Juriscol (MinJusticia) por título, epígrafe, materia o entidad emisora: leyes, decretos y resoluciones desde 1844, incluidos documentos que el Gestor Normativo no tiene."
+      "description": "Busca en el índice del buscador de SUIN-Juriscol (MinJusticia, unos 103.000 documentos hasta 2026) por tipo, número, año, título, epígrafe, materia, sector o entidad."
     },
     {
       "name": "explicar_relacion_tema",
@@ -148,7 +148,7 @@
     },
     {
       "name": "obtener_documento",
-      "description": "Devuelve el texto (troceado, nunca entero) de una de las siete fuentes con texto."
+      "description": "Devuelve el texto (troceado, nunca entero) de una de las ocho fuentes con texto."
     },
     {
       "name": "expediente",
