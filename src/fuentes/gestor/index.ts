@@ -1,0 +1,5 @@
+export { quitarStopwords, terminosSignificativos, pertinenciaDe, contienenTodos } from './terminos.ts'
+export { catalogos, resolver, type Catalogos } from './catalogos.ts'
+export { buscar, subtemaPorNombre, type Filtros } from './busqueda.ts'
+export { obtenerNorma, pdfEscaneado, subtemas, restrictor, tematica, normasFp } from './documentos.ts'
+export { conceptosFp } from './conceptos.ts'

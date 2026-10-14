@@ -21,7 +21,7 @@ import { historial, type Cambio } from '../nucleo/parse/historial.ts'
 import { idTipo, parsearCita, candidatosAmbiguos } from '../nucleo/citas.ts'
 import { estricto, numeroDeArticulo } from '../nucleo/normalizar.ts'
 
-import * as gestor from '../fuentes/gestor.ts'
+import * as gestor from '../fuentes/gestor/index.ts'
 import { alcance } from '../nucleo/alcance.ts'
 import { fechaBogota } from '../nucleo/fecha.ts'
 

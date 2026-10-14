@@ -32,7 +32,7 @@ import { seccion, seccionesPresentes, mapaDeSecciones, etiquetaEn, ENCABEZADO_PR
 import { limpiarTermino, sinTildes } from '../src/nucleo/parse/texto.ts'
 import { advertenciasVigencia } from '../src/nucleo/parse/vigencia.ts'
 import { cuerpoDe, decodificar, TOPE_TEXTO } from '../src/nucleo/http.ts'
-import * as gestor from '../src/fuentes/gestor.ts'
+import * as gestor from '../src/fuentes/gestor/index.ts'
 import * as corte from '../src/fuentes/jurisprudencia/corte.ts'
 
 // Las pruebas marcadas con RED consultan los portales oficiales. Con SIN_RED=1

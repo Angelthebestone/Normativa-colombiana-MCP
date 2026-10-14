@@ -11,7 +11,7 @@ import { alcance } from '../nucleo/alcance.ts'
 import { conAlternativas } from '../nucleo/alternativas.ts'
 import { sinTildes } from '../nucleo/parse/texto.ts'
 import { vacio } from '../nucleo/vacio.ts'
-import { terminosSignificativos } from '../fuentes/gestor.ts'
+import { terminosSignificativos } from '../fuentes/gestor/index.ts'
 import * as suin from '../fuentes/suin/index.ts'
 
 export const TITULO = 'Buscar en SUIN-Juriscol'

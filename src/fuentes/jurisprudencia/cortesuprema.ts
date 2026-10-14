@@ -24,7 +24,7 @@
  */
 import { CanarioError } from '../../nucleo/parse/errores.ts'
 import { cargar, textoDe } from '../../nucleo/parse/limpieza.ts'
-import { quitarStopwords } from '../gestor.ts'
+import { quitarStopwords } from '../gestor/index.ts'
 import { pedirJson } from '../../nucleo/http.ts'
 
 const API = 'https://consultaprovidenciasbk.cortesuprema.gov.co/api'

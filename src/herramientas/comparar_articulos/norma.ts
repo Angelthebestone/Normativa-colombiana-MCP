@@ -1,7 +1,7 @@
 import { idTipo, parsearCita, candidatosAmbiguos } from '../../nucleo/citas.ts'
 import { articulo as extraerArticulo, limpiarArticulo } from '../../nucleo/parse/articulos.ts'
 import { type Norma } from '../../nucleo/parse/gestor.ts'
-import * as gestor from '../../fuentes/gestor.ts'
+import * as gestor from '../../fuentes/gestor/index.ts'
 
 /** Inyectables para probar sin red (patrón de validar_cita.ts). */
 export type Deps = { buscar?: typeof gestor.buscar; obtenerNorma?: typeof gestor.obtenerNorma }

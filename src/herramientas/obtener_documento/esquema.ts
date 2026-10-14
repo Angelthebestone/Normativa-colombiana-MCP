@@ -2,7 +2,7 @@
 import type { ToolAnnotations } from '@modelcontextprotocol/sdk/types.js'
 import { z } from 'zod'
 
-import type * as gestor from '../../fuentes/gestor.ts'
+import type * as gestor from '../../fuentes/gestor/index.ts'
 import { estricto, numeroDeArticulo } from '../../nucleo/normalizar.ts'
 import { proyectar } from '../../nucleo/alcance.ts'
 

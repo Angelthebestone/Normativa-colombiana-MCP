@@ -157,7 +157,7 @@ export const PORTALES: Portal[] = [
     nombre: 'Gestor Normativo (Función Pública)',
     // Petición mínima al buscador avanzado (no la portada): devuelve el contador
     // «encontrados: N» y los enlaces `norma.php?i=`. Es la misma ruta que usa
-    // src/fuentes/gestor.ts (`funajax.php`) y no es cacheable por `cache.ts`.
+    // src/fuentes/gestor/index.ts (`funajax.php`) y no es cacheable por `cache.ts`.
     url: `${BASE_GESTOR}/gestion/funphp/funajax.php?t=ejecuta_busqueda_avanzada2&palabras=ley`,
     forma: (c) => (/encontrados:\s*\d+/i.test(c) && /norma\.php\?i=\d+/.test(c) ? null : 'sin el contador «encontrados» ni enlaces de norma'),
     nota: 'buscador avanzado: 200 con «encontrados: N» y enlaces a norma.php',
