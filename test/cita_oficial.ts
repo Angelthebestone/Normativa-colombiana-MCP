@@ -3,7 +3,7 @@
  * REALES recortados de las respuestas de las fuentes el 2026-09-28 (los mismos
  * que sostienen la tabla del informe del encargo).
  *
- *   node --test test/cita_oficial.ts
+ *   node --test test/cita_oficial/index.ts
  */
 import { strict as assert } from 'node:assert'
 import test from 'node:test'
@@ -14,7 +14,7 @@ import {
   citaCorteSuprema,
   citaNorma,
   fechaLarga,
-} from '../src/nucleo/cita_oficial.ts'
+} from '../src/nucleo/cita_oficial/index.ts'
 
 test('fechaLarga: ISO, fecha ya en palabras, y el estilo de las normas', () => {
   assert.equal(fechaLarga('2011-05-04'), '4 de mayo de 2011')
