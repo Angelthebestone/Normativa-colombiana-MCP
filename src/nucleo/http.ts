@@ -1,5 +1,5 @@
 import { request as pedirHttps } from 'node:https'
-import { pipeline } from 'node:stream'
+import { pipeline, type Readable } from 'node:stream'
 import { rootCertificates } from 'node:tls'
 import { createGunzip, createInflate } from 'node:zlib'
 import { GLOBALSIGN_OV, GODADDY_G2, SECTIGO_EV, SECTIGO_OV } from './ca.ts'
@@ -317,19 +317,61 @@ type Cruda = {
  *
  * Está separada de `crudo` para poder probarla sin levantar un TLS con
  * certificado propio, que es lo único que impedía cubrir este caso.
+ *
+ * `tope` limita los bytes YA descomprimidos, que son los que ocupan memoria: un
+ * gzip de 100 KB puede expandirse a gigas. Al pasarlo se destruye el flujo (y
+ * con él el socket) y se rechaza con `TopeExcedido`. Si el `content-length`
+ * declarado ya lo supera, se corta sin leer nada.
  */
-export function cuerpoDe(res: NodeJS.ReadableStream & { headers: Record<string, unknown> }): Promise<Buffer> {
+export function cuerpoDe(res: Readable & { headers: Record<string, unknown> }, tope: number): Promise<Buffer> {
   return new Promise((resolve, reject) => {
+    const declarado = Number(res.headers['content-length'])
+    if (declarado > tope) {
+      res.destroy()
+      reject(new TopeExcedido(tope, declarado))
+      return
+    }
     const enc = String(res.headers['content-encoding'] ?? '')
     const descompresor = enc === 'gzip' ? createGunzip() : enc === 'deflate' ? createInflate() : null
-    const flujo: NodeJS.ReadableStream = descompresor
-      ? pipeline(res, descompresor, (e) => e && reject(e))
-      : res
+    const flujo: Readable = descompresor ? pipeline(res, descompresor, (e) => e && reject(e)) : res
     const trozos: Buffer[] = []
-    flujo.on('data', (c: Buffer) => trozos.push(c))
+    let leidos = 0
+    flujo.on('data', (c: Buffer) => {
+      leidos += c.length
+      if (leidos > tope) {
+        flujo.destroy()
+        res.destroy()
+        reject(new TopeExcedido(tope, leidos))
+        return
+      }
+      trozos.push(c)
+    })
     flujo.on('end', () => resolve(Buffer.concat(trozos)))
     flujo.on('error', reject)
   })
+}
+
+/**
+ * Topes de cuerpo por clase de recurso. Lo más grande medido: 10,7 MB de HTML
+ * (`conceptosfp.php` del Gestor) y 15 MB de PDF (el Diario Oficial del 23/09);
+ * los topes dejan el triple de margen y siguen lejos de tumbar el proceso.
+ */
+export const TOPE_TEXTO = 32 * 1024 * 1024
+export const TOPE_BINARIO = 64 * 1024 * 1024
+
+/** La fuente mandó más de lo que el transporte acepta guardar en memoria. No es un fallo del host. */
+export class TopeExcedido extends Error {
+  readonly tope: number
+  readonly bytes: number
+  constructor(tope: number, bytes: number) {
+    super(
+      `La respuesta supera el tope de ${Math.round(tope / 1024 / 1024)} MB (se cortó al llegar a ` +
+        `${(bytes / 1024 / 1024).toFixed(1)} MB) y no se descargó entera.`,
+    )
+    this.name = 'TopeExcedido'
+    this.tope = tope
+    this.bytes = bytes
+  }
 }
 
 async function crudo(
@@ -337,6 +379,7 @@ async function crudo(
   timeout: number,
   accept: string,
   extra: Record<string, string>,
+  tope: number,
   cuerpo?: string,
 ): Promise<Cruda> {
   if (caidaForzada(new URL(url).host)) {
@@ -368,7 +411,7 @@ async function crudo(
         },
       },
       (res) => {
-        cuerpoDe(res).then(
+        cuerpoDe(res, tope).then(
           (datos) =>
             resolve({
               status: res.statusCode ?? 0,
@@ -401,6 +444,42 @@ function esperaSugerida(cabecera: string): number {
 }
 
 const ESPERA_MAXIMA_MS = 30_000
+
+/** El portal pide calma: 429 (demasiadas peticiones) o 503 (no disponible). */
+const pideCalma = (status: number): boolean => status === 429 || status === 503
+
+/**
+ * La petición con la política de reintento común a `pedir` y `pedirBytes`: si el
+ * portal pide calma, se le hace caso en vez de insistir al mismo ritmo. Una
+ * espera (la de `Retry-After`, o 2 s si no la da, con techo de 30 s), el cubo del
+ * host vaciado y un segundo intento. Devuelve la última respuesta, que puede
+ * seguir siendo 429/503: qué hacer con ella lo decide el llamador.
+ */
+async function conReintento(url: string, hacer: () => Promise<Cruda>, conCopia = false): Promise<Cruda> {
+  const host = new URL(url).host
+  for (let intento = 0; ; intento++) {
+    const t0 = Date.now()
+    const r = await enCola(host, hacer)
+    if (process.env['MEDIR_RED']) {
+      process.stderr.write(
+        `${JSON.stringify({ red: Date.now() - t0, host, url, status: r.status, bytes: r.datos.length, copia: conCopia, ts: new Date().toISOString() })}\n`,
+      )
+    }
+    if (!pideCalma(r.status) || intento > 0) return r
+    await pausa(Math.min(esperaSugerida(r.retryAfter) || 2000, ESPERA_MAXIMA_MS))
+    // Se vacía el cubo: veníamos yendo más rápido de lo que el sitio tolera.
+    cubos.set(host, { fichas: 0, ultimo: Date.now() })
+  }
+}
+
+/**
+ * El portal siguió pidiendo calma tras el reintento. Cuenta para el breaker: un
+ * host que limita no está sano, y tres seguidos lo pausan como un 5xx.
+ */
+function errorDeCalma(host: string, status: number): Error {
+  anotarFallo(host, `HTTP ${status}`)
+  return new Error(`El portal está limitando las consultas (${status}). Espera un momento y vuelve a intentarlo.`)
+}
 
 async function pedirUna(
   url: string,
@@ -453,95 +532,74 @@ async function pedirUna(
     throw errorDegradado(host, est.reintentaEnMs!, est.causa!)
   }
 
-  for (let intento = 0; ; intento++) {
-    const t0 = Date.now()
-    const condicionales = copia ? cabecerasCondicionales(copia) : {}
-    let r: Cruda
-    try {
-      r = await enCola(host, () =>
-        crudo(url, timeout, accept, { ...extra, ...condicionales }, cuerpo),
-      )
-    } catch (e) {
-      const d = degradarO()
-      if (d) return d
-      throw e
-    }
-    if (process.env['MEDIR_RED']) {
-      process.stderr.write(
-        `${JSON.stringify({ red: Date.now() - t0, host, url, status: r.status, bytes: r.datos.length, copia: Boolean(copia), ts: new Date().toISOString() })}\n`,
-      )
-    }
-
-    // 304: la copia sigue vigente, y eso está comprobado, no supuesto. Se le
-    // pone la fecha de hoy porque es la que el usuario va a leer; el cuerpo es
-    // el mismo y por eso la respuesta no cambia.
-    if (r.status === 304 && copia) {
-      restablecer(host)
-      anotarRed(0)
-      const fecha = Date.now()
-      refrescarCopia(url, fecha, fecha + ttlDe(url, copia.cuerpo, fecha, opciones.ttlMs))
-      return desdeCopia({ ...copia, fecha }, false, true)
-    }
-
-    // Si el portal pide calma, se le hace caso en vez de insistir al mismo ritmo.
-    if ((r.status === 429 || r.status === 503) && intento === 0) {
-      const espera = Math.min(esperaSugerida(r.retryAfter) || 2000, ESPERA_MAXIMA_MS)
-      await pausa(espera)
-      // Se vacía el cubo: veníamos yendo más rápido de lo que el sitio tolera.
-      cubos.set(host, { fichas: 0, ultimo: Date.now() })
-      continue
-    }
-    if (r.status === 429 || r.status === 503) {
-      const d = degradarO()
-      if (d) return d
-      throw new Error(
-        `El portal está limitando las consultas (${r.status}). Espera un momento y vuelve a intentarlo.`,
-      )
-    }
-
-    const texto = decodificar(r.datos, r.contentType)
-    // Un portal que se apunta a sí mismo (el 301 de SUIN) o que sirve su página
-    // de mantenimiento no está respondiendo, aunque el código HTTP no lo diga:
-    // cuenta para el breaker igual que un 5xx. La respuesta se devuelve tal cual
-    // —la fuente decide qué hacer con un 301— pero el host queda marcado.
-    const diag = diagnosticarRespuesta(url, r.status, r.cabeceras, texto)
-    if (r.status >= 500 || diag.roto) {
-      anotarFallo(host, r.status >= 500 ? `HTTP ${r.status}` : (diag.motivo ?? 'respuesta rota del portal'))
-    } else {
-      restablecer(host)
-    }
-    if (r.status >= 500) {
-      const d = degradarO()
-      if (d) return d
-      throw new Error(`El portal respondió ${r.status}.`)
-    }
-
-    anotarRed(r.datos.length)
-    const resp: Respuesta = { status: r.status, cuerpo: texto, cookies: r.cookies, cabeceras: r.cabeceras }
-
-    // Solo se guardan documentos: congelar una búsqueda escondería lo que se
-    // publique después.
-    if (esGet && esDescargaCacheable(url, 'GET', r.contentType)) {
-      const fecha = Date.now()
-      if (copia && copia.cuerpo !== texto) resp.cambio = true
-      guardarCopia(url, {
-        cuerpo: texto,
-        status: r.status,
-        cabeceras: r.cabeceras,
-        fecha,
-        vence: fecha + ttlDe(url, texto, fecha, opciones.ttlMs),
-      })
-    }
-    return resp
+  const condicionales = copia ? cabecerasCondicionales(copia) : {}
+  let r: Cruda
+  try {
+    r = await conReintento(
+      url,
+      () => crudo(url, timeout, accept, { ...extra, ...condicionales }, TOPE_TEXTO, cuerpo),
+      Boolean(copia),
+    )
+  } catch (e) {
+    const d = degradarO()
+    if (d) return d
+    throw e
   }
+
+  // 304: la copia sigue vigente, y eso está comprobado, no supuesto. Se le
+  // pone la fecha de hoy porque es la que el usuario va a leer; el cuerpo es
+  // el mismo y por eso la respuesta no cambia.
+  if (r.status === 304 && copia) {
+    restablecer(host)
+    anotarRed(0)
+    const fecha = Date.now()
+    refrescarCopia(url, fecha, fecha + ttlDe(url, copia.cuerpo, fecha, opciones.ttlMs))
+    return desdeCopia({ ...copia, fecha }, false, true)
+  }
+
+  if (pideCalma(r.status)) {
+    const e = errorDeCalma(host, r.status)
+    const d = degradarO()
+    if (d) return d
+    throw e
+  }
+
+  const texto = decodificar(r.datos, r.contentType)
+  // Un portal que se apunta a sí mismo (el 301 de SUIN) o que sirve su página
+  // de mantenimiento no está respondiendo, aunque el código HTTP no lo diga:
+  // cuenta para el breaker igual que un 5xx. La respuesta se devuelve tal cual
+  // —la fuente decide qué hacer con un 301— pero el host queda marcado.
+  const diag = diagnosticarRespuesta(url, r.status, r.cabeceras, texto)
+  if (r.status >= 500 || diag.roto) {
+    anotarFallo(host, r.status >= 500 ? `HTTP ${r.status}` : (diag.motivo ?? 'respuesta rota del portal'))
+  } else {
+    restablecer(host)
+  }
+  if (r.status >= 500) {
+    const d = degradarO()
+    if (d) return d
+    throw new Error(`El portal respondió ${r.status}.`)
+  }
+
+  anotarRed(r.datos.length)
+  const resp: Respuesta = { status: r.status, cuerpo: texto, cookies: r.cookies, cabeceras: r.cabeceras }
+
+  // Solo se guardan documentos: congelar una búsqueda escondería lo que se
+  // publique después.
+  if (esGet && esDescargaCacheable(url, 'GET', r.contentType)) {
+    const fecha = Date.now()
+    if (copia && copia.cuerpo !== texto) resp.cambio = true
+    guardarCopia(url, {
+      cuerpo: texto,
+      status: r.status,
+      cabeceras: r.cabeceras,
+      fecha,
+      vence: fecha + ttlDe(url, texto, fecha, opciones.ttlMs),
+    })
+  }
+  return resp
 }
 
-/**
- * Los mismos bytes, sin decodificar. Existe para los PDF: pasarlos por
- * `decodificar` los destruye —es texto lo que espera— y bajarlos con un `fetch`
- * suelto se salta el ritmo por dominio, los reintentos y la cadena de
- * certificados que este módulo aporta.
- */
 /**
  * Peticiones idénticas en vuelo: una sola sirve a todos los que la esperan.
  *
@@ -581,6 +639,12 @@ export function pedir(
   return p
 }
 
+/**
+ * Los mismos bytes, sin decodificar. Existe para los PDF: pasarlos por
+ * `decodificar` los destruye —es texto lo que espera— y bajarlos con un `fetch`
+ * suelto se salta el ritmo por dominio, los reintentos y la cadena de
+ * certificados que este módulo aporta.
+ */
 export async function pedirBytes(
   url: string,
   timeout = 90_000,
@@ -589,17 +653,20 @@ export async function pedirBytes(
   const host = new URL(url).host
   const est = estadoDe(host)
   if (est.degradado) throw errorDegradado(host, est.reintentaEnMs!, est.causa!)
+  let r: Cruda
   try {
-    const r = await enCola(host, () => crudo(url, timeout, accept, {}))
-    if (r.status >= 500) anotarFallo(host, `HTTP ${r.status}`)
-    else restablecer(host)
-    anotarRed(r.datos.length)
-    return { status: r.status, datos: r.datos, contentType: r.contentType }
+    r = await conReintento(url, () => crudo(url, timeout, accept, {}, TOPE_BINARIO))
   } catch (e) {
-    // Fallo de red (no una respuesta): cuenta para el breaker.
-    if (!(e instanceof Error && /degradada/.test(e.message))) anotarFallo(host, e instanceof Error ? e.message : String(e))
+    // Fallo de red (no una respuesta): cuenta para el breaker. Pasar el tope no:
+    // el host respondió, solo que mandó demasiado.
+    if (!(e instanceof TopeExcedido)) anotarFallo(host, e instanceof Error ? e.message : String(e))
     throw e
   }
+  if (pideCalma(r.status)) throw errorDeCalma(host, r.status)
+  if (r.status >= 500) anotarFallo(host, `HTTP ${r.status}`)
+  else restablecer(host)
+  anotarRed(r.datos.length)
+  return { status: r.status, datos: r.datos, contentType: r.contentType }
 }
 
 /**
