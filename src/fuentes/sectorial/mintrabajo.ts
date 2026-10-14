@@ -27,7 +27,9 @@
  *   codificación («RESPE�TANDO»): se normaliza el texto plano pero no se
  *   reescribe el contenido.
  */
-import { CanarioError, cargar, colapsarEspacios, sinTildes } from '../../nucleo/parse.ts'
+import { CanarioError } from '../../nucleo/parse/errores.ts'
+import { cargar } from '../../nucleo/parse/limpieza.ts'
+import { colapsarEspacios, sinTildes } from '../../nucleo/parse/texto.ts'
 import { pedir } from '../../nucleo/http.ts'
 import { claveActo, similitudEpigrafes } from '../../nucleo/deduplicar.ts'
 import { advertenciaPortalRoto } from '../../nucleo/portal-roto.ts'

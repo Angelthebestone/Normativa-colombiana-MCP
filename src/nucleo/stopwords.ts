@@ -3,7 +3,7 @@
  * La comparación ignora tildes y mayúsculas, porque las consultas llegan sin
  * ellas y los portales indexan sin ellas.
  */
-import { sinTildes } from './parse.ts'
+import { sinTildes } from './parse/texto.ts'
 
 export const STOPWORDS_ES: ReadonlySet<string> = new Set([
   // artículos

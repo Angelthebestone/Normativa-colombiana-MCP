@@ -21,7 +21,8 @@
  * categoría legible, así que el filtro va por el epígrafe.
  */
 import * as cheerio from 'cheerio/slim'
-import { CanarioError, colapsarEspacios, sinTildes } from '../nucleo/parse.ts'
+import { CanarioError } from '../nucleo/parse/errores.ts'
+import { colapsarEspacios, sinTildes } from '../nucleo/parse/texto.ts'
 import { pedir, type Respuesta } from '../nucleo/http.ts'
 
 const API = 'https://www.upme.gov.co/wp-json/wp/v2/circular_resolucion'

@@ -13,36 +13,26 @@
  * ruta con un trozo de lectura; con `ruta_destino` se descarga tal cual.
  */
 import type { ToolAnnotations } from '@modelcontextprotocol/sdk/types.js'
-import { mkdir, mkdtemp, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { z } from 'zod'
 
-import {
-  advertenciasVigencia,
-  articulo as extraerArticulo,
-  avisoSinTexto,
-  cargar,
-  fragmentos,
-  historial,
-  indiceArticulos,
-  normalizarRotulo,
-  mapaDeSecciones,
-  etiquetaEn,
-  ENCABEZADO_PROVIDENCIA,
-  seccion as seccionDe,
-  seccionesPresentes,
-  sinTildes,
-  textoDe,
-  trocear,
-} from '../nucleo/parse.ts'
-import { NoExisteError } from '../nucleo/parse.ts'
+import { articulo as extraerArticulo, indiceArticulos } from '../nucleo/parse/articulos.ts'
+import { fragmentos, trocear } from '../nucleo/parse/fragmentos.ts'
+import { historial } from '../nucleo/parse/historial.ts'
+import { cargar, textoDe } from '../nucleo/parse/limpieza.ts'
+import { avisoSinTexto } from '../nucleo/parse/pdf.ts'
+import { mapaDeSecciones, etiquetaEn, ENCABEZADO_PROVIDENCIA, seccion as seccionDe, seccionesPresentes } from '../nucleo/parse/secciones.ts'
+import { normalizarRotulo, sinTildes } from '../nucleo/parse/texto.ts'
+import { advertenciasVigencia } from '../nucleo/parse/vigencia.ts'
+import { NoExisteError } from '../nucleo/parse/errores.ts'
 import { pedir as pedirHttp } from '../nucleo/http.ts'
-import { descargarA, sinColision } from '../nucleo/descargas.ts'
+import { descargarA, escribirSinColision } from '../nucleo/descargas.ts'
 import { parsearCita } from '../nucleo/citas.ts'
 import { extraerTextoWord } from '../fuentes/sectorial/word.ts'
 import { textoDePdfSectorial, avisoEscaneo } from '../fuentes/sectorial/pdf.ts'
-import { adaptador, ids } from '../fuentes/sectorial.ts'
+import { adaptador, exigirOrigen, ids } from '../fuentes/sectorial.ts'
 import { estricto, numeroDeArticulo } from '../nucleo/normalizar.ts'
 
 import * as gestor from '../fuentes/gestor.ts'
@@ -827,8 +817,7 @@ async function enteroDocumento(p: Resueltas, tope: number, deps: DepsLectura = {
   await mkdir(destino, { recursive: true })
   // Con sufijo si ya existe: guardar dos veces el texto de la misma fuente en la
   // misma carpeta reemplazaba en silencio el primero.
-  const txt = await sinColision(join(destino, `texto-${p.fuente}.txt`))
-  await writeFile(txt, texto, 'utf8')
+  const txt = await escribirSinColision(join(destino, `texto-${p.fuente}.txt`), texto)
   return `Archivo guardado en: ${txt} (${texto.length} caracteres).\n\nURL de origen: ${origen}\n\n--- Texto (primeros caracteres) ---\n${trocear(texto, 0, tope).texto}`
 }
 
@@ -849,6 +838,10 @@ export async function escribir(p: Parametros, deps: DepsLectura = {}): Promise<s
   // como "no hay resultados".
   const r = schema.parse(p) as Resueltas
   if (!union.safeParse(r).success) throw new Error(problemaDeFuente(r))
+  // El enlace sectorial lo trae quien llama: se valida contra su regulador
+  // antes de cualquier rama (PDF, Word, HTML o descarga a disco).
+  const regulador = r.fuente === 'sectorial' ? adaptador(r.entidad ?? '') : undefined
+  if (regulador) exigirOrigen(regulador, r.url ?? '')
   const tope = topeDe(r.limite_caracteres)
   // Con ruta_destino la orden es descargar, no leer: se obedece antes que el troceo.
   const cuerpo =

@@ -11,7 +11,6 @@ import type { pedir, Respuesta } from '../src/nucleo/http.ts'
 import {
   advertenciaPortalRoto,
   diagnosticarRespuesta,
-  fechaCorta,
   numeroDelArchivo,
   numeroDelEpigrafe,
   rotuloCopia,
@@ -102,8 +101,14 @@ test('portal roto: el 301 que se apunta a sí mismo marca el host (el síntoma d
   assert.equal(d.roto, true)
   assert.match(d.motivo!, /bucle/)
 
-  // Con barra final el destino es el mismo recurso: sigue siendo bucle.
-  assert.equal(diagnosticarRespuesta('https://x.gov.co/a', 301, { location: 'https://x.gov.co/a/' }, '').roto, true)
+  // Con la ruta relativa que resuelve a la misma URL también es bucle.
+  assert.equal(diagnosticarRespuesta('https://x.gov.co/a', 301, { location: '/a' }, '').roto, true)
+})
+
+test('portal roto: la redirección canónica que solo añade la barra final no es un bucle (Superfinanciera)', () => {
+  const url = 'https://www.superfinanciera.gov.co/10115974'
+  assert.equal(diagnosticarRespuesta(url, 301, { location: `${url}/` }, '').roto, false)
+  assert.equal(diagnosticarRespuesta(url, 301, { location: '/10115974/' }, '').roto, false)
 })
 
 test('portal roto: un redirect legítimo no marca, y un 404 no es un portal roto', () => {
@@ -122,7 +127,6 @@ test('portal roto: la página de mantenimiento y el 503 sí marcan', () => {
 
 test('rótulo de copia: dice la fuente y la fecha, que es lo que el modelo necesita para no confundirla con la fuente viva', () => {
   const ms = Date.UTC(2026, 8, 16, 5, 6, 52)
-  assert.equal(fechaCorta(ms), '2026-09-16')
   const rotulo = rotuloCopia('normograma.dian.gov.co', ms)
   assert.match(rotulo, /normograma\.dian\.gov\.co/)
   assert.match(rotulo, /2026-09-16/)

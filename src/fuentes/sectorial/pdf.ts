@@ -11,9 +11,9 @@
  * esto solo permite que la respuesta de lectura traiga texto extraído además
  * del epígrafe cuando el PDF lo permite.
  */
-import { avisoSinTexto, pdfEsEscaneo } from '../../nucleo/parse.ts'
+import { avisoSinTexto, pdfEsEscaneo } from '../../nucleo/parse/pdf.ts'
 import { pedirBytes } from '../../nucleo/http.ts'
-import type { Adaptador } from '../sectorial.ts'
+import { exigirOrigen, type Adaptador } from '../sectorial.ts'
 
 export type TextoPdf = { texto: string; url: string } | { escaneo: true; url: string }
 
@@ -37,15 +37,7 @@ export async function textoDePdfSectorial(
   const descargar = deps.pedirBytes ?? pedirBytes
   const extraerTexto = deps.extraer
 
-  let dominio: URL
-  try {
-    dominio = new URL(url)
-  } catch {
-    throw new Error(`Enlace PDF inválido: ${url}.`)
-  }
-  if (dominio.origin !== new URL(a.dominioPermitido).origin) {
-    throw new Error(`El enlace PDF no pertenece al dominio permitido de ${a.nombre} (${a.dominioPermitido}).`)
-  }
+  exigirOrigen(a, url)
 
   const r = await descargar(url, 120_000)
   if (r.status !== 200) throw new Error(`El PDF respondió ${r.status}.`)
