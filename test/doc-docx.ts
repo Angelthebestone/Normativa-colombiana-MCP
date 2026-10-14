@@ -11,7 +11,7 @@ import test from 'node:test'
 import { deflateRawSync } from 'node:zlib'
 
 import { extraerTextoWord } from '../src/fuentes/sectorial/word.ts'
-import { fragmentos, trocear } from '../src/nucleo/parse.ts'
+import { fragmentos, trocear } from '../src/nucleo/parse/fragmentos.ts'
 import type { Adaptador } from '../src/fuentes/sectorial.ts'
 
 const adaptador: Adaptador = {

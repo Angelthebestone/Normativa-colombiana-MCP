@@ -10,7 +10,7 @@
 import { strict as assert } from 'node:assert'
 import test from 'node:test'
 
-import { CanarioError } from '../src/nucleo/parse.ts'
+import { CanarioError } from '../src/nucleo/parse/errores.ts'
 import type { Respuesta, pedir } from '../src/nucleo/http.ts'
 import adaptador, { buscar } from '../src/fuentes/sectorial/mintransporte.ts'
 

@@ -9,7 +9,8 @@
  * resultados." literal, el canario ante JSON inesperado y el recorte por
  * página— es idéntico y vive aquí, no copiado en cada adaptador.
  */
-import { CanarioError, limpiarTermino, sinTildes } from '../../nucleo/parse.ts'
+import { CanarioError } from '../../nucleo/parse/errores.ts'
+import { limpiarTermino, sinTildes } from '../../nucleo/parse/texto.ts'
 import { pedir } from '../../nucleo/http.ts'
 import type { Adaptador, ActoSectorial, OpcionesSectorial } from '../sectorial.ts'
 

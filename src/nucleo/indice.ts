@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs'
 
-import { sinTildes } from './parse.ts'
+import { sinTildes } from './parse/texto.ts'
 
 // --- índice temático empaquetado -----------------------------------------
 

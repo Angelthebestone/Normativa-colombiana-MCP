@@ -11,7 +11,7 @@
 import { strict as assert } from 'node:assert'
 import test from 'node:test'
 
-import { ficha, type RespuestaFichas } from '../src/fuentes/suin.ts'
+import { ficha, type RespuestaFichas } from '../src/fuentes/suin/index.ts'
 
 type Doc = { tipo: string; subtipo?: string; numero: string; anio: string; estado?: string; id?: number; visualizacion?: number }
 

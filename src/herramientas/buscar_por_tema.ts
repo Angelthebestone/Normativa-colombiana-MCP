@@ -6,9 +6,9 @@ import { estricto } from '../nucleo/normalizar.ts'
 import { alcance, DESCARGO } from '../nucleo/alcance.ts'
 import { conPrefijo } from '../nucleo/catalogos.ts'
 import { cargarIndice, frescura } from '../nucleo/indice.ts'
-import { normalizarRotulo, sinTildes } from '../nucleo/parse.ts'
+import { normalizarRotulo, sinTildes } from '../nucleo/parse/texto.ts'
 import { vacio } from '../nucleo/vacio.ts'
-import * as gestor from '../fuentes/gestor.ts'
+import * as gestor from '../fuentes/gestor/index.ts'
 
 export const TITULO = 'Buscar por tema y subtema'
 

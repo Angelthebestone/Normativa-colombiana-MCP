@@ -8,8 +8,9 @@
 import { strict as assert } from 'node:assert'
 import test from 'node:test'
 
-import { documento, documentoDe, resultadosDe } from '../src/fuentes/suin.ts'
-import { articulo, CanarioError, indiceArticulos } from '../src/nucleo/parse.ts'
+import { documento, documentoDe, resultadosDe } from '../src/fuentes/suin/index.ts'
+import { articulo, indiceArticulos } from '../src/nucleo/parse/articulos.ts'
+import { CanarioError } from '../src/nucleo/parse/errores.ts'
 import type { pedir as Pedir } from '../src/nucleo/http.ts'
 
 const relleno = 'La presente ley regula el empleo público y la carrera administrativa en todo el territorio. '.repeat(3)

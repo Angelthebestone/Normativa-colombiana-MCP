@@ -8,8 +8,8 @@
 import { strict as assert } from 'node:assert'
 import test from 'node:test'
 
-import { escribir, formatear, fuentesDe, mismoOrigen, paraLeerDe } from '../src/herramientas/buscar_unificado.ts'
-import type { Item } from '../src/herramientas/buscar_unificado.ts'
+import { escribir, formatear } from '../src/herramientas/buscar_unificado.ts'
+import { fuentesDe, mismoOrigen, paraLeerDe, type Item } from '../src/herramientas/buscar_unificado/fuentes.ts'
 import * as obtenerDocumento from '../src/herramientas/obtener_documento.ts'
 
 /** Sin red: los casos que consultan portales se saltan con SIN_RED=1. */

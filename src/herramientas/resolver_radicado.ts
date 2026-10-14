@@ -17,10 +17,10 @@
  * Un vacío en SAMAI tiene tres lecturas que hay que decir juntas, porque por
  * separado cada una se lee como «no existe».
  */
-import * as consejo from '../fuentes/jurisprudencia/consejoestado.ts'
+import * as consejo from '../fuentes/jurisprudencia/consejoestado/index.ts'
 import { activa, avisoApagada, type Uso } from '../nucleo/alcance.ts'
-import type { Radicado } from '../nucleo/citas.ts'
-import type { Resuelta } from './resolver_cita.ts'
+import type { Radicado } from '../nucleo/citas/index.ts'
+import type { Resuelta } from './resolver_cita/resuelta.ts'
 
 /** Sin resultado en SAMAI para un radicado del Consejo: las tres verdades. */
 const SIN_RESULTADO =

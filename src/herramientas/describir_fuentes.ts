@@ -8,11 +8,11 @@ import { ALIAS_FUENTES, ALIAS_INVERSO, CLAVES_FUENTES } from '../nucleo/claves_f
 import { CODIGOS, referencia as refCodigo } from '../nucleo/codigos.ts'
 import { VERSION } from '../nucleo/http.ts'
 import { cargarIndice, frescura } from '../nucleo/indice.ts'
-import { sinTildes } from '../nucleo/parse.ts'
+import { sinTildes } from '../nucleo/parse/texto.ts'
 import { advertenciaSnapshot } from '../nucleo/snapshot.ts'
 import { vacio } from '../nucleo/vacio.ts'
 import * as sectorial from '../fuentes/sectorial.ts'
-import * as suin from '../fuentes/suin.ts'
+import * as suin from '../fuentes/suin/index.ts'
 
 
 

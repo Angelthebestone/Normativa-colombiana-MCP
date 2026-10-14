@@ -3,14 +3,14 @@
  * (con guiones, con espacios y de corrido), con el sufijo «(AC)», dentro de una
  * frase, y no confundirlo con un número más largo. Sin red: el parser no
  * consulta nada y las tablas de corporación/sala salen de lo medido contra los
- * portales (ver src/nucleo/citas.ts).
+ * portales (ver src/nucleo/citas/index.ts).
  *
  *   node --test test/radicado.ts
  */
 import { strict as assert } from 'node:assert'
 import test from 'node:test'
 
-import { parsearRadicado, RE_RADICADO_23 } from '../src/nucleo/citas.ts'
+import { parsearRadicado, RE_RADICADO_23 } from '../src/nucleo/citas/index.ts'
 
 test('las tres formas del mismo radicado dan el mismo resultado', () => {
   const formas = [

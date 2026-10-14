@@ -40,12 +40,12 @@
  */
 import { fileURLToPath } from 'node:url'
 
-import { BASE_GESTOR } from '../src/nucleo/parse.ts'
+import { BASE_GESTOR } from '../src/nucleo/parse/gestor.ts'
 import { pedir, restablecer } from '../src/nucleo/http.ts'
 import { diagnosticarRespuesta } from '../src/nucleo/portal-roto.ts'
-import { enlaceBusqueda } from '../src/fuentes/jurisprudencia/consejoestado.ts'
+import { enlaceBusqueda } from '../src/fuentes/jurisprudencia/consejoestado/index.ts'
 import { BASE_SENADO } from '../src/fuentes/senado.ts'
-import { BASE as BASE_DIARIO } from '../src/fuentes/diario_oficial.ts'
+import { BASE as BASE_DIARIO } from '../src/fuentes/diario_oficial/index.ts'
 
 /** Límite del primer intento: por encima de esto el portal se considera lento. */
 const LIMITE_MS = 2000
@@ -157,14 +157,14 @@ export const PORTALES: Portal[] = [
     nombre: 'Gestor Normativo (Función Pública)',
     // Petición mínima al buscador avanzado (no la portada): devuelve el contador
     // «encontrados: N» y los enlaces `norma.php?i=`. Es la misma ruta que usa
-    // src/fuentes/gestor.ts (`funajax.php`) y no es cacheable por `cache.ts`.
+    // src/fuentes/gestor/index.ts (`funajax.php`) y no es cacheable por `cache.ts`.
     url: `${BASE_GESTOR}/gestion/funphp/funajax.php?t=ejecuta_busqueda_avanzada2&palabras=ley`,
     forma: (c) => (/encontrados:\s*\d+/i.test(c) && /norma\.php\?i=\d+/.test(c) ? null : 'sin el contador «encontrados» ni enlaces de norma'),
     nota: 'buscador avanzado: 200 con «encontrados: N» y enlaces a norma.php',
   },
   {
     nombre: 'Corte Constitucional (relatoría)',
-    // Misma API no documentada que src/fuentes/jurisprudencia/corte.ts
+    // Misma API no documentada que src/fuentes/jurisprudencia/corte/index.ts
     // (buscador_new, tipo=json): responde la salida cruda de Elasticsearch.
     url: 'https://www.corteconstitucional.gov.co/relatoria/buscador_new/?searchOption=texto&fini=1992-01-01&ffin=2100-12-31&buscar_por=querella&maxprov=1&slop=1&accion=search&tipo=json',
     accept: 'application/json,text/html,*/*',
@@ -209,7 +209,7 @@ export const PORTALES: Portal[] = [
   },
   {
     nombre: 'Diario Oficial (Imprenta Nacional)',
-    // Consulta pública del Diario Oficial (src/fuentes/diario_oficial.ts, `BASE`).
+    // Consulta pública del Diario Oficial (src/fuentes/diario_oficial/index.ts, `BASE`).
     // El GET sirve el formulario y la tabla; la búsqueda en sí es un POST con
     // ViewState y cookie, que el sondeo NO hace (sería caro y con estado).
     url: BASE_DIARIO,
@@ -229,7 +229,7 @@ export const PORTALES: Portal[] = [
   },
   {
     nombre: 'SUIN-Juriscol (fichas y búsqueda · Elasticsearch)',
-    // Índice público del buscador nuevo (src/fuentes/suin.ts, `INDICE`). POST
+    // Índice público del buscador nuevo (src/fuentes/suin/, `INDICE`). POST
     // mínimo: una ficha cualquiera. Es de donde salen el estado de vigencia y la búsqueda.
     url: 'https://lexis.minjusticia.gov.co/elasticsearch/documents_pdn/_search',
     accept: 'application/json',
@@ -239,7 +239,7 @@ export const PORTALES: Portal[] = [
   },
   {
     nombre: 'SUIN-Juriscol (texto · suin-search)',
-    // API del visor (src/fuentes/suin.ts, `DOCUMENTOS`): la Ley 909 de 2004.
+    // API del visor (src/fuentes/suin/, `DOCUMENTOS`): la Ley 909 de 2004.
     url: 'https://lexis.minjusticia.gov.co/suin-search/api/documentos/1670817',
     accept: 'application/json',
     forma: (c) => (typeof safeJson(c)?.data?.textoHtml === 'string' ? null : 'sin data.textoHtml'),

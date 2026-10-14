@@ -32,13 +32,15 @@ La más sencilla si usas Claude Desktop: no requiere Node ni tocar archivos de c
 
 Claude Desktop trae su propio Node, así que no hace falta instalar nada más.
 
+**Actualizaciones:** una extensión `.mcpb` no se actualiza sola. Cuando npm tenga una versión más nueva que la instalada, la primera respuesta de la sesión lo avisa una vez, con el enlace al último release; descárgalo y arrástralo igual que la primera vez. Si prefieres no volver a hacerlo, usa la Opción B: con `@latest` se actualiza sola.
+
 ### Opción B — cualquier otro cliente MCP, desde npm (recomendada)
 
 La forma más sencilla y la que evita errores de rutas: no hay que clonar nada ni apuntar a archivos locales. Requiere **Node 18 o superior**.
 
 ```bash
 # sin instalar nada, la forma habitual en clientes MCP
-npx -y normativa-colombia-mcp
+npx -y normativa-colombia-mcp@latest
 
 # o instalado en el proyecto
 npm install normativa-colombia-mcp
@@ -47,6 +49,8 @@ npm install normativa-colombia-mcp
 npm install -g normativa-colombia-mcp
 ```
 
+El sufijo `@latest` importa: sin él, `npx` reutiliza la copia que ya tiene en su caché y no vuelve a mirar el registro, así que te quedas con la versión del primer día. Con `@latest` consulta npm en cada arranque y trae la versión más reciente. Si ya tenías configurado el servidor sin `@latest`, añádelo al argumento. Además, el servidor avisa una vez por sesión cuando hay una versión más nueva que la que corre.
+
 Casi todos los clientes comparten este formato:
 
 ```json
@@ -54,7 +58,7 @@ Casi todos los clientes comparten este formato:
   "mcpServers": {
     "normativa-colombia": {
       "command": "npx",
-      "args": ["-y", "normativa-colombia-mcp"]
+      "args": ["-y", "normativa-colombia-mcp@latest"]
     }
   }
 }
@@ -67,7 +71,7 @@ Para instalar **sin ciertas fuentes** (por ejemplo, sin los reguladores sectoria
   "mcpServers": {
     "normativa-colombia": {
       "command": "npx",
-      "args": ["-y", "normativa-colombia-mcp"],
+      "args": ["-y", "normativa-colombia-mcp@latest"],
       "env": {
         "FUENTES": "-creg,-anh,-upme,-anla,-sectorial"
       }
@@ -89,10 +93,10 @@ Para instalar **sin ciertas fuentes** (por ejemplo, sin los reguladores sectoria
 
 ```bash
 # con todas las fuentes
-claude mcp add normativa-colombia -- npx -y normativa-colombia-mcp
+claude mcp add normativa-colombia -- npx -y normativa-colombia-mcp@latest
 
 # o sin fuentes sectoriales
-claude mcp add normativa-colombia -e FUENTES="-creg,-anh,-upme,-anla,-sectorial" -- npx -y normativa-colombia-mcp
+claude mcp add normativa-colombia -e FUENTES="-creg,-anh,-upme,-anla,-sectorial" -- npx -y normativa-colombia-mcp@latest
 ```
 
 **VS Code** usa la clave `servers` en vez de `mcpServers`, en `.mcp.json` del proyecto o en la configuración de usuario:
@@ -103,7 +107,7 @@ claude mcp add normativa-colombia -e FUENTES="-creg,-anh,-upme,-anla,-sectorial"
     "normativa-colombia": {
       "type": "stdio",
       "command": "npx",
-      "args": ["-y", "normativa-colombia-mcp"],
+      "args": ["-y", "normativa-colombia-mcp@latest"],
       "env": {
         "FUENTES": "-creg,-anh,-upme,-anla,-sectorial"
       }
@@ -120,7 +124,7 @@ Si tu cliente no está en la lista, busca dónde declara servidores MCP por stdi
 
 ```bash
 echo '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"prueba","version":"1"}}}' \
-  | npx -y normativa-colombia-mcp
+  | npx -y normativa-colombia-mcp@latest
 ```
 
 Debe responder un JSON con `"name":"normativa-colombia"` y un campo `instructions`.

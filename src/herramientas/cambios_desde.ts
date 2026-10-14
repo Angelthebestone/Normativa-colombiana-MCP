@@ -5,9 +5,9 @@
 import type { ToolAnnotations } from '@modelcontextprotocol/sdk/types.js'
 import { z } from 'zod'
 import { estricto } from '../nucleo/normalizar.ts'
-import { idTipo, parsearCita, candidatosAmbiguos } from '../nucleo/citas.ts'
-import * as gestor from '../fuentes/gestor.ts'
-import { historial, type Cambio } from '../nucleo/parse.ts'
+import { idTipo, parsearCita, candidatosAmbiguos } from '../nucleo/citas/index.ts'
+import * as gestor from '../fuentes/gestor/index.ts'
+import { historial, type Cambio } from '../nucleo/parse/historial.ts'
 import { alcance } from '../nucleo/alcance.ts'
 
 export const TITULO = 'Cambios registrados sobre normas desde una fecha'

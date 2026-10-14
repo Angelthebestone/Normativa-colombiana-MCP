@@ -2,7 +2,7 @@
  * `buscar_en_suin`: el buscador de SUIN-Juriscol (MinJusticia) —normas,
  * reglamentos técnicos por materia y la jurisprudencia que SUIN registra—,
  * incluidos documentos que el Gestor no tiene. Reutiliza `buscar` de
- * `fuentes/suin.ts`; aquí solo van el esquema y el texto de la respuesta.
+ * `fuentes/suin/index.ts`; aquí solo van el esquema y el texto de la respuesta.
  */
 import type { ToolAnnotations } from '@modelcontextprotocol/sdk/types.js'
 import { z } from 'zod'
@@ -10,10 +10,10 @@ import { z } from 'zod'
 import { estricto } from '../nucleo/normalizar.ts'
 import { alcance } from '../nucleo/alcance.ts'
 import { conAlternativas } from '../nucleo/alternativas.ts'
-import { sinTildes } from '../nucleo/parse.ts'
+import { sinTildes } from '../nucleo/parse/texto.ts'
 import { vacio } from '../nucleo/vacio.ts'
-import { terminosSignificativos } from '../fuentes/gestor.ts'
-import * as suin from '../fuentes/suin.ts'
+import { terminosSignificativos } from '../fuentes/gestor/index.ts'
+import * as suin from '../fuentes/suin/index.ts'
 
 export const TITULO = 'Buscar en SUIN-Juriscol'
 

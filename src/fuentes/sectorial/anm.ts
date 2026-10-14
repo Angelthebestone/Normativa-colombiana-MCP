@@ -34,7 +34,9 @@
  *   `div` no está, la página cambió de estructura; si está pero no hay tabla,
  *   son cero resultados de verdad.
  */
-import { CanarioError, cargar, colapsarEspacios, limpiarTermino } from '../../nucleo/parse.ts'
+import { CanarioError } from '../../nucleo/parse/errores.ts'
+import { cargar } from '../../nucleo/parse/limpieza.ts'
+import { colapsarEspacios, limpiarTermino } from '../../nucleo/parse/texto.ts'
 import { pedir } from '../../nucleo/http.ts'
 import type { Adaptador, ActoSectorial, OpcionesSectorial, ResultadoSectorial } from '../sectorial.ts'
 

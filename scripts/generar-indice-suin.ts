@@ -23,7 +23,7 @@ import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { pedirJson } from '../src/nucleo/http.ts'
-import { claveSuin, fichasDe, type RespuestaFichas } from '../src/fuentes/suin.ts'
+import { claveSuin, fichasDe, type RespuestaFichas } from '../src/fuentes/suin/index.ts'
 
 const FICHAS = 'https://lexis.minjusticia.gov.co/elasticsearch/documents_pdn/_search'
 const SALIDA = fileURLToPath(new URL('../datos/indice-suin.json', import.meta.url))

@@ -37,7 +37,9 @@
  *   («1900») y rango hasta 2018. Archivo congelado, no el listado vigente.
  * - **Circulares** del catálogo antiguo: no se incluyen.
  */
-import { CanarioError, cargar, colapsarEspacios, sinTildes } from '../../nucleo/parse.ts'
+import { CanarioError } from '../../nucleo/parse/errores.ts'
+import { cargar } from '../../nucleo/parse/limpieza.ts'
+import { colapsarEspacios, sinTildes } from '../../nucleo/parse/texto.ts'
 import { pedir } from '../../nucleo/http.ts'
 import type { ActoSectorial, Adaptador, OpcionesSectorial, ResultadoSectorial } from '../sectorial.ts'
 

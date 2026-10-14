@@ -10,8 +10,10 @@
 import { strict as assert } from 'node:assert'
 import test from 'node:test'
 
-import { historial, type Cambio } from '../src/nucleo/parse.ts'
-import { datosDe, escribir, formatearHistorial, ordenarCambios, ultimaReforma } from '../src/herramientas/historial_norma.ts'
+import { historial, type Cambio } from '../src/nucleo/parse/historial.ts'
+import { escribir } from '../src/herramientas/historial_norma.ts'
+import { formatearHistorial, ordenarCambios, ultimaReforma } from '../src/herramientas/historial_norma/cambios.ts'
+import { datosDe } from '../src/herramientas/historial_norma/datos.ts'
 
 const CON_REFORMAS = `ARTÍCULO 6. <p>El Gobierno reglamentará la materia.</p>
 (Modificado por el art. 1 Decreto 666 de 2017)

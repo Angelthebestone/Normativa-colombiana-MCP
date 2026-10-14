@@ -1,6 +1,6 @@
 /**
  * `buscar_jurisprudencia`: sentencias y autos de la relatoría de la Corte
- * Constitucional. Reutiliza `buscar` de `fuentes/jurisprudencia/corte.ts`, que es
+ * Constitucional. Reutiliza `buscar` de `fuentes/jurisprudencia/corte/index.ts`, que es
  * quien habla con la relatoría; aquí solo van el esquema y el texto de la respuesta.
  */
 import type { ToolAnnotations } from '@modelcontextprotocol/sdk/types.js'
@@ -9,9 +9,9 @@ import { z } from 'zod'
 import { estricto } from '../nucleo/normalizar.ts'
 import { alcance } from '../nucleo/alcance.ts'
 import { conAlternativas } from '../nucleo/alternativas.ts'
-import { sinTildes } from '../nucleo/parse.ts'
+import { sinTildes } from '../nucleo/parse/texto.ts'
 import { vacio } from '../nucleo/vacio.ts'
-import * as corte from '../fuentes/jurisprudencia/corte.ts'
+import * as corte from '../fuentes/jurisprudencia/corte/index.ts'
 
 export const TITULO = 'Buscar jurisprudencia de la Corte Constitucional'
 

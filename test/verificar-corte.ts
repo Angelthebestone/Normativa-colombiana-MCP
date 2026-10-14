@@ -5,7 +5,7 @@
  */
 import { strict as assert } from 'node:assert'
 import { mock, test } from 'node:test'
-import { type buscar, verificar } from '../src/fuentes/jurisprudencia/corte.ts'
+import { type buscar, verificar } from '../src/fuentes/jurisprudencia/corte/index.ts'
 
 type Buscar = typeof buscar
 
