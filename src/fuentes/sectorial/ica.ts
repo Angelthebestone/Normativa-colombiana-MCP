@@ -30,7 +30,9 @@
  *   tope no se mueve con `&page=`: no pagina. Sirve para localizar un acto
  *   puntual, no para explorar a fondo un tema con muchos resultados.
  */
-import { CanarioError, cargar, colapsarEspacios } from '../../nucleo/parse.ts'
+import { CanarioError } from '../../nucleo/parse/errores.ts'
+import { cargar } from '../../nucleo/parse/limpieza.ts'
+import { colapsarEspacios } from '../../nucleo/parse/texto.ts'
 import { pedir } from '../../nucleo/http.ts'
 import type { Adaptador, ActoSectorial, OpcionesSectorial, ResultadoSectorial } from '../sectorial.ts'
 

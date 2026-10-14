@@ -6,9 +6,9 @@ import { estricto } from '../nucleo/normalizar.ts'
 import { alcance } from '../nucleo/alcance.ts'
 import { conPrefijo, sinPrefijo } from '../nucleo/catalogos.ts'
 import { cargarIndice } from '../nucleo/indice.ts'
-import { normalizarRotulo } from '../nucleo/parse.ts'
+import { normalizarRotulo } from '../nucleo/parse/texto.ts'
 import { vacio } from '../nucleo/vacio.ts'
-import * as gestor from '../fuentes/gestor.ts'
+import * as gestor from '../fuentes/gestor/index.ts'
 
 export const TITULO = 'Explicar por qué una norma aplica a un subtema'
 

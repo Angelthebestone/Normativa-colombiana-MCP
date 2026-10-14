@@ -14,6 +14,7 @@ import { estricto } from '../nucleo/normalizar.ts'
 import { alcance } from '../nucleo/alcance.ts'
 import { vacio } from '../nucleo/vacio.ts'
 import * as creg from '../fuentes/creg.ts'
+import { anioBogota } from '../nucleo/fecha.ts'
 
 export const TITULO = 'Buscar resoluciones de la CREG (energía y gas)'
 
@@ -57,7 +58,7 @@ export async function escribir({ texto, compilacion, anio, limite }: Params): Pr
   if (!r.items.length) {
     return vacio(
       `resoluciones de la CREG${texto ? ` que coincidan con "${texto}"` : ''} en la compilación "${compilacion}"` +
-        ` del año ${anio ?? new Date().getFullYear()}`,
+        ` del año ${anio ?? anioBogota()}`,
       'La CREG publica una compilación POR AÑO y sin el parámetro anio solo se mira el año en curso, que apenas ' +
         'trae unas decenas. Repite indicando el año (desde 1994). La búsqueda es sobre número, año y epígrafe: ' +
         'la CREG no ofrece búsqueda dentro del texto.',

@@ -8,7 +8,8 @@
 import { strict as assert } from 'node:assert'
 import test from 'node:test'
 
-import { escribir, formatear, formatearConReforma, formaDeLaReforma } from '../src/herramientas/comparar_articulos.ts'
+import { escribir, formatear } from '../src/herramientas/comparar_articulos.ts'
+import { formatearConReforma, formaDeLaReforma } from '../src/herramientas/comparar_articulos/reforma.ts'
 
 const A = { titulo: 'Ley 909 de 2004', url: 'https://www.funcionpublica.gov.co/eva/gestornormativo/norma.php?i=1' }
 const B = { titulo: 'Decreto 1083 de 2015', url: 'https://www.funcionpublica.gov.co/eva/gestornormativo/norma.php?i=2' }

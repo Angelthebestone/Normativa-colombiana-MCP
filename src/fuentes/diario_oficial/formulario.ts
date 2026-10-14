@@ -1,4 +1,5 @@
-import { CanarioError, cargar } from '../../nucleo/parse.ts'
+import { CanarioError } from '../../nucleo/parse/errores.ts'
+import { cargar } from '../../nucleo/parse/limpieza.ts'
 
 /** Botones del formulario: se descartan del cuerpo y solo se añade el pulsado. */
 const BOTONES = /^(?:btnBuscar|botonCancelarBuscar|dtbDiariosOficiales:\d+:j_idt34)$/

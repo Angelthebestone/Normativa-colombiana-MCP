@@ -6,8 +6,8 @@
  */
 import { strict as assert } from 'node:assert'
 import { mock, test } from 'node:test'
-import { buscar } from '../src/fuentes/gestor.ts'
-import { ficha, type RespuestaFichas } from '../src/fuentes/suin.ts'
+import { buscar } from '../src/fuentes/gestor/index.ts'
+import { ficha, type RespuestaFichas } from '../src/fuentes/suin/index.ts'
 
 // --- Gestor ----------------------------------------------------------------
 

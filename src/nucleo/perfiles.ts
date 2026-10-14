@@ -16,7 +16,7 @@
 import * as anla from '../fuentes/anla.ts'
 import * as consejo from '../fuentes/jurisprudencia/consejoestado.ts'
 import * as creg from '../fuentes/creg.ts'
-import * as gestor from '../fuentes/gestor.ts'
+import * as gestor from '../fuentes/gestor/index.ts'
 import * as dian from '../fuentes/normograma.ts'
 
 export type Perfil = {

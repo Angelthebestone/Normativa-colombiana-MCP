@@ -1,4 +1,6 @@
-import { CanarioError, cargar, colapsarEspacios } from '../../nucleo/parse.ts'
+import { CanarioError } from '../../nucleo/parse/errores.ts'
+import { cargar } from '../../nucleo/parse/limpieza.ts'
+import { colapsarEspacios } from '../../nucleo/parse/texto.ts'
 import type { Diario } from './portal.ts'
 
 

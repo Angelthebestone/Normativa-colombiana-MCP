@@ -4,9 +4,9 @@ import { z } from 'zod'
 
 import { estricto } from '../nucleo/normalizar.ts'
 import { conPrefijo, sinPrefijo } from '../nucleo/catalogos.ts'
-import { sinTildes } from '../nucleo/parse.ts'
+import { sinTildes } from '../nucleo/parse/texto.ts'
 import { vacio } from '../nucleo/vacio.ts'
-import * as gestor from '../fuentes/gestor.ts'
+import * as gestor from '../fuentes/gestor/index.ts'
 
 export const TITULO = 'Listar catálogos de búsqueda'
 

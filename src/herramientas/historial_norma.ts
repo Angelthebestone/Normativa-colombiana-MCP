@@ -16,12 +16,14 @@
 import type { ToolAnnotations } from '@modelcontextprotocol/sdk/types.js'
 import { z } from 'zod'
 
-import { articulo as extraerArticulo, historial, indiceArticulos, type Cambio } from '../nucleo/parse.ts'
+import { articulo as extraerArticulo, indiceArticulos } from '../nucleo/parse/articulos.ts'
+import { historial, type Cambio } from '../nucleo/parse/historial.ts'
 import { idTipo, parsearCita, candidatosAmbiguos } from '../nucleo/citas.ts'
 import { estricto, numeroDeArticulo } from '../nucleo/normalizar.ts'
 
-import * as gestor from '../fuentes/gestor.ts'
+import * as gestor from '../fuentes/gestor/index.ts'
 import { alcance } from '../nucleo/alcance.ts'
+import { fechaBogota } from '../nucleo/fecha.ts'
 
 export const TITULO = 'Historial de reformas de una norma'
 
@@ -66,9 +68,6 @@ type Params = z.infer<typeof esquema>
 
 /** Inyectables para probar sin red (patrón de validar_cita.ts). */
 type Deps = { buscar?: typeof gestor.buscar; obtenerNorma?: typeof gestor.obtenerNorma }
-
-/** Fecha de la consulta en AAAA-MM-DD: la que el envoltorio ya no añade en modo json. */
-const hoy = () => new Date().toISOString().slice(0, 10)
 
 const ficha = (c: Cambio): string =>
   `${c.accion.toUpperCase()}${c.norma ? ` por ${c.norma}${c.anio ? ` de ${c.anio}` : ''}` : ''}${c.articulo ? `, artículo ${c.articulo}` : ''}`
@@ -235,7 +234,7 @@ function avisosDe(
 
 /** El objeto vacío de los caminos sin norma resuelta: la misma forma, en cero. */
 const sinDatos = (alcanceLinea: string, aviso: string): DatosHistorial => ({
-  fecha_consulta: hoy(),
+  fecha_consulta: fechaBogota(),
   alcance: alcanceLinea,
   titulo: '',
   url: '',
@@ -258,7 +257,7 @@ export function datosDe(
 ): DatosHistorial {
   const { ordenados, desde, tramo } = acotar(cambios, opts)
   return {
-    fecha_consulta: hoy(),
+    fecha_consulta: fechaBogota(),
     alcance: alcanceLinea,
     titulo,
     url,

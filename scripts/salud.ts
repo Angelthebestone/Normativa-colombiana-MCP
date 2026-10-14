@@ -40,7 +40,7 @@
  */
 import { fileURLToPath } from 'node:url'
 
-import { BASE_GESTOR } from '../src/nucleo/parse.ts'
+import { BASE_GESTOR } from '../src/nucleo/parse/gestor.ts'
 import { pedir, restablecer } from '../src/nucleo/http.ts'
 import { diagnosticarRespuesta } from '../src/nucleo/portal-roto.ts'
 import { enlaceBusqueda } from '../src/fuentes/jurisprudencia/consejoestado.ts'
@@ -157,7 +157,7 @@ export const PORTALES: Portal[] = [
     nombre: 'Gestor Normativo (Función Pública)',
     // Petición mínima al buscador avanzado (no la portada): devuelve el contador
     // «encontrados: N» y los enlaces `norma.php?i=`. Es la misma ruta que usa
-    // src/fuentes/gestor.ts (`funajax.php`) y no es cacheable por `cache.ts`.
+    // src/fuentes/gestor/index.ts (`funajax.php`) y no es cacheable por `cache.ts`.
     url: `${BASE_GESTOR}/gestion/funphp/funajax.php?t=ejecuta_busqueda_avanzada2&palabras=ley`,
     forma: (c) => (/encontrados:\s*\d+/i.test(c) && /norma\.php\?i=\d+/.test(c) ? null : 'sin el contador «encontrados» ni enlaces de norma'),
     nota: 'buscador avanzado: 200 con «encontrados: N» y enlaces a norma.php',
@@ -229,7 +229,7 @@ export const PORTALES: Portal[] = [
   },
   {
     nombre: 'SUIN-Juriscol (fichas · Elasticsearch)',
-    // Índice público del buscador nuevo (src/fuentes/suin.ts, `FICHAS`). POST
+    // Índice público del buscador nuevo (src/fuentes/suin/index.ts, `FICHAS`). POST
     // mínimo: una ficha cualquiera. Es de donde sale el estado de vigencia.
     url: 'https://lexis.minjusticia.gov.co/elasticsearch/documents_stg/_search',
     accept: 'application/json',
@@ -239,7 +239,7 @@ export const PORTALES: Portal[] = [
   },
   {
     nombre: 'SUIN-Juriscol (buscador · Azure)',
-    // Azure Cognitive Search (src/fuentes/suin.ts, `BUSCADOR`). La api-key es la
+    // Azure Cognitive Search (src/fuentes/suin/index.ts, `BUSCADOR`). La api-key es la
     // pública que el portal sirve a cualquier visitante.
     url: "https://searchmjd.search.windows.net/indexes/suinjuriscol-index/docs?api-version=2019-05-06&search=tutela&$top=1&$select=ID&$count=true",
     accept: 'application/json;odata.metadata=none',
