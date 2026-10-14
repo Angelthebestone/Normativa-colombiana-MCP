@@ -28,7 +28,9 @@
  * con exactamente tres `<td>` útiles por fila y el número como enlace de
  * descarga. Por eso no se filtra por clase.
  */
-import { CanarioError, cargar, colapsarEspacios, limpiarTermino, sinTildes } from '../../nucleo/parse.ts'
+import { CanarioError } from '../../nucleo/parse/errores.ts'
+import { cargar } from '../../nucleo/parse/limpieza.ts'
+import { colapsarEspacios, limpiarTermino, sinTildes } from '../../nucleo/parse/texto.ts'
 import { pedir } from '../../nucleo/http.ts'
 import type { Adaptador, ActoSectorial } from '../sectorial.ts'
 import { anioBogota } from '../../nucleo/fecha.ts'

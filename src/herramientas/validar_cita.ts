@@ -3,7 +3,7 @@ import { z } from 'zod'
 import { estricto } from '../nucleo/normalizar.ts'
 import { idTipo, parsearCita, candidatosAmbiguos, type Cita } from '../nucleo/citas.ts'
 import { clasificarValidacion, parametroEs, validarArticulo, validarNumeroAnio, validarUrl } from '../nucleo/evidencia.ts'
-import { sinTildes } from '../nucleo/parse.ts'
+import { sinTildes } from '../nucleo/parse/texto.ts'
 import * as gestor from '../fuentes/gestor.ts'
 import { fechaBogota } from '../nucleo/fecha.ts'
 

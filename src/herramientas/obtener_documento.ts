@@ -18,25 +18,15 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { z } from 'zod'
 
-import {
-  advertenciasVigencia,
-  articulo as extraerArticulo,
-  avisoSinTexto,
-  cargar,
-  fragmentos,
-  historial,
-  indiceArticulos,
-  normalizarRotulo,
-  mapaDeSecciones,
-  etiquetaEn,
-  ENCABEZADO_PROVIDENCIA,
-  seccion as seccionDe,
-  seccionesPresentes,
-  sinTildes,
-  textoDe,
-  trocear,
-} from '../nucleo/parse.ts'
-import { NoExisteError } from '../nucleo/parse.ts'
+import { articulo as extraerArticulo, indiceArticulos } from '../nucleo/parse/articulos.ts'
+import { fragmentos, trocear } from '../nucleo/parse/fragmentos.ts'
+import { historial } from '../nucleo/parse/historial.ts'
+import { cargar, textoDe } from '../nucleo/parse/limpieza.ts'
+import { avisoSinTexto } from '../nucleo/parse/pdf.ts'
+import { mapaDeSecciones, etiquetaEn, ENCABEZADO_PROVIDENCIA, seccion as seccionDe, seccionesPresentes } from '../nucleo/parse/secciones.ts'
+import { normalizarRotulo, sinTildes } from '../nucleo/parse/texto.ts'
+import { advertenciasVigencia } from '../nucleo/parse/vigencia.ts'
+import { NoExisteError } from '../nucleo/parse/errores.ts'
 import { pedir as pedirHttp } from '../nucleo/http.ts'
 import { descargarA, escribirSinColision } from '../nucleo/descargas.ts'
 import { parsearCita } from '../nucleo/citas.ts'

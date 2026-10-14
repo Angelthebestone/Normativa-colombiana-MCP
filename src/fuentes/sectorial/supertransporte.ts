@@ -21,7 +21,9 @@
  * `.resolution` o los enlaces a `/documentos/`), se lanza `CanarioError` y no
  * una lista vacía: un vacío se leería como "esa norma no existe".
  */
-import { CanarioError, cargar, colapsarEspacios, sinTildes } from '../../nucleo/parse.ts'
+import { CanarioError } from '../../nucleo/parse/errores.ts'
+import { cargar } from '../../nucleo/parse/limpieza.ts'
+import { colapsarEspacios, sinTildes } from '../../nucleo/parse/texto.ts'
 import { pedir } from '../../nucleo/http.ts'
 import type { ActoSectorial, OpcionesSectorial, ResultadoSectorial } from '../sectorial.ts'
 import { anioBogota } from '../../nucleo/fecha.ts'

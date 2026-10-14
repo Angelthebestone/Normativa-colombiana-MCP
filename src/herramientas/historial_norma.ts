@@ -16,7 +16,8 @@
 import type { ToolAnnotations } from '@modelcontextprotocol/sdk/types.js'
 import { z } from 'zod'
 
-import { articulo as extraerArticulo, historial, indiceArticulos, type Cambio } from '../nucleo/parse.ts'
+import { articulo as extraerArticulo, indiceArticulos } from '../nucleo/parse/articulos.ts'
+import { historial, type Cambio } from '../nucleo/parse/historial.ts'
 import { idTipo, parsearCita, candidatosAmbiguos } from '../nucleo/citas.ts'
 import { estricto, numeroDeArticulo } from '../nucleo/normalizar.ts'
 

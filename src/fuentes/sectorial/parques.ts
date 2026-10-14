@@ -33,7 +33,9 @@
  * correcto). Tomar el primer `<a>` de la tarjeta sin distinguir da una URL
  * rota; hay que preferir siempre `a.documento-normativa`.
  */
-import { CanarioError, cargar, colapsarEspacios, sinTildes } from '../../nucleo/parse.ts'
+import { CanarioError } from '../../nucleo/parse/errores.ts'
+import { cargar } from '../../nucleo/parse/limpieza.ts'
+import { colapsarEspacios, sinTildes } from '../../nucleo/parse/texto.ts'
 import { pedir } from '../../nucleo/http.ts'
 import { advertenciaPortalRoto } from '../../nucleo/portal-roto.ts'
 import type * as cheerio from 'cheerio/slim'

@@ -10,7 +10,7 @@
  *     esconde que la fuente está caída. Eso lo consume el circuit breaker de
  *     `http.ts`, para que el host quede degradado y se diga cuándo reintentar.
  */
-import { sinTildes } from './parse.ts'
+import { sinTildes } from './parse/texto.ts'
 import { fechaBogota } from './fecha.ts'
 
 /** Número(s) de la norma dentro del epígrafe: "Ley 2021 de 2021" → ["2021"]. */

@@ -33,7 +33,8 @@
  */
 import { readFileSync } from 'node:fs'
 import { TTL_BUSQUEDA_MS } from '../nucleo/cache.ts'
-import { CanarioError, limpiarTermino, sinTildes } from '../nucleo/parse.ts'
+import { CanarioError } from '../nucleo/parse/errores.ts'
+import { limpiarTermino, sinTildes } from '../nucleo/parse/texto.ts'
 import { pedir, pedirJson } from '../nucleo/http.ts'
 import { esStopword } from '../nucleo/stopwords.ts'
 

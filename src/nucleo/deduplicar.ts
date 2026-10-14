@@ -4,7 +4,7 @@
  * espacios colapsados, para que "Ley 100 de 1993" y "LEY 100 DE 1993" (mismo
  * acto, dos enlaces del portal) sean la misma clave.
  */
-import { sinTildes } from './parse.ts'
+import { sinTildes } from './parse/texto.ts'
 
 const normaliza = (s: string): string =>
   sinTildes(s)

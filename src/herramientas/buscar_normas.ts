@@ -7,7 +7,7 @@ import { alcance } from '../nucleo/alcance.ts'
 import { conPrefijo, idOnombre } from '../nucleo/catalogos.ts'
 import { NO_EN_GESTOR, normalizarEntidad } from '../nucleo/entidades.ts'
 import { temaDelIndice } from '../nucleo/indice.ts'
-import { normalizarRotulo, sinTildes } from '../nucleo/parse.ts'
+import { normalizarRotulo, sinTildes } from '../nucleo/parse/texto.ts'
 import { vacio } from '../nucleo/vacio.ts'
 import * as gestor from '../fuentes/gestor.ts'
 
