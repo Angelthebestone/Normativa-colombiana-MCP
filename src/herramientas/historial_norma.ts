@@ -18,7 +18,7 @@ import { z } from 'zod'
 
 import { articulo as extraerArticulo, indiceArticulos } from '../nucleo/parse/articulos.ts'
 import { historial, type Cambio } from '../nucleo/parse/historial.ts'
-import { idTipo, parsearCita, candidatosAmbiguos } from '../nucleo/citas.ts'
+import { idTipo, parsearCita, candidatosAmbiguos } from '../nucleo/citas/index.ts'
 import { estricto, numeroDeArticulo } from '../nucleo/normalizar.ts'
 
 import * as gestor from '../fuentes/gestor/index.ts'

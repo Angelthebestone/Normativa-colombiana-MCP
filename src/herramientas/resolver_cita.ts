@@ -7,7 +7,7 @@ import { z } from 'zod'
 
 import { activa, alcance, avisoApagada, type Uso } from '../nucleo/alcance.ts'
 import { citaCorteConstitucional } from '../nucleo/cita_oficial/index.ts'
-import { parsearCita, parsearRadicado } from '../nucleo/citas.ts'
+import { parsearCita, parsearRadicado } from '../nucleo/citas/index.ts'
 import { codigoDe, equivalencia, referencia as refCodigo } from '../nucleo/codigos.ts'
 import { esCompiladora } from '../nucleo/compiladas.ts'
 import { validarUrl } from '../nucleo/evidencia.ts'

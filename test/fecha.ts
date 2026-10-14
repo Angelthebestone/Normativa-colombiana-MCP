@@ -7,7 +7,7 @@ import { strict as assert } from 'node:assert'
 import test from 'node:test'
 
 import { anioBogota, fechaBogota } from '../src/nucleo/fecha.ts'
-import { analizarVacancia, enVacancia } from '../src/nucleo/vacancia.ts'
+import { analizarVacancia, enVacancia } from '../src/nucleo/vacancia/index.ts'
 import { rotuloCopia } from '../src/nucleo/portal-roto.ts'
 
 test('de 19:00 a medianoche de Bogotá, UTC ya va un día por delante y la fecha sigue siendo la colombiana', () => {

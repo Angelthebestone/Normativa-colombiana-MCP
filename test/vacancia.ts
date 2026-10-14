@@ -10,7 +10,7 @@
 import { strict as assert } from 'node:assert'
 import test from 'node:test'
 
-import { analizarVacancia, enVacancia, type ClaseVacancia } from '../src/nucleo/vacancia.ts'
+import { analizarVacancia, enVacancia, type ClaseVacancia } from '../src/nucleo/vacancia/index.ts'
 import * as gestor from '../src/fuentes/gestor/index.ts'
 
 /** Sin red: los casos que consultan el Gestor se saltan. */

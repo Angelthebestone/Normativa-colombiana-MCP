@@ -21,7 +21,7 @@ import { articulo as articuloDelSenado, BASE_SENADO } from '../fuentes/senado.ts
 import * as suin from '../fuentes/suin/index.ts'
 import { activa, avisoApagada } from '../nucleo/alcance.ts'
 import { equivalencia, referencia, type Codigo } from '../nucleo/codigos.ts'
-import type { Cita } from '../nucleo/citas.ts'
+import type { Cita } from '../nucleo/citas/index.ts'
 import type { Resuelta } from './resolver_cita.ts'
 
 const SIN_CIFRAR =
