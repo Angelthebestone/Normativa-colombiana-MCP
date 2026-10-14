@@ -29,7 +29,7 @@ import {
 } from '../nucleo/parse.ts'
 import { estricto, numeroDeArticulo } from '../nucleo/normalizar.ts'
 
-import * as gestor from '../fuentes/gestor.ts'
+import * as gestor from '../fuentes/gestor/index.ts'
 import { alcance } from '../nucleo/alcance.ts'
 
 export const TITULO = 'Comparar dos artículos de normas distintas'

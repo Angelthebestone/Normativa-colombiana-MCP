@@ -23,7 +23,7 @@
  * y además no hace falta ninguna.
  */
 import { CanarioError, cargar, textoDe } from '../../nucleo/parse.ts'
-import { quitarStopwords } from '../gestor.ts'
+import { quitarStopwords } from '../gestor/index.ts'
 import { pedirJson } from '../../nucleo/http.ts'
 
 const API = 'https://consultaprovidenciasbk.cortesuprema.gov.co/api'

@@ -45,7 +45,7 @@ import { textoDePdfSectorial, avisoEscaneo } from '../fuentes/sectorial/pdf.ts'
 import { adaptador, ids } from '../fuentes/sectorial.ts'
 import { estricto, numeroDeArticulo } from '../nucleo/normalizar.ts'
 
-import * as gestor from '../fuentes/gestor.ts'
+import * as gestor from '../fuentes/gestor/index.ts'
 import * as corte from '../fuentes/jurisprudencia/corte.ts'
 import * as suprema from '../fuentes/jurisprudencia/cortesuprema.ts'
 import * as consejo from '../fuentes/jurisprudencia/consejoestado.ts'

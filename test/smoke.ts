@@ -43,7 +43,7 @@ import {
   trocear,
 } from '../src/nucleo/parse.ts'
 import { cuerpoDe, decodificar } from '../src/nucleo/http.ts'
-import * as gestor from '../src/fuentes/gestor.ts'
+import * as gestor from '../src/fuentes/gestor/index.ts'
 import * as corte from '../src/fuentes/jurisprudencia/corte.ts'
 
 // Las pruebas marcadas con RED consultan los portales oficiales. Con SIN_RED=1

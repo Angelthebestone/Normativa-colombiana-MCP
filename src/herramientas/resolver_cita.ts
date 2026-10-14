@@ -15,7 +15,7 @@ import { advertenciasVigencia, articulo as extraerArticulo } from '../nucleo/par
 import { estricto, numeroDeArticulo } from '../nucleo/normalizar.ts'
 import { vacio } from '../nucleo/vacio.ts'
 import * as corte from '../fuentes/jurisprudencia/corte.ts'
-import * as gestor from '../fuentes/gestor.ts'
+import * as gestor from '../fuentes/gestor/index.ts'
 import * as suin from '../fuentes/suin.ts'
 import { resolverCodigo } from './codigo_senado.ts'
 import { resolverRadicado } from './resolver_radicado.ts'

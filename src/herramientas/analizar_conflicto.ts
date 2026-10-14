@@ -7,7 +7,7 @@ import { z } from 'zod'
 
 import { estricto } from '../nucleo/normalizar.ts'
 import { idTipo, parsearCita, candidatosAmbiguos } from '../nucleo/citas.ts'
-import * as gestor from '../fuentes/gestor.ts'
+import * as gestor from '../fuentes/gestor/index.ts'
 import * as suin from '../fuentes/suin.ts'
 import { caracterDelNivel, tipoANivel } from '../nucleo/jerarquia.ts'
 import { fragmentos, historial, sinTildes } from '../nucleo/parse.ts'

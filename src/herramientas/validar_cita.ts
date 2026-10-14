@@ -4,7 +4,7 @@ import { estricto } from '../nucleo/normalizar.ts'
 import { idTipo, parsearCita, candidatosAmbiguos, type Cita } from '../nucleo/citas.ts'
 import { clasificarValidacion, validarArticulo, validarNumeroAnio, validarUrl } from '../nucleo/evidencia.ts'
 import { sinTildes } from '../nucleo/parse.ts'
-import * as gestor from '../fuentes/gestor.ts'
+import * as gestor from '../fuentes/gestor/index.ts'
 
 export const TITULO = 'Validar una cita y su enlace'
 

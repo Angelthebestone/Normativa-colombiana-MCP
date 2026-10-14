@@ -9,7 +9,7 @@ import { NO_EN_GESTOR, normalizarEntidad } from '../nucleo/entidades.ts'
 import { temaDelIndice } from '../nucleo/indice.ts'
 import { normalizarRotulo, sinTildes } from '../nucleo/parse.ts'
 import { vacio } from '../nucleo/vacio.ts'
-import * as gestor from '../fuentes/gestor.ts'
+import * as gestor from '../fuentes/gestor/index.ts'
 
 export const TITULO = 'Buscar normas en el Gestor Normativo'
 

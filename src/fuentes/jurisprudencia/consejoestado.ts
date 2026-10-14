@@ -26,7 +26,7 @@
  */
 import * as cheerio from 'cheerio/slim'
 import { CanarioError, colapsarEspacios, limpiarTermino, sinTildes } from '../../nucleo/parse.ts'
-import { terminosSignificativos } from '../gestor.ts'
+import { terminosSignificativos } from '../gestor/index.ts'
 import { pedir, pedirBytes } from '../../nucleo/http.ts'
 
 const BASE = 'https://samai.consejodeestado.gov.co'

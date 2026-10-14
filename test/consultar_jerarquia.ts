@@ -7,7 +7,7 @@ import test from 'node:test'
 
 import { formatear, porGestor, type BuscadorNormas } from '../src/herramientas/consultar_jerarquia.ts'
 import { caracterDelNivel, TIPO_GESTOR } from '../src/nucleo/jerarquia.ts'
-import type * as gestor from '../src/fuentes/gestor.ts'
+import type * as gestor from '../src/fuentes/gestor/index.ts'
 
 test('formatear con 2 items incluye el carácter del nivel y sus URLs', () => {
   const items = [

@@ -8,7 +8,7 @@ import { conPrefijo, sinPrefijo } from '../nucleo/catalogos.ts'
 import { cargarIndice } from '../nucleo/indice.ts'
 import { normalizarRotulo } from '../nucleo/parse.ts'
 import { vacio } from '../nucleo/vacio.ts'
-import * as gestor from '../fuentes/gestor.ts'
+import * as gestor from '../fuentes/gestor/index.ts'
 
 export const TITULO = 'Explicar por qué una norma aplica a un subtema'
 
