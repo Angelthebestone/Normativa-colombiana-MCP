@@ -2,26 +2,33 @@
 
 type Entrada = { valor: unknown; vence: number }
 
-const entradas = new Map<string, Entrada>()
+/** Valores con TTL de una instancia de caché: no se comparten entre instancias. */
+export function crearMemoria() {
+  const entradas = new Map<string, Entrada>()
 
-/**
- * Valor fresco para `clave`, o null si no está o expiró (barrido perezoso:
- * la entrada vencida se borra al tocarla y la próxima llamada la recalcula).
- */
-export function obtener(clave: string): unknown | null {
-  const e = entradas.get(clave)
-  if (!e) return null
-  if (Date.now() > e.vence) {
-    entradas.delete(clave)
-    return null
+  /**
+   * Valor fresco para `clave`, o null si no está o expiró (barrido perezoso:
+   * la entrada vencida se borra al tocarla y la próxima llamada la recalcula).
+   */
+  function obtener(clave: string): unknown | null {
+    const e = entradas.get(clave)
+    if (!e) return null
+    if (Date.now() > e.vence) {
+      entradas.delete(clave)
+      return null
+    }
+    return e.valor
   }
-  return e.valor
+
+  /** Guarda `valor` bajo `clave` hasta `ttlMs` milisegundos desde ahora. */
+  function poner(clave: string, valor: unknown, ttlMs: number): void {
+    entradas.set(clave, { valor, vence: Date.now() + ttlMs })
+  }
+
+  return { obtener, poner }
 }
 
-/** Guarda `valor` bajo `clave` hasta `ttlMs` milisegundos desde ahora. */
-export function poner(clave: string, valor: unknown, ttlMs: number): void {
-  entradas.set(clave, { valor, vence: Date.now() + ttlMs })
-}
+export type Memoria = ReturnType<typeof crearMemoria>
 
 /**
  * Cuánto se recuerda la respuesta de una búsqueda o de una consulta por número: no es

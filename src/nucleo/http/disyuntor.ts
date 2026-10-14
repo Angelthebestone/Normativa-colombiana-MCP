@@ -9,50 +9,57 @@ const UMBRAL_FALLOS = 3
 
 /** `ultimo` es la causa del último fallo (HTTP 503, error de red…): la que el error de la pausa tiene que decir. */
 type Breaker = { fallos: number; desde: number; hasta: number | null; ultimo: string }
-const breakers = new Map<string, Breaker>()
+/** Los interruptores por host de una instancia de red. */
+export function crearDisyuntor() {
+  const breakers = new Map<string, Breaker>()
 
-function breaker(host: string): Breaker {
-  let b = breakers.get(host)
-  if (!b) {
-    b = { fallos: 0, desde: Date.now(), hasta: null, ultimo: '' }
-    breakers.set(host, b)
+  function breaker(host: string): Breaker {
+    let b = breakers.get(host)
+    if (!b) {
+      b = { fallos: 0, desde: Date.now(), hasta: null, ultimo: '' }
+      breakers.set(host, b)
+    }
+    return b
   }
-  return b
+
+  /** Estado declarado de un host: si está degradado, por qué y cuándo se vuelve a llamar a la fuente. */
+  function estadoDe(host: string): { degradado: boolean; reintentaEnMs?: number; causa?: string } {
+    const b = breaker(host)
+    const ahora = Date.now()
+    if (b.hasta !== null && ahora >= b.hasta) {
+      b.fallos = 0
+      b.desde = ahora
+      b.hasta = null
+    }
+    return b.hasta === null ? { degradado: false } : { degradado: true, reintentaEnMs: b.hasta - ahora, causa: b.ultimo }
+  }
+
+  /** Anota un fallo de red o 5xx, con su causa, y arma la pausa al llegar al umbral. */
+  function anotarFallo(host: string, causa: string): void {
+    const b = breaker(host)
+    const ahora = Date.now()
+    if (b.hasta !== null && ahora >= b.hasta) {
+      b.fallos = 0
+      b.desde = ahora
+      b.hasta = null
+    }
+    b.fallos += 1
+    b.ultimo = causa
+    if (b.fallos >= UMBRAL_FALLOS) {
+      b.hasta = ahora + DEGRADADO_MS
+      b.fallos = 0
+    }
+  }
+
+  /** Marca el host como sano tras una petición que sí respondió. */
+  function restablecer(host: string): void {
+    breakers.delete(host)
+  }
+
+  return { estadoDe, anotarFallo, restablecer }
 }
 
-/** Estado declarado de un host: si está degradado, por qué y cuándo se vuelve a llamar a la fuente. */
-export function estadoDe(host: string): { degradado: boolean; reintentaEnMs?: number; causa?: string } {
-  const b = breaker(host)
-  const ahora = Date.now()
-  if (b.hasta !== null && ahora >= b.hasta) {
-    b.fallos = 0
-    b.desde = ahora
-    b.hasta = null
-  }
-  return b.hasta === null ? { degradado: false } : { degradado: true, reintentaEnMs: b.hasta - ahora, causa: b.ultimo }
-}
-
-/** Anota un fallo de red o 5xx, con su causa, y arma la pausa al llegar al umbral. */
-export function anotarFallo(host: string, causa: string): void {
-  const b = breaker(host)
-  const ahora = Date.now()
-  if (b.hasta !== null && ahora >= b.hasta) {
-    b.fallos = 0
-    b.desde = ahora
-    b.hasta = null
-  }
-  b.fallos += 1
-  b.ultimo = causa
-  if (b.fallos >= UMBRAL_FALLOS) {
-    b.hasta = ahora + DEGRADADO_MS
-    b.fallos = 0
-  }
-}
-
-/** Marca el host como sano tras una petición que sí respondió. */
-export function restablecer(host: string): void {
-  breakers.delete(host)
-}
+export type Disyuntor = ReturnType<typeof crearDisyuntor>
 
 /**
  * Error con el que se corta la llamada mientras el host está degradado. Nombra la
