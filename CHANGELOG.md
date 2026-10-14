@@ -3,7 +3,7 @@
 Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/).
 Este proyecto sigue [versionado semántico](https://semver.org/lang/es/).
 
-## [Sin publicar]
+## [1.16.0] — 2026-10-14
 
 **SUIN-Juriscol alineado con su portal de octubre de 2026, y dos ministerios nuevos.** Medido el 2026-10-14 contra `lexis.minjusticia.gov.co/buscador/Detallado/{1,2,3}` (reglamentos técnicos, jurisprudencia y normas).
 
