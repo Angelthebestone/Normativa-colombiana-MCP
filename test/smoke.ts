@@ -13,7 +13,6 @@ import { gzipSync } from 'node:zlib'
 
 import { parsearCita, idTipo, rutaDeSentencia } from '../src/nucleo/citas/index.ts'
 import { claveSuin, ficha, fichasDe } from '../src/fuentes/suin/index.ts'
-import { mereceAviso } from '../src/nucleo/actualizacion.ts'
 import * as dian from '../src/fuentes/normograma.ts'
 import * as suprema from '../src/fuentes/jurisprudencia/cortesuprema.ts'
 import * as consejo from '../src/fuentes/jurisprudencia/consejoestado/index.ts'
@@ -514,16 +513,6 @@ test('las formas de la Suprema: encabezado con dos puntos, firmante bajo el voto
   assert.equal(mapa[0]!.desde, 0)
   assert.equal(mapa.at(-1)!.hasta, texto.length)
   for (let i = 1; i < mapa.length; i++) assert.equal(mapa[i]!.desde, mapa[i - 1]!.hasta)
-})
-
-test('el aviso de versión no molesta: solo cambios que importan', () => {
-  assert.equal(mereceAviso('1.4.0', '1.5.0'), true)
-  assert.equal(mereceAviso('1.4.0', '2.0.0'), true)
-  // Un parche no interrumpe a nadie: se recoge cuando actualice por otra razón.
-  assert.equal(mereceAviso('1.4.0', '1.4.1'), false)
-  assert.equal(mereceAviso('1.4.0', '1.4.0'), false)
-  // Y nunca hacia atrás.
-  assert.equal(mereceAviso('1.4.0', '1.3.9'), false)
 })
 
 test('la ANH devuelve actos citables y marca los de personal', RED, async () => {

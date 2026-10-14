@@ -1,70 +1,90 @@
 /**
  * Aviso de versión nueva.
  *
- * El problema que resuelve es real —se publican versiones cada pocos días y
- * quien instaló el .mcpb no se entera— pero la solución fácil es peor que el
- * problema: un recordatorio en cada respuesta convierte la herramienta en un
- * software que da la lata, y en un contexto jurídico compite con el texto de la
- * norma por la atención de quien lee.
+ * Quien lanza el servidor con `npx` sin `@latest` se queda con la copia que npx
+ * dejó en su caché, y quien instaló el .mcpb no recibe nada solo. Este módulo
+ * cierra esa brecha sin volverse una molestia: en un contexto jurídico un
+ * recordatorio en cada respuesta compite con el texto de la norma.
  *
- * Por eso:
- *
- * - Se consulta UNA vez por proceso, y solo cuando ya se pidió algo. Nunca en
- *   el arranque: no vale la pena retrasar el `initialize` por esto.
- * - Se avisa UNA sola vez por sesión, en la primera respuesta, y nunca más.
- * - Si el registro no contesta en tres segundos, se calla para siempre. Un
- *   fallo de red no puede degradar una consulta legal.
- * - Solo se avisa de versiones MAYORES o MENORES. Un parche no merece
- *   interrumpir a nadie; se recogerá cuando actualice por otra razón.
+ * - La comprobación arranca en segundo plano al conectar, sin retrasar `initialize`.
+ * - Se avisa UNA sola vez por proceso, en la primera respuesta que llegue con la
+ *   comprobación ya resuelta.
+ * - Si el registro no contesta en tres segundos, se calla. Un fallo de red no
+ *   puede degradar una consulta legal.
+ * - Se avisa de cualquier versión mayor, parche incluido: se publica seguido y
+ *   cada parche corrige respuestas que un abogado podría estar citando.
  */
 import { VERSION, pedir } from './http.ts'
 
 const REGISTRO = 'https://registry.npmjs.org/normativa-colombia-mcp/latest'
+const ESPERA_REGISTRO_MS = 3000
+const RELEASES = 'https://github.com/Angelthebestone/Normativa-colombiana-MCP/releases/latest'
 
-let comprobado = false
-let yaAvisado = false
-let disponible: string | null = null
+type ConsultarUltima = () => Promise<string | null>
 
 const trozos = (v: string): number[] => v.split('.').map((n) => Number(n) || 0)
 
-/** ¿`b` es mayor que `a` en algo que no sea el parche? */
-export function mereceAviso(actual: string, nueva: string): boolean {
-  const [aM = 0, am = 0] = trozos(actual)
-  const [bM = 0, bm = 0] = trozos(nueva)
-  return bM > aM || (bM === aM && bm > am)
+/** ¿`nueva` es estrictamente mayor que `actual`? Compara mayor, menor y parche. */
+export function esVersionNueva(actual: string, nueva: string): boolean {
+  const a = trozos(actual)
+  const b = trozos(nueva)
+  for (let i = 0; i < 3; i++) {
+    const diferencia = (b[i] ?? 0) - (a[i] ?? 0)
+    if (diferencia !== 0) return diferencia > 0
+  }
+  return false
 }
 
-/** Consulta el registro sin bloquear ni propagar errores. */
-async function mirar(): Promise<void> {
-  if (comprobado) return
-  comprobado = true
-  if (VERSION === 'dev') return // sin empaquetar no hay versión que comparar
+/** Última versión publicada en npm, o null si el registro no contesta. */
+async function consultarRegistro(): Promise<string | null> {
   try {
-    const r = await pedir(REGISTRO, 3000, 'application/json')
-    if (r.status !== 200) return
-    const v = (JSON.parse(r.cuerpo) as { version?: string }).version
-    if (v && mereceAviso(VERSION, v)) disponible = v
+    const r = await pedir(REGISTRO, ESPERA_REGISTRO_MS, 'application/json')
+    if (r.status !== 200) return null
+    return (JSON.parse(r.cuerpo) as { version?: string }).version ?? null
   } catch {
-    /* el registro es un lujo, no un requisito */
+    return null // el registro es un lujo, no un requisito
   }
 }
 
-/**
- * Línea que se añade a la primera respuesta si hay versión nueva, y vacío
- * siempre después. Se dispara la comprobación y se sigue: la primera respuesta
- * de la sesión no espera por ella.
- */
-export function avisoVersion(): string {
-  if (yaAvisado) return ''
-  if (!comprobado) {
-    void mirar()
-    return ''
-  }
-  if (!disponible) return ''
-  yaAvisado = true
+export function textoAviso(actual: string, nueva: string): string {
   return (
-    `\n\nHay una versión nueva de esta extensión: ${VERSION} → ${disponible}. ` +
-    `Si la instalaste con npx se actualiza sola al reiniciar el cliente; si usas el .mcpb, descárgalo de ` +
-    `https://github.com/Angelthebestone/Normativa-colombiana-MCP/releases. Este aviso no se repite.`
+    `\n\nHay una versión nueva de esta extensión: ${actual} → ${nueva}. ` +
+    `Con npx, reinicia el cliente (si no se actualiza, usa el argumento normativa-colombia-mcp@latest); ` +
+    `con el .mcpb, descarga el nuevo de ${RELEASES}. Este aviso no se repite.`
   )
 }
+
+export interface AvisoVersion {
+  /** Dispara la comprobación en segundo plano. Idempotente. */
+  iniciar(): void
+  /** El aviso la primera vez que hay versión nueva, y '' siempre después. */
+  tomar(): string
+}
+
+export function crearAvisoVersion(
+  versionActual: string,
+  consultar: ConsultarUltima = consultarRegistro,
+): AvisoVersion {
+  let iniciada = false
+  let disponible: string | null = null
+  return {
+    iniciar() {
+      if (iniciada || versionActual === 'dev') return // sin empaquetar no hay versión que comparar
+      iniciada = true
+      void consultar().then((ultima) => {
+        if (ultima && esVersionNueva(versionActual, ultima)) disponible = ultima
+      })
+    },
+    tomar() {
+      if (!disponible) return ''
+      const nueva = disponible
+      disponible = null
+      return textoAviso(versionActual, nueva)
+    },
+  }
+}
+
+const delProceso = crearAvisoVersion(VERSION)
+
+export const iniciarAvisoVersion = delProceso.iniciar
+export const avisoVersion = delProceso.tomar
