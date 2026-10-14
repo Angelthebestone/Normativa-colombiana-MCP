@@ -1,5 +1,7 @@
 /** Piezas de salida compartidas por todas las fuentes: troceo, pasajes, origen y menciones. */
-import { advertenciasVigencia, avisoSinTexto, fragmentos } from '../../nucleo/parse.ts'
+import { advertenciasVigencia } from '../../nucleo/parse/vigencia.ts'
+import { avisoSinTexto } from '../../nucleo/parse/pdf.ts'
+import { fragmentos } from '../../nucleo/parse/fragmentos.ts'
 import { parsearCita } from '../../nucleo/citas.ts'
 import type { Resueltas } from './esquema.ts'
 

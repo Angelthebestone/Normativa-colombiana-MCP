@@ -1,4 +1,5 @@
-import { articulo as extraerArticulo, sinTildes } from './parse.ts'
+import { articulo as extraerArticulo } from './parse/articulos.ts'
+import { sinTildes } from './parse/texto.ts'
 
 /**
  * false si la URL no parsea o no es https; true solo si el hostname coincide,
@@ -41,7 +42,7 @@ export function validarNumeroAnio(titulo: string, numero: string, anio?: string)
   return true
 }
 
-/** true si `articulo` de parse.ts encuentra el artículo pedido y trae texto. */
+/** true si `articulo` de parse/articulos.ts encuentra el artículo pedido y trae texto. */
 export function validarArticulo(texto: string, articulo: string): boolean {
   const extraido = extraerArticulo(texto, articulo)
   return extraido !== null && extraido.trim() !== ''

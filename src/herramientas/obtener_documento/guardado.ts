@@ -3,7 +3,7 @@ import { mkdir, mkdtemp } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
-import { trocear } from '../../nucleo/parse.ts'
+import { trocear } from '../../nucleo/parse/fragmentos.ts'
 import { descargarA, escribirSinColision } from '../../nucleo/descargas.ts'
 import { adaptador } from '../../fuentes/sectorial.ts'
 import * as gestor from '../../fuentes/gestor.ts'

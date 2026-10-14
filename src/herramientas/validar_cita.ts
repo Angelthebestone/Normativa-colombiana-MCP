@@ -3,10 +3,40 @@ import { z } from 'zod'
 import { estricto } from '../nucleo/normalizar.ts'
 import { idTipo, parsearCita, candidatosAmbiguos, type Cita } from '../nucleo/citas.ts'
 import { clasificarValidacion, parametroEs, validarArticulo, validarNumeroAnio, validarUrl } from '../nucleo/evidencia.ts'
-import { sinTildes } from '../nucleo/parse.ts'
+import { sinTildes } from '../nucleo/parse/texto.ts'
 import * as gestor from '../fuentes/gestor.ts'
+import { fechaBogota } from '../nucleo/fecha.ts'
 
 export const TITULO = 'Validar una cita y su enlace'
+
+/**
+ * Tope del lote de citas, aquí y en resolver_cita. Cada cita es al menos una
+ * consulta al Gestor, en serie y al ritmo por dominio de `pedir`: sin tope, un
+ * lote arbitrario ocupa la herramienta y la fuente todo lo que quiera quien
+ * llama. Veinte cubren las citas de un escrito corriente; uno más largo se
+ * parte en varias llamadas.
+ */
+export const MAX_LOTE = 20
+
+/** El lote: no vacío y con tope. Lo comparten validar_cita y resolver_cita. */
+export const loteDeCitas = z
+  .array(z.string())
+  .min(1, 'El lote citas está vacío: pasa al menos una cita, o usa cita para una sola.')
+  .max(MAX_LOTE, `El lote citas admite como mucho ${MAX_LOTE} citas: parte el lote en varias llamadas.`)
+
+/**
+ * Una cita o un lote, no las dos. Antes se aceptaban las dos y el lote
+ * descartaba la cita suelta: la llamada parecía validar ambas y solo validaba
+ * el lote. Se comprueba en el handler y no con un `superRefine` en el esquema
+ * porque el SDK publica como `inputSchema` vacío todo lo que no sea un
+ * `ZodObject` (medido con `tools/list`): el cliente perdería los campos. El
+ * error sale igual antes de tocar la red, con el mismo mensaje.
+ */
+export function unaViaDeCita(p: { cita?: string | undefined; citas?: string[] | undefined }): void {
+  if (p.cita !== undefined && p.citas !== undefined) {
+    throw new Error('Usa cita (una) o citas (un lote), no las dos: mete la cita suelta dentro de citas.')
+  }
+}
 
 export const DESCRIPCION =
   'Comprueba que la cita (tipo, número, año y artículo, si se indica) coincide con lo que devuelve el Gestor ' +
@@ -15,14 +45,14 @@ export const DESCRIPCION =
   'estado de una norma usa resolver_cita. Con formato="json" devuelve, para una cita, un objeto con ' +
   'fecha_consulta, estado y detalle (o resultado, comprobaciones y encontrada si se validó); para un lote, un ' +
   'objeto {fecha_consulta, resultados:[...]} con un resultado por cita. Una cita sin forma, ambigua o con la ' +
-  'fuente caída NUNCA lanza: sale como objeto con estado y detalle.'
+  'fuente caída NUNCA lanza: sale como objeto con estado y detalle. Se pasa cita o citas, nunca las dos; el ' +
+  `lote lleva entre 1 y ${MAX_LOTE} citas.`
 
 export const schema = estricto({
   cita: z.string().optional().describe('Cita a validar, ej. "Ley 909 de 2004"'),
-  citas: z
-    .array(z.string())
+  citas: loteDeCitas
     .optional()
-    .describe('Lote de citas a validar en una llamada, ej. ["Ley 909 de 2004", "C-337/11"]'),
+    .describe(`Lote de 1 a ${MAX_LOTE} citas a validar en una llamada, ej. ["Ley 909 de 2004", "C-337/11"]`),
   // Sin .url(): una URL malformada se reporta como "no fue posible validar",
   // no como un error de esquema.
   url: z.string().optional().describe('Enlace a comprobar; si no se da, se usa el de la fuente'),
@@ -33,9 +63,6 @@ export const schema = estricto({
       'Salida: "markdown" (texto legible, por defecto) o "json" (un objeto por cita, sin cabecera ni pie)',
     ),
 })
-
-/** Fecha de la consulta en AAAA-MM-DD: la que el envoltorio ya no añade en modo json. */
-const hoy = () => new Date().toISOString().slice(0, 10)
 
 export type Comprobacion = { nombre: string; ok: boolean }
 
@@ -270,13 +297,14 @@ export async function escribir(
   args: { cita?: string; citas?: string[]; url?: string; formato?: 'markdown' | 'json' },
   deps: { buscar?: typeof gestor.buscar; obtenerNorma?: typeof gestor.obtenerNorma } = {},
 ): Promise<string> {
+  unaViaDeCita(args)
   const json = args.formato === 'json'
   if (args.citas?.length) {
     if (json) {
       // Un solo objeto con un resultado por cita: un fallo de una no tumba al resto.
       const resultados: DatosCita[] = []
       for (const cita of args.citas) resultados.push(await calcularDatosSeguro(cita, args.url, deps))
-      return JSON.stringify({ fecha_consulta: hoy(), resultados })
+      return JSON.stringify({ fecha_consulta: fechaBogota(), resultados })
     }
     const bloques: string[] = []
     for (const cita of args.citas) bloques.push(await bloqueDe(cita, args.url, deps))
@@ -285,11 +313,11 @@ export async function escribir(
   if (args.cita) {
     if (json) {
       const d = await calcularDatosSeguro(args.cita, args.url, deps)
-      return JSON.stringify({ fecha_consulta: hoy(), ...d })
+      return JSON.stringify({ fecha_consulta: fechaBogota(), ...d })
     }
     return resolverUna(args.cita, args.url, deps)
   }
   const falta = 'Falta la cita: pásala en cita ("Ley 909 de 2004") o en citas (["Ley 909 de 2004", "C-337/11"]).'
-  if (json) return JSON.stringify({ fecha_consulta: hoy(), estado: 'sin-cita', detalle: falta })
+  if (json) return JSON.stringify({ fecha_consulta: fechaBogota(), estado: 'sin-cita', detalle: falta })
   return falta
 }

@@ -1,5 +1,6 @@
 /** `obtener_documento` con fuente="dian" y fuente="creg": páginas de normograma leídas como texto. */
-import { cargar, textoDe, trocear } from '../../nucleo/parse.ts'
+import { cargar, textoDe } from '../../nucleo/parse/limpieza.ts'
+import { trocear } from '../../nucleo/parse/fragmentos.ts'
 import { pedir as pedirHttp } from '../../nucleo/http.ts'
 import * as dian from '../../fuentes/normograma.ts'
 import * as creg from '../../fuentes/creg.ts'

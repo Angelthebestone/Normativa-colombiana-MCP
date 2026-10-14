@@ -1,5 +1,7 @@
 /** `obtener_documento` con fuente="sectorial": PDF, Word o página de un regulador. */
-import { avisoSinTexto, cargar, textoDe, trocear } from '../../nucleo/parse.ts'
+import { avisoSinTexto } from '../../nucleo/parse/pdf.ts'
+import { cargar, textoDe } from '../../nucleo/parse/limpieza.ts'
+import { trocear } from '../../nucleo/parse/fragmentos.ts'
 import { pedir as pedirHttp } from '../../nucleo/http.ts'
 import { extraerTextoWord } from '../../fuentes/sectorial/word.ts'
 import { textoDePdfSectorial, avisoEscaneo } from '../../fuentes/sectorial/pdf.ts'

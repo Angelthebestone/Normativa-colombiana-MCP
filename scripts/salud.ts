@@ -40,7 +40,7 @@
  */
 import { fileURLToPath } from 'node:url'
 
-import { BASE_GESTOR } from '../src/nucleo/parse.ts'
+import { BASE_GESTOR } from '../src/nucleo/parse/gestor.ts'
 import { pedir, restablecer } from '../src/nucleo/http.ts'
 import { diagnosticarRespuesta } from '../src/nucleo/portal-roto.ts'
 import { enlaceBusqueda } from '../src/fuentes/jurisprudencia/consejoestado.ts'

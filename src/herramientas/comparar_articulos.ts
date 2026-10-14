@@ -21,12 +21,9 @@ import { z } from 'zod'
 
 import { agruparEditoriales, clasificarDiferencia, diffArticulos } from './diff.ts'
 import { idTipo, parsearCita, candidatosAmbiguos } from '../nucleo/citas.ts'
-import {
-  articulo as extraerArticulo,
-  historial,
-  limpiarArticulo,
-  type Norma,
-} from '../nucleo/parse.ts'
+import { articulo as extraerArticulo, limpiarArticulo } from '../nucleo/parse/articulos.ts'
+import { type Norma } from '../nucleo/parse/gestor.ts'
+import { historial } from '../nucleo/parse/historial.ts'
 import { estricto, numeroDeArticulo } from '../nucleo/normalizar.ts'
 
 import * as gestor from '../fuentes/gestor.ts'

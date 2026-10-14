@@ -4,7 +4,8 @@
  * 925.000 caracteres; el 1625 de 2016 de la DIAN, 6,5 MB), así que no se
  * devuelven enteras y hay que avisarlo con un índice de artículos.
  */
-import { indiceArticulos, sinTildes } from './parse.ts'
+import { indiceArticulos } from './parse/articulos.ts'
+import { sinTildes } from './parse/texto.ts'
 
 const UMBRAL_TAMANO = 300_000
 const MAX_INDICE = 30

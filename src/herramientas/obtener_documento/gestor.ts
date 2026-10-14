@@ -1,15 +1,10 @@
 /** `obtener_documento` con fuente="gestor": norma del Gestor Normativo, artículo, historial y temas. */
-import {
-  advertenciasVigencia,
-  articulo as extraerArticulo,
-  fragmentos,
-  historial,
-  indiceArticulos,
-  normalizarRotulo,
-  NoExisteError,
-  sinTildes,
-  trocear,
-} from '../../nucleo/parse.ts'
+import { advertenciasVigencia } from '../../nucleo/parse/vigencia.ts'
+import { articulo as extraerArticulo, indiceArticulos } from '../../nucleo/parse/articulos.ts'
+import { fragmentos, trocear } from '../../nucleo/parse/fragmentos.ts'
+import { historial } from '../../nucleo/parse/historial.ts'
+import { normalizarRotulo, sinTildes } from '../../nucleo/parse/texto.ts'
+import { NoExisteError } from '../../nucleo/parse/errores.ts'
 import * as gestor from '../../fuentes/gestor.ts'
 import { esCompiladora, avisoCompiladora } from '../../nucleo/compiladas.ts'
 import { citaNorma } from '../../nucleo/cita_oficial.ts'
