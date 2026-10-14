@@ -86,13 +86,7 @@ async function esDirectorio(ruta: string): Promise<boolean> {
 }
 
 /** Argumentos de `escribir`, ya resueltos por el esquema del SDK. */
-type Args = {
-  accion: 'crear' | 'agregar' | 'leer' | 'exportar'
-  id?: string
-  campo?: keyof Expediente
-  texto?: string
-  ruta?: string
-}
+type Args = z.infer<typeof schema>
 
 export async function escribir(args: Args): Promise<string> {
   return `${ALCANCE}\n\n${await cuerpo(args)}`
