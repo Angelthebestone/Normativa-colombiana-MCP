@@ -3,6 +3,14 @@
 Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/).
 Este proyecto sigue [versionado semántico](https://semver.org/lang/es/).
 
+## [Sin publicar]
+
+### Corregido
+
+- **`expediente` ya no confirma una persistencia que no ocurrió.** Con `EXPEDIENTES_DIR`, un fallo de escritura (permisos, disco lleno, ruta que no es directorio) se tragaba y `crear`/`agregar` respondían éxito con el expediente solo en memoria. Ahora la llamada falla con el motivo y el cambio no se aplica tampoco en memoria. Cada guardado escribe en un temporal, lo sincroniza y lo renombra sobre `<id>.json`, así que un cierre a mitad deja el archivo anterior y no uno truncado.
+- **Las descargas ya no escriben `.prueba-escritura`.** La comprobación previa de permisos truncaba un archivo del usuario con ese nombre y dejaba el auxiliar en la carpeta. El error de escritura se informa ahora desde la escritura real.
+- **Dos escrituras simultáneas al mismo nombre ya no se pisan.** Descargas, `obtener_documento` con `entero`/`ruta_destino` y `expediente` con `exportar` reservan el nombre al abrirlo con creación exclusiva; ante un archivo existente prueban el siguiente sufijo. Antes comprobaban que el nombre estaba libre y escribían después, y dos llamadas podían elegir el mismo.
+
 ## [1.15.2] — 2026-10-04
 
 **Cada dato sale una vez por respuesta, y las 28 herramientas declaran sus efectos.** Cambio OpenSpec `optimizar-salida-y-tdqs`. Sin parámetros nuevos ni retirados, pero **cambia el formato de salida** de `resolver_cita` y de `buscar_jurisprudencia_consejo_estado` (ver **Cambiado**). Medido el 2026-10-04 con las ocho llamadas de la sesión de referencia (tres lotes de `resolver_cita` por norma, el Estatuto Tributario por su nombre, dos artículos de la Ley 769 con `contexto: false`, dos búsquedas de 10 en el Consejo de Estado y `articulos` del Decreto Ley 624), contra el servidor anterior y el nuevo a la vez: **98.990 B → 80.628 B (−18,5 %)**; las dos búsquedas del Consejo de Estado bajan un 22 % y un 29 %.

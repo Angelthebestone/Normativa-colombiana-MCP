@@ -2,10 +2,11 @@
  * Expediente de investigación: agrupa preguntas, fuentes, documentos, citas,
  * decisiones y observaciones de una sesión. Vive en memoria; si EXPEDIENTES_DIR
  * apunta a un directorio, cada expediente se persiste como `<id>.json` (se carga
- * al arrancar y se escribe en cada mutación).
+ * al arrancar y se escribe en cada mutación). Una mutación que no llega a disco
+ * lanza y no se aplica en memoria: lo que se confirma es lo que sobrevive.
  */
 
-import { mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { closeSync, fsyncSync, mkdirSync, openSync, readdirSync, readFileSync, renameSync, rmSync, writeSync } from 'node:fs'
 import * as path from 'node:path'
 
 export type Expediente = {
@@ -98,15 +99,34 @@ function asegurarCargado(): void {
   if (!cargado) recargar()
 }
 
-/** Persiste `e` en disco si EXPEDIENTES_DIR está configurado; falla en silencio. */
+/**
+ * Persiste `e` en disco si EXPEDIENTES_DIR está configurado. Escribe en un
+ * temporal, lo sincroniza y lo renombra sobre `<id>.json`: un cierre a mitad
+ * deja el archivo anterior intacto, nunca uno truncado. Si falla, lanza.
+ */
 function persistir(id: string, e: { datos: Expediente; creado: number }): void {
   const dir = direccion()
   if (!dir) return
+  const final = path.join(dir, `${id}.json`)
+  const temporal = `${final}.${process.pid}.${Math.random().toString(36).slice(2)}.tmp`
+  let creado = false
   try {
     mkdirSync(dir, { recursive: true })
-    writeFileSync(path.join(dir, `${id}.json`), JSON.stringify(e), 'utf8')
-  } catch {
-    // Un fallo de escritura no tumba el servidor.
+    const fd = openSync(temporal, 'wx')
+    creado = true
+    try {
+      writeSync(fd, JSON.stringify(e))
+      fsyncSync(fd)
+    } finally {
+      closeSync(fd)
+    }
+    renameSync(temporal, final)
+  } catch (err) {
+    if (creado) rmSync(temporal, { force: true })
+    throw new Error(
+      `No se pudo guardar el expediente ${id} en ${dir}: ${(err as Error).message}. El cambio no se aplicó.`,
+      { cause: err },
+    )
   }
 }
 
@@ -125,25 +145,28 @@ function vivo(id: string): { datos: Expediente; creado: number } | null {
   return e
 }
 
+/** Crea un expediente vacío; lanza si EXPEDIENTES_DIR está configurado y no se pudo guardar. */
 export function crear(ttlMs?: number): string {
   asegurarCargado()
   const id = Date.now().toString(36) + Math.random().toString(36).slice(2, 7)
-  if (ttlMs !== undefined) ttlEspecial.set(id, ttlMs)
   const e = {
     datos: { preguntas: [], fuentes: [], documentos: [], citas: [], decisiones: [], observaciones: [] },
     creado: Date.now(),
   }
-  expedientes.set(id, e)
   persistir(id, e)
+  expedientes.set(id, e)
+  if (ttlMs !== undefined) ttlEspecial.set(id, ttlMs)
   return id
 }
 
+/** Agrega `texto` a `campo`; false si el id no existe. Lanza si no se pudo guardar en disco. */
 export function agregar(id: string, campo: keyof Expediente, texto: string): boolean {
   if (!texto) return false
   const e = vivo(id)
   if (!e) return false
-  e.datos[campo].push(texto)
-  persistir(id, e)
+  const nuevo = { creado: e.creado, datos: { ...e.datos, [campo]: [...e.datos[campo], texto] } }
+  persistir(id, nuevo)
+  expedientes.set(id, nuevo)
   return true
 }
 
