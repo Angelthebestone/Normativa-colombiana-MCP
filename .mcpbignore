@@ -29,6 +29,10 @@ openspec/
 .claude/
 # Análisis local del repositorio: no es parte del producto.
 graphify-out/
+# Crítica del código fuente escrita para trabajar en él, no para quien instala
+# la extensión. `.gitignore` ya la excluía del repositorio, pero mcpb empaqueta
+# el directorio, no lo que git sigue: se colaban 17,2 kB de notas en el .mcpb.
+CRITICA_SRC.md
 # Banco de mediciones locales: no es parte del producto.
 .medidas/
 # El plugin de Cowork para abogados se desarrolla aquí pero se publica en su
