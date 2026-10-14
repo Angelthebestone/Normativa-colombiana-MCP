@@ -2,7 +2,7 @@ import { z } from 'zod'
 
 import { estricto } from '../nucleo/normalizar.ts'
 import { idTipo, parsearCita, candidatosAmbiguos, type Cita } from '../nucleo/citas.ts'
-import { clasificarValidacion, validarArticulo, validarNumeroAnio, validarUrl } from '../nucleo/evidencia.ts'
+import { clasificarValidacion, parametroEs, validarArticulo, validarNumeroAnio, validarUrl } from '../nucleo/evidencia.ts'
 import { sinTildes } from '../nucleo/parse.ts'
 import * as gestor from '../fuentes/gestor.ts'
 
@@ -178,7 +178,7 @@ export async function calcularDatos(
     // validar el del item cuando el usuario pasó uno ajeno sería un falso positivo.
     { nombre: 'dominio del enlace', ok: validarUrl(url ?? item.url, 'funcionpublica.gov.co') },
     // Si el usuario dio un enlace, además debe apuntar al MISMO id de la norma.
-    ...(url ? [{ nombre: 'el enlace corresponde a esta norma', ok: url.includes(`i=${item.id}`) }] : []),
+    ...(url ? [{ nombre: 'el enlace corresponde a esta norma', ok: parametroEs(url, 'i', item.id) }] : []),
   ]
   if (c.articulo) {
     const norma = await obtenerNorma(item.id)
