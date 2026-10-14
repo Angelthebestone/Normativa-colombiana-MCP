@@ -187,7 +187,13 @@ function indices(): Record<string, Medida> {
 // --- 3. funciones puras sobre un documento grande -------------------------
 
 async function puras() {
-  const P = (await import(`file:///${RAIZ}/src/nucleo/parse.ts`)) as typeof import('../src/nucleo/parse.ts')
+  const rutaParse = (m: string) => `file:///${RAIZ}/src/nucleo/parse/${m}.ts`
+  const P = {
+    ...((await import(rutaParse('texto'))) as typeof import('../src/nucleo/parse/texto.ts')),
+    ...((await import(rutaParse('fragmentos'))) as typeof import('../src/nucleo/parse/fragmentos.ts')),
+    ...((await import(rutaParse('articulos'))) as typeof import('../src/nucleo/parse/articulos.ts')),
+    ...((await import(rutaParse('vigencia'))) as typeof import('../src/nucleo/parse/vigencia.ts')),
+  }
   // Un documento del tamaño del Decreto 1083 (925k) para medir el caso peor real.
   const base = readFileSync(`${RAIZ}/src/index.ts`, 'utf8')
   const texto = base.repeat(Math.ceil(925_000 / base.length)).slice(0, 925_000)

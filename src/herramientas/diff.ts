@@ -2,7 +2,7 @@
  * Diferencia entre dos versiones de un artículo: qué cambió y de qué clase.
  */
 import { dice } from '../nucleo/deduplicar.ts'
-import { sinTildes } from '../nucleo/parse.ts'
+import { sinTildes } from '../nucleo/parse/texto.ts'
 
 type Clasificacion = 'plazo' | 'sancion' | 'excepcion' | 'sujeto' | 'prohibicion' | 'obligacion' | 'no clasificado'
 

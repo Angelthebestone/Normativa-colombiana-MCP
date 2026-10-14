@@ -11,12 +11,13 @@ import { parsearCita, parsearRadicado } from '../nucleo/citas.ts'
 import { codigoDe, equivalencia, referencia as refCodigo } from '../nucleo/codigos.ts'
 import { esCompiladora } from '../nucleo/compiladas.ts'
 import { validarUrl } from '../nucleo/evidencia.ts'
-import { advertenciasVigencia, articulo as extraerArticulo } from '../nucleo/parse.ts'
+import { articulo as extraerArticulo } from '../nucleo/parse/articulos.ts'
+import { advertenciasVigencia } from '../nucleo/parse/vigencia.ts'
 import { estricto, numeroDeArticulo } from '../nucleo/normalizar.ts'
 import { vacio } from '../nucleo/vacio.ts'
 import * as corte from '../fuentes/jurisprudencia/corte.ts'
 import * as gestor from '../fuentes/gestor.ts'
-import * as suin from '../fuentes/suin.ts'
+import * as suin from '../fuentes/suin/index.ts'
 import { resolverCodigo } from './codigo_senado.ts'
 import { resolverRadicado } from './resolver_radicado.ts'
 import * as validarCita from './validar_cita.ts'
@@ -441,7 +442,7 @@ export const DESCRIPCION =
   '("art. 191 del Código de Comercio"). Úsala SIEMPRE que la pregunta mencione una norma concreta: ' +
   'buscar_normas y buscar_por_tema son para cuando no la hay. Devuelve la identificación oficial con su ' +
   'enlace, la vigencia y el texto pedido, y dice contra qué norma resolvió. Solo consulta, no guarda nada. ' +
-  'Tres modos: cita sola; citas, un lote que manda sobre cita y se agrupa por norma; o articulos con cita ' +
+  `Tres modos: cita sola; citas, un lote de 1 a ${validarCita.MAX_LOTE} que se agrupa por norma (cita o citas, nunca las dos); o articulos con cita ` +
   'apuntando a UNA norma, que se descarga una vez (con citas, articulos se ignora). validar=true cambia la ' +
   'respuesta a un VEREDICTO sobre la cita (validada, parcialmente validada o no validable), sin texto ni ' +
   'vigencia; url y formato solo valen con validar. Para las reformas de una norma usa historial_norma; para ' +
@@ -459,10 +460,11 @@ const esquema = z.object({
     .string()
     .optional()
     .describe('Ej.: "Ley 909 de 2004", "C-337/11", "art. 6 de la Ley 1221 de 2008", "art. 191 del Código de Comercio"'),
-  citas: z
-    .array(z.string())
+  citas: validarCita.loteDeCitas
     .optional()
-    .describe('Varias citas a la vez, ej. ["Ley 909 de 2004", "C-337/11"]: cada una se resuelve y se devuelve con su enlace'),
+    .describe(
+      `Varias citas a la vez (de 1 a ${validarCita.MAX_LOTE}), ej. ["Ley 909 de 2004", "C-337/11"]: cada una se resuelve y se devuelve con su enlace`,
+    ),
   articulos: z
     .preprocess((v) => (Array.isArray(v) ? v.map(numeroDeArticulo) : v), z.array(z.string()).optional())
     .describe(
@@ -502,6 +504,7 @@ export async function escribir(
   { cita, citas, articulos, contexto, validar, url, formato }: Params,
   deps: Deps = {},
 ): Promise<string> {
+  validarCita.unaViaDeCita({ cita, citas })
   if (validar) {
     const datos = await validarCita.escribir({
       ...(cita !== undefined ? { cita } : {}),
@@ -539,12 +542,7 @@ export async function escribir(
       ? `articulos (${articulos.join(', ')}) se ignoró: es para varios artículos de UNA norma, no para un lote. ` +
         `Pídelos con cita apuntando a la norma.\n\n`
       : ''
-    // Igual con `cita`: el lote manda, pero callarlo dejaría creer que también
-    // se resolvió la cita suelta.
-    const citaSuelta = cita
-      ? `cita ("${cita}") se ignoró: manda el lote citas (${citas.length}). Usa una vía u otra, no las dos.\n\n`
-      : ''
-    return componer(piezas, citaSuelta + sobrante)
+    return componer(piezas, sobrante)
   }
   if (!cita) {
     return vacio(

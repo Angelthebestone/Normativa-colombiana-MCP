@@ -52,7 +52,9 @@
  * probabilidad de fallo se dobla. El techo es que corte dos veces seguidas; el
  * salto, si eso importa, es reintentar en `http.ts` para todas las fuentes.
  */
-import { CanarioError, cargar, colapsarEspacios } from '../nucleo/parse.ts'
+import { CanarioError } from '../nucleo/parse/errores.ts'
+import { cargar } from '../nucleo/parse/limpieza.ts'
+import { colapsarEspacios } from '../nucleo/parse/texto.ts'
 import { pedir } from '../nucleo/http.ts'
 
 export const BASE = 'https://svrpubindc.imprenta.gov.co/diario/index.xhtml'

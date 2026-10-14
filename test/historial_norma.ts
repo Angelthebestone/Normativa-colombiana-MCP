@@ -10,7 +10,7 @@
 import { strict as assert } from 'node:assert'
 import test from 'node:test'
 
-import { historial, type Cambio } from '../src/nucleo/parse.ts'
+import { historial, type Cambio } from '../src/nucleo/parse/historial.ts'
 import { datosDe, escribir, formatearHistorial, ordenarCambios, ultimaReforma } from '../src/herramientas/historial_norma.ts'
 
 const CON_REFORMAS = `ARTÍCULO 6. <p>El Gobierno reglamentará la materia.</p>

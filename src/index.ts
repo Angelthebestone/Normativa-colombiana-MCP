@@ -36,13 +36,12 @@ import * as obtenerDocumento from './herramientas/obtener_documento.ts'
 import { redResumen, VERSION } from './nucleo/http.ts'
 import { avisoVersion } from './nucleo/actualizacion.ts'
 import './fuentes/sectorial/registro.ts'
+import { fechaBogota } from './nucleo/fecha.ts'
 
-
-const hoy = () => new Date().toISOString().slice(0, 10)
 
 /** Toda respuesta sale fechada y con el descargo: es la fuente lo que la hace útil. */
 const txt = (s: string) => ({
-  content: [{ type: 'text' as const, text: `${s}\n\nConsulta del ${hoy()}. ${DESCARGO}${avisoVersion()}` }],
+  content: [{ type: 'text' as const, text: `${s}\n\nConsulta del ${fechaBogota()}. ${DESCARGO}${avisoVersion()}` }],
 })
 
 // --- índice temático empaquetado -----------------------------------------
@@ -209,17 +208,15 @@ registrarHerramienta('describir_fuentes', describirFuentes)
 // El formato común (fecha, descargo, aviso de versión, logging) lo pone `txt`;
 // cada módulo solo exporta título, descripción, anotaciones, esquema y el texto puro.
 // `ANOTACIONES` es obligatorio: que falte en un módulo es un error de tipos.
-type HerramientaV2 = {
+type HerramientaV2<S extends z.ZodTypeAny> = {
   TITULO: string
   DESCRIPCION: string
   ANOTACIONES: ToolAnnotations
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  schema: any
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  escribir: (p: any) => Promise<string>
+  schema: S
+  escribir: (p: z.infer<S>) => Promise<string>
 }
 
-function registrarHerramienta(nombre: string, m: HerramientaV2) {
+function registrarHerramienta<S extends z.ZodTypeAny>(nombre: string, m: HerramientaV2<S>) {
   return server.registerTool(
     nombre,
     { title: m.TITULO, description: m.DESCRIPCION, annotations: m.ANOTACIONES, inputSchema: m.schema },
@@ -229,7 +226,7 @@ function registrarHerramienta(nombre: string, m: HerramientaV2) {
     // ponytail: el `as never` del final es el mismo caso que en el gancho de arriba —`registerTool`
     // infiere el handler del `inputSchema`, y aquí el shape llega en una variable—. Es UNO, no uno
     // por herramienta: las 16 llamadas de abajo ya no llevan ninguno.
-    (async (p: { formato?: string }) =>
+    (async (p: z.infer<S> & { formato?: string }) =>
       p?.formato === 'json'
         ? { content: [{ type: 'text' as const, text: await m.escribir(p) }] }
         : txt(await m.escribir(p))) as never,

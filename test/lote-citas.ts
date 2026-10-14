@@ -8,10 +8,10 @@ import { strict as assert } from 'node:assert'
 import test from 'node:test'
 
 import type * as gestor from '../src/fuentes/gestor.ts'
-import type * as suin from '../src/fuentes/suin.ts'
+import type * as suin from '../src/fuentes/suin/index.ts'
 import * as resolverCita from '../src/herramientas/resolver_cita.ts'
 import * as validar from '../src/herramientas/validar_cita.ts'
-import type { Resultado } from '../src/nucleo/parse.ts'
+import type { Resultado } from '../src/nucleo/parse/gestor.ts'
 
 const item = (id: string, titulo: string, url: string): Resultado => ({ id, titulo, resumen: '', url })
 
@@ -148,4 +148,31 @@ test('Estatuto Tributario: se rotula con su tipo oficial y no se corrige un tipo
 
   const escrito = await resolverCita.escribir({ cita: 'Decreto 624 de 1989' }, deps)
   assert.match(escrito, /No existe un «decreto 624 de 1989»; el tipo oficial es «Decreto Ley»/)
+})
+
+test('cita y citas a la vez se rechaza antes de salir a la red, en validar_cita y en resolver_cita', async () => {
+  let consultas = 0
+  const contando = (async (f: Parameters<typeof buscar>[0]) => {
+    consultas++
+    return buscar(f)
+  }) as typeof buscar
+  const ambas = { cita: 'Ley 909 de 2004', citas: ['Ley 1221 de 2008'] }
+  await assert.rejects(validar.escribir(ambas, { buscar: contando }), /cita \(una\) o citas \(un lote\), no las dos/)
+  await assert.rejects(resolverCita.escribir(ambas, { buscar: contando }), /no las dos/)
+  await assert.rejects(resolverCita.escribir({ ...ambas, validar: true }), /no las dos/)
+  assert.equal(consultas, 0)
+})
+
+test(`esquema: el lote va de 1 a ${validar.MAX_LOTE} citas, en validar_cita y en resolver_cita`, () => {
+  const lote = (n: number) => Array.from({ length: n }, (_, i) => `Ley ${i + 1} de 2004`)
+  for (const schema of [validar.schema, resolverCita.schema]) {
+    assert.equal(schema.safeParse({ citas: lote(1) }).success, true)
+    assert.equal(schema.safeParse({ citas: lote(validar.MAX_LOTE) }).success, true)
+    const vacio = schema.safeParse({ citas: [] })
+    assert.equal(vacio.success, false)
+    assert.match(vacio.error!.issues[0]!.message, /está vacío/)
+    const grande = schema.safeParse({ citas: lote(validar.MAX_LOTE + 1) })
+    assert.equal(grande.success, false)
+    assert.match(grande.error!.issues[0]!.message, new RegExp(`como mucho ${validar.MAX_LOTE} citas`))
+  }
 })
