@@ -13,7 +13,8 @@ import {
   ttlDeNorma,
   type Copia,
 } from './cache.ts'
-import { diagnosticarRespuesta, fechaCorta, rotuloCopia } from './portal-roto.ts'
+import { diagnosticarRespuesta, rotuloCopia } from './portal-roto.ts'
+import { fechaBogota } from './fecha.ts'
 
 /**
  * Raíces de Node más los intermedios que funcionpublica.gov.co,
@@ -431,7 +432,7 @@ async function pedirUna(
       fechaCopia: c.fecha,
       avisoCopia: degradada
         ? rotuloCopia(host, c.fecha)
-        : `(servido de una copia consultada el ${fechaCorta(c.fecha)}, sin volver a la fuente)`,
+        : `(servido de una copia consultada el ${fechaBogota(new Date(c.fecha))}, sin volver a la fuente)`,
     }
   }
 

@@ -7,6 +7,7 @@
  * detectar la cita y saltarse el buscador.
  */
 import { codigoCitado } from './codigos.ts'
+import { anioBogota } from './fecha.ts'
 
 export type Cita = {
   tipo: string
@@ -315,7 +316,7 @@ export function parsearRadicado(texto: string): Radicado | null {
     string,
   ]
   const n = Number(anio)
-  if (n < 1900 || n > new Date().getFullYear() + 1) return null
+  if (n < 1900 || n > anioBogota() + 1) return null
 
   const conocido = POR_PREFIJO[`${especialidad}${sala}`]
   return {

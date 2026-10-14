@@ -22,6 +22,7 @@
  */
 import { CanarioError, cargar, colapsarEspacios, sinTildes, textoDe } from '../nucleo/parse.ts'
 import { pedir } from '../nucleo/http.ts'
+import { anioBogota } from '../nucleo/fecha.ts'
 
 const BASE = 'https://gestornormativo.creg.gov.co/gestor/entorno/'
 
@@ -62,7 +63,7 @@ const ROTULO: Record<Compilacion, string> = {
  */
 const paginaDe = (compilacion: Compilacion, anio?: string): string => {
   const base = COMPILACIONES[compilacion]
-  return anio && anio !== String(new Date().getFullYear()) ? base.replace(/\.html$/, `_${anio}.html`) : base
+  return anio && anio !== String(anioBogota()) ? base.replace(/\.html$/, `_${anio}.html`) : base
 }
 
 export async function buscar(

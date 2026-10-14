@@ -3,6 +3,17 @@
 Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/).
 Este proyecto sigue [versionado semántico](https://semver.org/lang/es/).
 
+## [Sin publicar]
+
+### Cambiado
+
+- **`resolver_cita` rechaza `cita` y `citas` a la vez**, con `validar` o sin él, antes de consultar ninguna fuente («Usa cita (una) o citas (un lote), no las dos»). Antes el lote mandaba y la cita suelta se descartaba con un aviso (o en silencio, con `validar: true`).
+- **El lote `citas` lleva entre 1 y 20 citas** (`MAX_LOTE`), en `resolver_cita` y en `validar_cita`. El esquema publica `minItems`/`maxItems`; un lote vacío o de 21 es un error de esquema que dice el tope. Un escrito con más citas se valida en varias llamadas.
+
+### Corregido
+
+- **Las fechas que ve el usuario son las de Colombia**, no las de UTC ni las de la zona del host: el pie «Consulta del…», `fecha_consulta` en json, la fecha de una copia servida sin red, el «hoy» del Diario Oficial, el año en curso por defecto de CREG, Superfinanciera y Supertransporte, y el día contra el que la vacancia decide si una norma ya entró en vigor. Antes, de 19:00 a medianoche de Bogotá la consulta salía fechada al día siguiente. Una sola función, `fechaBogota` (`src/nucleo/fecha.ts`); los timestamps técnicos de los logs siguen en UTC.
+
 ## [1.15.2] — 2026-10-04
 
 **Cada dato sale una vez por respuesta, y las 28 herramientas declaran sus efectos.** Cambio OpenSpec `optimizar-salida-y-tdqs`. Sin parámetros nuevos ni retirados, pero **cambia el formato de salida** de `resolver_cita` y de `buscar_jurisprudencia_consejo_estado` (ver **Cambiado**). Medido el 2026-10-04 con las ocho llamadas de la sesión de referencia (tres lotes de `resolver_cita` por norma, el Estatuto Tributario por su nombre, dos artículos de la Ley 769 con `contexto: false`, dos búsquedas de 10 en el Consejo de Estado y `articulos` del Decreto Ley 624), contra el servidor anterior y el nuevo a la vez: **98.990 B → 80.628 B (−18,5 %)**; las dos búsquedas del Consejo de Estado bajan un 22 % y un 29 %.
