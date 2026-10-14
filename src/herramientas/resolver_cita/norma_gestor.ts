@@ -16,11 +16,11 @@ import type { Deps, OpcionesCita, Resuelta } from './resuelta.ts'
  * porque el formato tiene que ser idéntico, y porque un artículo que falte se
  * marca en su propio bloque sin abortar los demás.
  */
-function bloqueArticulo(texto: string, numero: string): string {
+export function bloqueArticulo(texto: string, numero: string, fuente: 'gestor' | 'suin' = 'gestor'): string {
   const art = extraerArticulo(texto, numero)
   return art
     ? [`--- Artículo ${numero} ---`, art, ...advertenciasVigencia(art)].join('\n')
-    : `No encontré un "artículo ${numero}" en el texto. Usa obtener_documento con fuente="gestor" y buscar_en_texto.`
+    : `No encontré un "artículo ${numero}" en el texto. Usa obtener_documento con fuente="${fuente}" y buscar_en_texto.`
 }
 
 export type EntradaNormaGestor = {

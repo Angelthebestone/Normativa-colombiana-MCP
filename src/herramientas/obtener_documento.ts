@@ -17,6 +17,7 @@ import { alcance } from '../nucleo/alcance.ts'
 import { schema, union, problemaDeFuente, topeDe, type DepsLectura, type Parametros, type Resueltas } from './obtener_documento/esquema.ts'
 import { pedidoDe } from './obtener_documento/formato.ts'
 import { gestorDocumento } from './obtener_documento/gestor.ts'
+import { suinDocumento } from './obtener_documento/suin.ts'
 import { corteDocumento, supremaDocumento, consejoDocumento } from './obtener_documento/providencias.ts'
 import { dianDocumento, cregDocumento } from './obtener_documento/normogramas.ts'
 import { sectorialDocumento } from './obtener_documento/sectorial.ts'
@@ -27,6 +28,7 @@ export { mencionesDe } from './obtener_documento/formato.ts'
 
 const POR_FUENTE: Record<Resueltas['fuente'], (p: Resueltas, tope: number, deps: DepsLectura) => Promise<string>> = {
   gestor: gestorDocumento,
+  suin: suinDocumento,
   corte: corteDocumento,
   suprema: supremaDocumento,
   consejo: consejoDocumento,

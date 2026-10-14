@@ -3,18 +3,19 @@ import type { ToolAnnotations } from '@modelcontextprotocol/sdk/types.js'
 import { z } from 'zod'
 
 import type * as gestor from '../../fuentes/gestor/index.ts'
+import type * as suin from '../../fuentes/suin/index.ts'
 import { estricto, numeroDeArticulo } from '../../nucleo/normalizar.ts'
 import { proyectar } from '../../nucleo/alcance.ts'
 
 export const TITULO = 'Obtener el texto de un documento por fuente'
 
 export const DESCRIPCION =
-  'Devuelve el texto (troceado, nunca entero) de una de las siete fuentes con texto. CADA FUENTE EXIGE LO ' +
-  'SUYO y los parámetros de otra no valen con ella: gestor necesita id; corte, ruta; suprema, ruta y sala; ' +
+  'Devuelve el texto (troceado, nunca entero) de una de las ocho fuentes con texto. CADA FUENTE EXIGE LO ' +
+  'SUYO y los parámetros de otra no valen con ella: gestor necesita id; suin, id; corte, ruta; suprema, ruta y sala; ' +
   'consejo, token; dian, link; creg, ruta; sectorial, entidad y url. Una combinación que no encaje se ' +
   'rechaza antes de salir a la red, diciendo qué falta y el ejemplo mínimo que funciona. Qué parte sale: ' +
   'historial (gestor) da los cambios anotados en vez del texto, del artículo si va con articulo; articulo ' +
-  '(gestor) o seccion (cortes) acotan y entonces buscar_en_texto no se aplica; desde solo avanza el troceo, ' +
+  '(gestor y suin) o seccion (cortes) acotan y entonces buscar_en_texto no se aplica; desde solo avanza el troceo, ' +
   'no los pasajes de buscar_en_texto. Informa total/mostrado/omitido y el "desde" del trozo siguiente. ' +
   'ESCRIBE EN DISCO solo con entero o ruta_destino, que se imponen a todo lo anterior: dian y sectorial ' +
   'guardan el archivo original; las demás, texto-<fuente>.txt (sin ruta_destino, en una carpeta temporal); ' +
@@ -61,12 +62,12 @@ export const schema = estricto({
   // Solo las fuentes encendidas (FUENTES): la llamada a una apagada no se puede
   // ni escribir, y la valida el mismo esquema antes de tocar la red.
   fuente: z
-    .enum(proyectar(['gestor', 'corte', 'suprema', 'consejo', 'dian', 'creg', 'sectorial'] as const, (f) => f))
+    .enum(proyectar(['gestor', 'suin', 'corte', 'suprema', 'consejo', 'dian', 'creg', 'sectorial'] as const, (f) => f))
     .describe('De qué fuente sale el documento'),
   ...comun,
   // Extras por fuente (opcionales; el handler valida cuál aplica según fuente).
-  id: z.coerce.string().optional().describe('Solo gestor: id numérico de la norma'),
-  articulo: z.preprocess(numeroDeArticulo, z.string().optional()).describe('Solo gestor: número de artículo'),
+  id: z.coerce.string().optional().describe('Solo gestor y suin: id numérico de la norma'),
+  articulo: z.preprocess(numeroDeArticulo, z.string().optional()).describe('Solo gestor y suin: número de artículo'),
   historial: z
     .boolean()
     .optional()
@@ -115,6 +116,7 @@ export type Resueltas = z.infer<typeof schema>
  */
 const EXIGE: Record<string, string[]> = {
   gestor: ['id'],
+  suin: ['id'],
   corte: ['ruta'],
   suprema: ['ruta', 'sala'],
   consejo: ['token'],
@@ -126,6 +128,7 @@ const EXIGE: Record<string, string[]> = {
 /** El ejemplo mínimo que funciona, por fuente: es lo que el error devuelve. */
 const EJEMPLO: Record<string, string> = {
   gestor: '{"fuente":"gestor","id":"31431"}',
+  suin: '{"fuente":"suin","id":"1670817"}',
   corte: '{"fuente":"corte","ruta":"2021/SU-371-21.htm"}',
   suprema: '{"fuente":"suprema","ruta":"<la de buscar_jurisprudencia_suprema>","sala":"Laboral"}',
   consejo: '{"fuente":"consejo","token":"<el de buscar_jurisprudencia_consejo_estado>"}',
@@ -140,8 +143,8 @@ const EJEMPLO: Record<string, string> = {
  * del id y tiraba la ruta sin decir nada, que es el peor desenlace posible.
  */
 const EXCLUSIVOS: Record<string, string[]> = {
-  id: ['gestor'],
-  articulo: ['gestor'],
+  id: ['gestor', 'suin'],
+  articulo: ['gestor', 'suin'],
   historial: ['gestor'],
   sin_temas: ['gestor'],
   seccion: ['corte', 'suprema', 'consejo'],
@@ -188,6 +191,7 @@ export const union = z.discriminatedUnion('fuente', [
       sin_temas: z.boolean().optional(),
     })
     .strict(),
+  z.object({ ...compartidos, fuente: z.literal('suin'), id: identificador, articulo: z.string().optional() }).strict(),
   z.object({ ...compartidos, fuente: z.literal('corte'), ruta: z.string(), seccion: z.enum(SECCIONES_PROVIDENCIA).optional() }).strict(),
   z
     .object({ ...compartidos, fuente: z.literal('suprema'), ruta: z.string(), sala: z.string(), seccion: z.enum(SECCIONES_PROVIDENCIA).optional() })
@@ -232,4 +236,5 @@ export type DepsLectura = {
   extraerPdf?: (bytes: Uint8Array) => Promise<string>
   descomprimirZip?: (bytes: Uint8Array) => Promise<Uint8Array | null>
   obtenerNorma?: typeof gestor.obtenerNorma
+  documentoSuin?: typeof suin.documento
 }

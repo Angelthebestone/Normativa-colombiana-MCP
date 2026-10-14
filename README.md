@@ -10,7 +10,7 @@ Conecta seis fuentes oficiales:
 
 - **Gestor Normativo** del Departamento Administrativo de la Función Pública — leyes, decretos, resoluciones, circulares y conceptos del sector público, con la consulta temática y los *restrictores* que explican por qué cada norma aplica a un tema.
 - **Relatoría de la Corte Constitucional** — 44.839 providencias según su propio índice, con fallos recientes publicados el mismo año.
-- **SUIN-Juriscol** del Ministerio de Justicia — **el estado de vigencia**, que ninguna otra fuente del país publica, y 11.599 leyes de 1844 a 2026, muchas de las cuales el Gestor no tiene.
+- **SUIN-Juriscol** del Ministerio de Justicia — **el estado de vigencia**, que ninguna otra fuente del país publica, y su buscador nuevo: unos 103.000 documentos de 1844 a 2026 (leyes, decretos, resoluciones, circulares, reglamentos técnicos y la jurisprudencia que afectó la vigencia de alguna norma), con su texto, muchos de los cuales el Gestor no tiene.
 - **Corte Suprema de Justicia** — providencias de las salas de Tutelas, Civil, Laboral y Penal, cada una con las normas que cita.
 - **Consejo de Estado** — providencias tituladas de lo contencioso administrativo, con el problema jurídico que la Sala se planteó, su respuesta y el texto completo. Con esta se completan las tres altas cortes, y las tres entregan texto.
 - **Normograma de la DIAN** — normativa tributaria, aduanera y cambiaria.
@@ -158,13 +158,13 @@ Al conectarse, el servidor entrega **28 herramientas**, **5 prompts** y sus **pr
 | Corte Constitucional | `buscar_jurisprudencia` (`tipos` acepta «tutela», «auto»…), `linea_jurisprudencial` (qué providencias citan una sentencia), `obtener_documento` (fuente `corte`) |
 | Corte Suprema | `buscar_jurisprudencia_suprema`, `obtener_documento` (fuente `suprema`) |
 | Consejo de Estado | `buscar_jurisprudencia_consejo_estado`, `obtener_documento` (fuente `consejo`) |
-| SUIN-Juriscol | `buscar_en_suin` (y vigencia vía `resolver_cita`) |
+| SUIN-Juriscol | `buscar_en_suin` (`coleccion`: normas, corte-constitucional, consejo-estado o corte-suprema; `materia` para los reglamentos técnicos), `obtener_documento` (fuente `suin`, con el resumen de modificaciones y de jurisprudencia) y vigencia vía `resolver_cita` |
 | Secretaría del Senado | el Código Civil, artículo por artículo, vía `resolver_cita` (solo HTTP sin cifrar) |
 | Diario Oficial | `buscar_diario_oficial` — en qué diario salió una norma (tipo + número) o qué diarios salieron en unas fechas |
 | DIAN | `buscar_normativa_tributaria`, `obtener_documento` (fuente `dian`) |
 | CREG | `buscar_resoluciones_creg`, `obtener_documento` (fuente `creg`) |
 | ANH / UPME / ANLA | `buscar_normativa_anh`, `buscar_normativa_upme`, `listar_normativa_ambiental_anla` |
-| 14 reguladores sectoriales | `buscar_normativa_sectorial` (entidad: `sic`, `superfinanciera`, `supersalud`, `ant`, `unidadvictimas`…) + `obtener_documento` (fuente `sectorial`) |
+| 15 reguladores y ministerios sectoriales | `buscar_normativa_sectorial` (entidad: `sic`, `superfinanciera`, `supersalud`, `ant`, `mineducacion`, `mintransporte`, `unidadvictimas`…) + `obtener_documento` (fuente `sectorial`) |
 | V2 — jerarquía y conflictos | `consultar_por_jerarquia`, `analizar_conflicto` (reúne EVIDENCIA; la búsqueda de tema prueba singular y plural y declara la variante), `comparar_articulos`, `cambios_desde` |
 | V2 — perfiles y expedientes | `consultar_perfil`, `expediente` (acción `crear\|agregar\|leer\|exportar`) |
 | Alcance | `describir_fuentes` — qué cubre cada fuente y qué no, sin consultar la red |
@@ -217,13 +217,13 @@ Una regla de oro de las V2: si una cita viene sin año y el número es ambiguo (
 
 **Esto no es asesoría jurídica.** Es un buscador que le da a un asistente de IA acceso a fuentes oficiales. Verifica siempre en el enlace que acompaña cada respuesta.
 
-**La vigencia viene de SUIN, y solo de SUIN.** Ni el Gestor ni la relatoría tienen un campo que diga «esta norma está derogada»: las derogatorias van escritas dentro del texto, y el servidor se limita a avisar cuando detecta marcas de «Derogado» o «Modificado por» (el Decreto 1083 de 2015 contiene 155 notas de modificación). SUIN-Juriscol, del Ministerio de Justicia, sí publica el estado como dato, y es la única fuente del país que lo hace: cuando la norma está en el índice empaquetado, `resolver_cita` devuelve ese estado con su enlace.
+**La vigencia viene de SUIN, y solo de SUIN.** Ni el Gestor ni la relatoría tienen un campo que diga «esta norma está derogada»: las derogatorias van escritas dentro del texto, y el servidor se limita a avisar cuando detecta marcas de «Derogado» o «Modificado por» (el Decreto 1083 de 2015 contiene 155 notas de modificación). SUIN-Juriscol, del Ministerio de Justicia, sí publica el estado como dato, y es la única fuente del país que lo hace: `resolver_cita` y `consultar_vigencia` lo piden en vivo a su ficha por tipo, número y año, y lo devuelven con su enlace.
 
 Tres advertencias sobre ese dato, todas comprobadas:
 
 - **Se entrega literal, nunca traducido a un sí o un no.** SUIN distingue «Vigente», «DEROGADO», «Vigencia en Estudio», «Compilado», «Declarado Inexequible» y «Norma no vigente porque agotó su objeto». «Vigencia en Estudio» no significa vigente.
 - **El estado se lee del registro del documento, no de su prosa.** Donde aparecen los dos se contradicen: la Ley 1541 de 2012 muestra «Vigente» en pantalla y «Vigencia en Estudio» en su campo.
-- **El buscador de SUIN no sirve para esto.** `buscar_en_suin` devuelve un campo de vigencia que viene de su índice de búsqueda y contradice la ficha —la Ley 74 de 1923 figura allí como «Vigencia en Estudio» y su ficha dice DEROGADO—, así que se marca como no fiable en cada respuesta.
+- **El buscador de SUIN da el mismo dato que la ficha.** Desde octubre de 2026 `buscar_en_suin` consulta el índice del buscador nuevo, cuyo `estado` es el de la ficha (la Ley 74 de 1923 sale «Derogado»). El índice de Azure que usaba antes contradecía la ficha y ya no se consulta.
 
 Y la regla de fondo no cambia: **verifica en el enlace antes de actuar.**
 
@@ -231,7 +231,7 @@ Y la regla de fondo no cambia: **verifica en el enlace antes de actuar.**
 
 **Los códigos se citan por su nombre.** `resolver_cita` entiende "art. 191 del Código de Comercio" además de "art. 191 del Decreto 410 de 1971", y dice contra qué norma resolvió: Comercio (Decreto 410 de 1971), Sustantivo del Trabajo (Decreto 2663 de 1950), Procesal del Trabajo (Decreto 2158 de 1948), Penal (Ley 599 de 2000), Procedimiento Penal (Ley 906 de 2004), General del Proceso (Ley 1564 de 2012), CPACA (Ley 1437 de 2011), Infancia y Adolescencia (Ley 1098 de 2006) y Estatuto Tributario (Decreto 624 de 1989) salen del Gestor.
 
-**El Código Civil (Ley 84 de 1873) sale de la Secretaría del Senado, con tres salvedades.** El Gestor no lo publica y SUIN no sirve su texto, así que `resolver_cita` con "art. 946 del Código Civil" lee el artículo de la página de la Secretaría del Senado (medido el 2026-09-28: 48 de 50 artículos de una muestra leídos bien; los otros dos, un «socket hang up» del portal, se declaran como «no respondió», nunca como «no existe»). (1) **Solo sirve HTTP sin cifrar** —su puerto 443 no abre—: el texto no se puede autenticar en tránsito, y cada respuesta lo dice; quien no lo quiera la apaga con `FUENTES=-senado`. (2) **Los apartes tachados** que el portal marca como inexequibles o derogados salen entre `~~ ~~` y la respuesta avisa: no se citan como vigentes. (3) **No se reproducen las notas de vigencia, concordancias ni jurisprudencia de cada artículo**: son del editor del portal (Avance Jurídico Casa Editorial), que reserva su copia; la respuesta remite al enlace, donde están, y hay que mirarlas antes de citar. El portal es lento e intermitente (una parte tardó 40 s en responder).
+**El Código Civil (Ley 84 de 1873) sale de la Secretaría del Senado, con tres salvedades.** El Gestor no lo publica, así que `resolver_cita` con "art. 946 del Código Civil" lee el artículo de la página de la Secretaría del Senado (medido el 2026-09-28: 48 de 50 artículos de una muestra leídos bien; los otros dos, un «socket hang up» del portal, se declaran como «no respondió», nunca como «no existe»). (1) **Solo sirve HTTP sin cifrar** —su puerto 443 no abre—: el texto no se puede autenticar en tránsito, y cada respuesta lo dice; quien no lo quiera la apaga con `FUENTES=-senado`. (2) **Los apartes tachados** que el portal marca como inexequibles o derogados salen entre `~~ ~~` y la respuesta avisa: no se citan como vigentes. (3) **No se reproducen las notas de vigencia, concordancias ni jurisprudencia de cada artículo**: son del editor del portal (Avance Jurídico Casa Editorial), que reserva su copia; la respuesta remite al enlace, donde están, y hay que mirarlas antes de citar. El portal es lento e intermitente (una parte tardó 40 s en responder).
 
 **Las leyes modificatorias traen el artículo que sustituyen.** Cuando una ley está redactada como "El artículo 217 del Código Civil quedará así:", el texto nuevo va debajo con su propia numeración; el extractor lo devuelve junto al artículo pedido en lugar de cortar en los dos puntos. El cuerpo del código modificado es otro documento, y se pide con su propia cita ("art. 217 del Código Civil").
 
@@ -256,9 +256,11 @@ Y la regla de fondo no cambia: **verifica en el enlace antes de actuar.**
 **Datos empaquetados.** Se incluyen dos índices, cada uno con su fecha de generación:
 
 - El **temático** (12.063 pares tema/subtema, 56.458 asociaciones norma–subtema, 2026-08-01) responde al instante y sigue sirviendo si el portal se cae. Si supera los tres meses, el servidor te lo advierte.
-- El de **SUIN** (11.613 leyes, 2026-09-24) traduce una cita escrita como texto a su documento sin salir a la red. La vigencia **no** depende de él: se pide en vivo a la ficha de SUIN por tipo, número y año, para leyes y decretos.
+- El de **SUIN** (11.648 leyes, 2026-10-14) traduce una cita escrita como texto a su documento sin salir a la red. La vigencia **no** depende de él: se pide en vivo a la ficha de SUIN por tipo, número y año.
 
-**SUIN-Juriscol cambió de portal (septiembre de 2026).** La ficha con el estado de vigencia sale ahora del índice público de su buscador nuevo, que trae leyes y decretos y **llega hasta 2020**: de una norma posterior no hay ficha, y la respuesta lo dice en vez de callarlo. El **texto** de los documentos ya no se puede leer desde fuera: el visor del portal lo pide a una dirección privada del Ministerio y se queda en blanco (medido con un navegador el 2026-09-24). Se entrega la ficha, el estado y el enlace clásico `viewDocument.asp?id=`. Comprobado de nuevo el 2026-09-28, cuando el portal anunció su vuelta: el buscador nuevo (`lexis.minjusticia.gov.co/buscador/Detallado/1`, `/2` y `/3`) consulta el mismo índice, que sigue llegando a 2020, y su visor sigue apuntando a direcciones privadas; la página `suin-juriscol.gov.co/suin/normativahistorica` es una página del gestor de contenidos del Ministerio y su API responde 404 para ese identificador, así que no hay datos que leer.
+**SUIN-Juriscol volvió a cambiar (octubre de 2026).** El buscador nuevo (`lexis.minjusticia.gov.co/buscador/Detallado/3` normas, `/2` jurisprudencia, `/1` reglamentos técnicos) consulta ahora el índice `documents_pdn`: 103.326 documentos cargados el 2026-10-02 que llegan a 2026 —el anterior, `documents_stg`, se cortaba en 2020—, con colecciones de normas (89.879), Corte Constitucional (7.609), Consejo de Estado (3.483) y Corte Suprema (2.355). Los reglamentos técnicos no son una colección aparte: el portal los filtra por materia. Y el **texto** vuelve a leerse: el visor (`lexis.minjusticia.gov.co/minjusticia/viewDocument/{id}`, que es el enlace que se entrega) lo pide a `suin-search/api/documentos/{id}`, público, con el articulado, el resumen de modificaciones por artículo, el de jurisprudencia y las notas de vigencia (medido con un navegador el 2026-10-14). Entre el 2026-09-24 y esa fecha el visor apuntaba a direcciones privadas del Ministerio y el texto no se podía leer.
+
+**Ministerio de Educación y Ministerio de Transporte.** El normograma del MEN (`normograma.info/men`) es un libro de Avance Jurídico con el mismo buscador JSON que el del INVIMA: indexa la compilación del sector educación (no solo actos del MEN) y corta en 10.000 resultados por consulta. El Ministerio de Transporte no concentra su normativa en un solo sitio: los actos desde 2025 están en la tabla de `mintransporte.gov.co/normatividad/actos/`, y los de 2016–2024 en su catálogo `/documentos/`, por año; el buscador de ese catálogo exige reCAPTCHA y el repositorio DSpace (`web.mintransporte.gov.co/jspui`) tiene fechas de relleno y llega a 2018, así que no se usan. Por eso, para un acto anterior a 2025, hay que indicar el año.
 
 **Cobertura de la búsqueda tributaria.** La primera consulta de cada término a la DIAN tarda unos 20 segundos: su portal devuelve el resultado completo y no admite límite. Las páginas siguientes del mismo término son instantáneas, así que conviene paginar en lugar de repetir búsquedas.
 
@@ -296,10 +298,10 @@ Estructura:
 | `src/nucleo/` | Núcleo compartido: `parse.ts` (extracción y limpieza de HTML, troceado, canario anti-rotura), `citas.ts` (parser de citas), `codigos.ts` (los códigos por su nombre y su cobertura), `http.ts` (cliente HTTP con la cadena TLS completa), `ca.ts` (intermedios TLS), `evidencia.ts`, `compiladas.ts`, `alternativas.ts`, `entidades.ts`, `jerarquia.ts`, `perfiles.ts`, `indice.ts`, `expediente.ts`, `actualizacion.ts`, `deduplicar.ts`, `portal-roto.ts`, `snapshot.ts` |
 | `src/herramientas/` | Handlers de herramientas MCP: `obtener_documento.ts`, `diff.ts` (comparación de artículos), V2 (`analizar_conflicto`, `cambios_desde`, `comparar_articulos`, `consultar_jerarquia`, `consultar_perfil`, `consultar_vigencia`, `expedientes`, `historial_norma`, `validar_cita`, `buscar_unificado`); `resolver_cita` está en `index.ts` |
 | `src/fuentes/gestor.ts` | Gestor Normativo (HTML raspado, con canarios) |
-| `src/fuentes/suin.ts` | SUIN-Juriscol: ficha, vigencia e índice empaquetado |
+| `src/fuentes/suin.ts` | SUIN-Juriscol: ficha, vigencia, búsqueda, texto e índice empaquetado |
 | `src/fuentes/normograma.ts` | Normograma de la DIAN (JSON) |
 | `src/fuentes/jurisprudencia/` | Tres tribunales: `corte.ts` (relatoría Constitucional, JSON), `cortesuprema.ts` (GraphQL), `consejoestado.ts` (WebForms, sin API) |
-| `src/fuentes/sectorial/` | Reguladores sectoriales (CREG, ANH, UPME, ANLA y 11 más vía `buscar_normativa_sectorial`) |
+| `src/fuentes/sectorial/` | Reguladores sectoriales (CREG, ANH, UPME, ANLA y 15 más vía `buscar_normativa_sectorial`) |
 | `scripts/medir.ts` | Banco de métricas, para que optimizar no sea a ojo |
 | `scripts/verificar.ts` | `npm run verificar`: comando único de salud (build → typecheck → lint → unit → cobertura tool→caso → red → barridos) |
 | `scripts/barrido-terminos.ts` | `npm run barrido-terminos`: detecta "término que antes rendía y ahora vacío" por fuente (regresión de portal) |

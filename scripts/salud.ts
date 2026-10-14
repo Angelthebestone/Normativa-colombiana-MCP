@@ -228,24 +228,22 @@ export const PORTALES: Portal[] = [
     nota: 'buscador JSON de normograma.info (instancia prueba-dian); el texto de los docs vive en normograma.dian.gov.co',
   },
   {
-    nombre: 'SUIN-Juriscol (fichas · Elasticsearch)',
-    // Índice público del buscador nuevo (src/fuentes/suin/index.ts, `FICHAS`). POST
-    // mínimo: una ficha cualquiera. Es de donde sale el estado de vigencia.
-    url: 'https://lexis.minjusticia.gov.co/elasticsearch/documents_stg/_search',
+    nombre: 'SUIN-Juriscol (fichas y búsqueda · Elasticsearch)',
+    // Índice público del buscador nuevo (src/fuentes/suin/, `INDICE`). POST
+    // mínimo: una ficha cualquiera. Es de donde salen el estado de vigencia y la búsqueda.
+    url: 'https://lexis.minjusticia.gov.co/elasticsearch/documents_pdn/_search',
     accept: 'application/json',
-    cuerpo: JSON.stringify({ size: 1, query: { match_all: {} } }),
-    forma: (c) => (safeJson(c)?.hits?.hits ? null : 'sin hits.hits'),
-    nota: 'POST _search al índice de fichas; es la fuente del estado de vigencia',
+    cuerpo: JSON.stringify({ size: 1, query: { term: { configid: 30 } } }),
+    forma: (c) => (safeJson(c)?.hits?.hits?.length ? null : 'sin hits.hits'),
+    nota: 'POST _search a documents_pdn; fuente del estado de vigencia y de buscar_en_suin',
   },
   {
-    nombre: 'SUIN-Juriscol (buscador · Azure)',
-    // Azure Cognitive Search (src/fuentes/suin/index.ts, `BUSCADOR`). La api-key es la
-    // pública que el portal sirve a cualquier visitante.
-    url: "https://searchmjd.search.windows.net/indexes/suinjuriscol-index/docs?api-version=2019-05-06&search=tutela&$top=1&$select=ID&$count=true",
-    accept: 'application/json;odata.metadata=none',
-    extra: { 'api-key': '404481BD9298D9A33EE7215E16757100' },
-    forma: (c) => (Array.isArray(safeJson(c)?.value) ? null : 'sin la lista «value»; la api-key pública pudo rotar'),
-    nota: 'buscador por materia de SUIN (Azure); 0,14 % figura derogado, el resto «en estudio»',
+    nombre: 'SUIN-Juriscol (texto · suin-search)',
+    // API del visor (src/fuentes/suin/, `DOCUMENTOS`): la Ley 909 de 2004.
+    url: 'https://lexis.minjusticia.gov.co/suin-search/api/documentos/1670817',
+    accept: 'application/json',
+    forma: (c) => (typeof safeJson(c)?.data?.textoHtml === 'string' ? null : 'sin data.textoHtml'),
+    nota: 'texto completo con resúmenes de modificaciones y jurisprudencia; un id inexistente da 204',
   },
   {
     nombre: 'ANH',

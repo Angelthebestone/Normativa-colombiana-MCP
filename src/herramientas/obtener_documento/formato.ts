@@ -13,6 +13,7 @@ import type { Resueltas } from './esquema.ts'
 export function pedidoDe(r: Resueltas): string {
   switch (r.fuente) {
     case 'gestor':
+    case 'suin':
       return `id ${r.id}`
     case 'corte':
     case 'suprema':

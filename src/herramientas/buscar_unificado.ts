@@ -6,7 +6,7 @@
  * Es orquestación, no un scraper nuevo: reutiliza `gestor.buscar/tematica`,
  * `corte.buscar`, `suin.buscar` y `dian.buscar`, con `conAlternativas` por
  * fuente cuando rinde 0. Cada resultado se etiqueta con su fuente y su URL, y
- * la vigencia de SUIN se rotula "SEGÚN EL BUSCADOR" sin reinterpretarla.
+ * el estado de SUIN se rotula como dato de su ficha, sin reinterpretarlo.
  *
  * Ranking trivial: `perfil=tributario` prioriza la DIAN; el resto sigue el
  * orden Gestor → Corte → SUIN → DIAN. No hay reranking LLM ni router: es un
@@ -18,7 +18,7 @@ import { z } from 'zod'
 import { estricto } from '../nucleo/normalizar.ts'
 import { alcance, proyectar } from '../nucleo/alcance.ts'
 import { fechaBogota } from '../nucleo/fecha.ts'
-import { FUENTES, CLAVE_ALCANCE, NOTA_SUIN, PERFILES_ADMITIDOS, POR_FUENTE, fuentesDe, ordenar, type Fuente, type Item } from './buscar_unificado/fuentes.ts'
+import { FUENTES, CLAVE_ALCANCE, PERFILES_ADMITIDOS, POR_FUENTE, fuentesDe, ordenar, type Fuente, type Item } from './buscar_unificado/fuentes.ts'
 
 export const TITULO = 'Buscar en varias fuentes a la vez'
 
@@ -28,7 +28,7 @@ export const DESCRIPCION =
   'herramienta obvia; para una cita exacta sigue siendo mejor resolver_cita y para un tribunal concreto, su ' +
   'buscador propio. perfil elige las fuentes ("salud" añade INVIMA y Supersalud; "mineria", la ANM) y el ' +
   'orden; si pasas fuentes, esa lista manda y el perfil solo ordena. limite es POR fuente, así que el total ' +
-  'puede multiplicarse. La vigencia de SUIN se rotula SEGÚN EL BUSCADOR y no es la ficha oficial. Cuando la ' +
+  'puede multiplicarse. El estado de SUIN es el de su ficha, copiado tal cual. Cuando la ' +
   'fuente sirve su texto, cada resultado trae "Para leer", la llamada lista a obtener_documento. Una fuente ' +
   'caída se declara como fallo, no como vacío.'
 
@@ -105,8 +105,6 @@ export function formatear(
       'Esto es un FALLO de la fuente, no un vacío: no concluyas que no hay resultados ahí. Vuelve a intentarlo.',
     )
   }
-  // Una sola línea al final explica por qué hay resultados sin «Para leer».
-  if (ordenados.some((i) => i.fuente === 'suin')) bloque.push('', NOTA_SUIN)
   return bloque.join('\n')
 }
 
@@ -203,7 +201,6 @@ export async function escribir(
       avisos.push('Un vacío en una fuente NO significa que la norma no exista; para una cita exacta usa resolver_cita.')
     if (caidas.length)
       avisos.push('Esto es un FALLO de la fuente, no un vacío: no concluyas que no hay resultados ahí. Vuelve a intentarlo.')
-    if (todos.some((i) => i.fuente === 'suin')) avisos.push(NOTA_SUIN)
     return JSON.stringify({
       fecha_consulta: fechaBogota(),
       texto: params.texto,

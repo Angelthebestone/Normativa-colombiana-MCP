@@ -108,7 +108,7 @@ test('SUIN: el índice no cubre el término y el buscador vivo encuentra la Ley 
   assert.equal(r.total, 1)
   assert.equal(r.items[0]?.titulo, 'LEY 1221 DE 2008')
   assert.ok(r.nota?.includes('no cubría el término'), 'el fallback se declara en la nota')
-  assert.deepEqual(r.aplicados, ['buscador del portal (Azure)'])
+  assert.deepEqual(r.aplicados, ['buscador del portal'])
 })
 
 test('SUIN: índice y buscador vivo vacíos declaran el hueco sin concluir que no existe', async () => {
@@ -197,18 +197,17 @@ const suinConHueco = (porTermino: Record<string, ResultadoSuin[]>) =>
 
 test('SUIN: «trabajo remoto» que solo casa con «trabajo» devuelve el vacío con aviso y orientación', async () => {
   const s = await escribirSuin(
-    { texto: 'teletrabajo', desde: 0, limite: 15 },
+    { texto: 'teletrabajo', coleccion: 'normas', desde: 0, limite: 15 },
     suinConHueco({ 'trabajo remoto': [docSuin('Ley 50 de 1990', 'Reforma laboral y del trabajo'), docSuin('Decreto 2 de 2000', 'Sobre el trabajo')] }),
   )
   assert.match(s, /No encontré documentos en SUIN para "teletrabajo"/)
-  assert.match(s, /índice tiene huecos/)
   assert.match(s, /buscar_por_tema/)
   assert.doesNotMatch(s, /Ley 50 de 1990|Decreto 2 de 2000/)
 })
 
 test('SUIN: una variante que aparece completa en el título o el epígrafe se conserva y se anuncia', async () => {
   const s = await escribirSuin(
-    { texto: 'teletrabajo', desde: 0, limite: 15 },
+    { texto: 'teletrabajo', coleccion: 'normas', desde: 0, limite: 15 },
     suinConHueco({
       'trabajo remoto': [
         docSuin('Ley 1221 de 2008', 'Normas para promover el Trabajo Remoto'),
@@ -223,7 +222,7 @@ test('SUIN: una variante que aparece completa en el título o el epígrafe se co
 
 test('SUIN: la búsqueda literal que sí rinde no se filtra', async () => {
   const s = await escribirSuin(
-    { texto: 'Buenaventura', desde: 0, limite: 15 },
+    { texto: 'Buenaventura', coleccion: 'normas', desde: 0, limite: 15 },
     suinConHueco({ Buenaventura: [docSuin('Ley 1 de 1990', 'Sobre otra cosa')] }),
   )
   assert.match(s, /Ley 1 de 1990/)
