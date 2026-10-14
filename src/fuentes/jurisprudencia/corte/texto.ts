@@ -1,5 +1,5 @@
 import { cargar, textoDe } from '../../../nucleo/parse/limpieza.ts'
-import { rutaDeSentencia } from '../../../nucleo/citas.ts'
+import { rutaDeSentencia } from '../../../nucleo/citas/index.ts'
 import { BASE, pedir } from './relatoria.ts'
 
 /**

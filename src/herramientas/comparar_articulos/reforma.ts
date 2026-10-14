@@ -1,5 +1,5 @@
 import { agruparEditoriales, clasificarDiferencia, diffArticulos } from '../diff.ts'
-import { parsearCita } from '../../nucleo/citas.ts'
+import { parsearCita } from '../../nucleo/citas/index.ts'
 import { articulo as extraerArticulo, limpiarArticulo } from '../../nucleo/parse/articulos.ts'
 import { historial } from '../../nucleo/parse/historial.ts'
 import { alcance } from '../../nucleo/alcance.ts'

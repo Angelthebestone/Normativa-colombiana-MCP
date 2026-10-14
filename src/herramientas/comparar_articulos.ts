@@ -20,7 +20,7 @@ import type { ToolAnnotations } from '@modelcontextprotocol/sdk/types.js'
 import { z } from 'zod'
 
 import { agruparEditoriales, clasificarDiferencia, diffArticulos } from './diff.ts'
-import { parsearCita } from '../nucleo/citas.ts'
+import { parsearCita } from '../nucleo/citas/index.ts'
 import { estricto, numeroDeArticulo } from '../nucleo/normalizar.ts'
 import { alcance } from '../nucleo/alcance.ts'
 import { articuloDe, type Deps } from './comparar_articulos/norma.ts'

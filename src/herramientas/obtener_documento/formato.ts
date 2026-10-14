@@ -2,7 +2,7 @@
 import { advertenciasVigencia } from '../../nucleo/parse/vigencia.ts'
 import { avisoSinTexto } from '../../nucleo/parse/pdf.ts'
 import { fragmentos } from '../../nucleo/parse/fragmentos.ts'
-import { parsearCita } from '../../nucleo/citas.ts'
+import { parsearCita } from '../../nucleo/citas/index.ts'
 import type { Resueltas } from './esquema.ts'
 
 /**

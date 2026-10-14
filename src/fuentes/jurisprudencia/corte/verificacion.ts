@@ -1,5 +1,5 @@
 import { poner, obtener, TTL_BUSQUEDA_MS } from '../../../nucleo/cache.ts'
-import { parsearCita } from '../../../nucleo/citas.ts'
+import { parsearCita } from '../../../nucleo/citas/index.ts'
 import { buscar } from './busqueda.ts'
 import type { Providencia } from './providencia.ts'
 

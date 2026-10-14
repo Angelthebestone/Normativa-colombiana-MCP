@@ -6,7 +6,7 @@ import type { ToolAnnotations } from '@modelcontextprotocol/sdk/types.js'
 import { z } from 'zod'
 
 import { vacio } from '../nucleo/vacio.ts'
-import { parsearCita, parsearRadicado } from '../nucleo/citas.ts'
+import { parsearCita, parsearRadicado } from '../nucleo/citas/index.ts'
 import { codigoDe } from '../nucleo/codigos.ts'
 import { estricto, numeroDeArticulo } from '../nucleo/normalizar.ts'
 import * as suin from '../fuentes/suin/index.ts'

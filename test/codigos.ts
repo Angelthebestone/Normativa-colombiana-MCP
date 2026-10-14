@@ -7,7 +7,7 @@
 import { strict as assert } from 'node:assert'
 import test from 'node:test'
 
-import { parsearCita } from '../src/nucleo/citas.ts'
+import { parsearCita } from '../src/nucleo/citas/index.ts'
 import { CODIGOS, codigoDe, referencia } from '../src/nucleo/codigos.ts'
 
 test('el nombre del código resuelve a su norma contenedora', () => {
