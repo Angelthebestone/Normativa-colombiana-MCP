@@ -1,5 +1,5 @@
 import { activa, avisoApagada } from '../../nucleo/alcance.ts'
-import type { Cita } from '../../nucleo/citas.ts'
+import type { Cita } from '../../nucleo/citas/index.ts'
 import { equivalencia, type Codigo } from '../../nucleo/codigos.ts'
 import { esCompiladora } from '../../nucleo/compiladas.ts'
 import { validarUrl } from '../../nucleo/evidencia.ts'

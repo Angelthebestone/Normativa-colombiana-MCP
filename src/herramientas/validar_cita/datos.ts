@@ -1,4 +1,4 @@
-import { idTipo, parsearCita, candidatosAmbiguos, type Cita } from '../../nucleo/citas.ts'
+import { idTipo, parsearCita, candidatosAmbiguos, type Cita } from '../../nucleo/citas/index.ts'
 import { clasificarValidacion, parametroEs, validarArticulo, validarNumeroAnio, validarUrl } from '../../nucleo/evidencia.ts'
 import { sinTildes } from '../../nucleo/parse/texto.ts'
 import * as gestor from '../../fuentes/gestor/index.ts'

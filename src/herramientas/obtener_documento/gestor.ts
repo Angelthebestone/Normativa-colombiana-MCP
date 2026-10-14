@@ -8,7 +8,7 @@ import { NoExisteError } from '../../nucleo/parse/errores.ts'
 import * as gestor from '../../fuentes/gestor/index.ts'
 import { esCompiladora, avisoCompiladora } from '../../nucleo/compiladas.ts'
 import { citaNorma } from '../../nucleo/cita_oficial/index.ts'
-import { analizarVacancia, enVacancia } from '../../nucleo/vacancia.ts'
+import { analizarVacancia, enVacancia } from '../../nucleo/vacancia/index.ts'
 import type { Resueltas } from './esquema.ts'
 import { conOrigen, mencionesDe, reanudar, sinTexto } from './formato.ts'
 

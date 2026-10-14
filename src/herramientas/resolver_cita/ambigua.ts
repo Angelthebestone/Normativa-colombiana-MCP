@@ -1,4 +1,4 @@
-import type { Cita } from '../../nucleo/citas.ts'
+import type { Cita } from '../../nucleo/citas/index.ts'
 import type { Resultado } from '../../nucleo/parse/gestor.ts'
 import { sinNorma, type Resuelta } from './resuelta.ts'
 

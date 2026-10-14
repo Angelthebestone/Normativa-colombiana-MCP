@@ -1,4 +1,4 @@
-import { idTipo, parsearCita, candidatosAmbiguos } from '../../nucleo/citas.ts'
+import { idTipo, parsearCita, candidatosAmbiguos } from '../../nucleo/citas/index.ts'
 import { articulo as extraerArticulo, limpiarArticulo } from '../../nucleo/parse/articulos.ts'
 import { type Norma } from '../../nucleo/parse/gestor.ts'
 import * as gestor from '../../fuentes/gestor/index.ts'
