@@ -24,7 +24,9 @@ import supersalud from './supersalud.ts'
 import invima from './invima.ts'
 import superfinanciera from './superfinanciera.ts'
 import mintrabajo from './mintrabajo.ts'
+import mineducacion from './mineducacion.ts'
 import supertransporte from './supertransporte.ts'
+import mintransporte from './mintransporte.ts'
 import parques from './parques.ts'
 import unidadvictimas from './unidadvictimas.ts'
 
@@ -40,9 +42,11 @@ registrar(
   invima,
   superfinanciera,
   supersalud,
-  // Transversales: trabajo, transporte, víctimas y ambiente
+  // Transversales: trabajo, educación, transporte, víctimas y ambiente
   mintrabajo,
+  mineducacion,
   supertransporte,
+  mintransporte,
   unidadvictimas,
   parques,
 )
