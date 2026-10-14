@@ -20,7 +20,7 @@
 import * as consejo from '../fuentes/jurisprudencia/consejoestado/index.ts'
 import { activa, avisoApagada, type Uso } from '../nucleo/alcance.ts'
 import type { Radicado } from '../nucleo/citas.ts'
-import type { Resuelta } from './resolver_cita.ts'
+import type { Resuelta } from './resolver_cita/resuelta.ts'
 
 /** Sin resultado en SAMAI para un radicado del Consejo: las tres verdades. */
 const SIN_RESULTADO =

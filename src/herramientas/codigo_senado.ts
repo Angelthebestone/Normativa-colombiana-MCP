@@ -22,7 +22,7 @@ import * as suin from '../fuentes/suin/index.ts'
 import { activa, avisoApagada } from '../nucleo/alcance.ts'
 import { equivalencia, referencia, type Codigo } from '../nucleo/codigos.ts'
 import type { Cita } from '../nucleo/citas.ts'
-import type { Resuelta } from './resolver_cita.ts'
+import type { Resuelta } from './resolver_cita/resuelta.ts'
 
 const SIN_CIFRAR =
   'La Secretaría del Senado solo sirve HTTP sin cifrar (su puerto 443 no abre): este texto viajó sin autenticar. ' +
