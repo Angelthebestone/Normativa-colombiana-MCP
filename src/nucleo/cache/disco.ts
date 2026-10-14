@@ -58,32 +58,6 @@ function olvidar(ruta: string): boolean {
 }
 
 /**
- * La copia que hay en disco para `clave`, o null. Un fichero ilegible, truncado
- * (cierre a mitad) o con otra forma se ignora y se borra, para que la próxima
- * descarga lo reemplace limpio.
- */
-export function leerDeDisco(clave: string): Copia | null {
-  const dir = directorio()
-  if (!dir) return null
-  const ruta = join(dir, archivoDe(clave))
-  let crudo: string
-  try {
-    crudo = readFileSync(ruta, 'utf8')
-  } catch {
-    return null // no está (lo normal) o no se puede leer
-  }
-  let copia: Copia | null = null
-  try {
-    const x: unknown = JSON.parse(crudo)
-    if (esCopia(x)) copia = x
-  } catch {
-    // JSON cortado a mitad o basura.
-  }
-  if (!copia) olvidar(ruta)
-  return copia
-}
-
-/**
  * Tope del directorio: 500 ficheros y 256 MB. Una providencia grande ronda
  * 1,8 MB y una norma corriente 200 KB, así que 256 MB dan para un centenar de
  * las grandes y el recuento de 500 corta antes con las corrientes: el caché no
@@ -98,60 +72,97 @@ export function leerDeDisco(clave: string): Copia | null {
 const MAX_FICHEROS_EN_DISCO = 500
 const MAX_BYTES_EN_DISCO = 256 * 1024 * 1024
 
-/** Escrituras desde el arranque; cada 32 se revisa además el tamaño. */
-let escrituras = 0
+/**
+ * El espejo en disco de las copias. El contador de escrituras es de cada
+ * instancia: decide cuándo toca revisar el tamaño del directorio.
+ */
+export function crearDisco() {
+  // Escrituras desde el arranque; cada 32 se revisa además el tamaño.
+  let escrituras = 0
 
-/** Purga lo más antiguo por fecha de modificación hasta volver bajo el tope. */
-function podar(): void {
-  const dir = directorio()
-  if (!dir) return
-  escrituras++
-  try {
-    const nombres = readdirSync(dir)
-    // Un `.tmp` solo queda de una escritura muerta a medias. Si otro proceso
-    // estuviera escribiendo justo ahora perdería ese guardado —no la copia que
-    // tiene en memoria—, mal menor frente a irlos acumulando para siempre.
-    for (const n of nombres) if (n.endsWith('.tmp')) olvidar(join(dir, n))
-
-    const ficheros = nombres.filter((n) => n.endsWith('.json'))
-    if (ficheros.length <= MAX_FICHEROS_EN_DISCO && escrituras % 32 !== 0) return
-
-    const conTamano = ficheros
-      .map((n) => {
-        const ruta = join(dir, n)
-        const info = statSync(ruta)
-        return { ruta, bytes: info.size, mtime: info.mtimeMs }
-      })
-      .sort((a, b) => a.mtime - b.mtime) // el más antiguo, primero
-
-    let quedan = conTamano.length
-    let bytes = conTamano.reduce((suma, f) => suma + f.bytes, 0)
-    for (const f of conTamano) {
-      if (quedan <= MAX_FICHEROS_EN_DISCO && bytes <= MAX_BYTES_EN_DISCO) break
-      if (olvidar(f.ruta)) {
-        quedan -= 1
-        bytes -= f.bytes
-      }
+  /**
+   * La copia que hay en disco para `clave`, o null. Un fichero ilegible, truncado
+   * (cierre a mitad) o con otra forma se ignora y se borra, para que la próxima
+   * descarga lo reemplace limpio.
+   */
+  function leerDeDisco(clave: string): Copia | null {
+    const dir = directorio()
+    if (!dir) return null
+    const ruta = join(dir, archivoDe(clave))
+    let crudo: string
+    try {
+      crudo = readFileSync(ruta, 'utf8')
+    } catch {
+      return null // no está (lo normal) o no se puede leer
     }
-  } catch {
-    // Directorio inexistente o ilegible: no hay nada que podar.
+    let copia: Copia | null = null
+    try {
+      const x: unknown = JSON.parse(crudo)
+      if (esCopia(x)) copia = x
+    } catch {
+      // JSON cortado a mitad o basura.
+    }
+    if (!copia) olvidar(ruta)
+    return copia
   }
+
+
+  /** Purga lo más antiguo por fecha de modificación hasta volver bajo el tope. */
+  function podar(): void {
+    const dir = directorio()
+    if (!dir) return
+    escrituras++
+    try {
+      const nombres = readdirSync(dir)
+      // Un `.tmp` solo queda de una escritura muerta a medias. Si otro proceso
+      // estuviera escribiendo justo ahora perdería ese guardado —no la copia que
+      // tiene en memoria—, mal menor frente a irlos acumulando para siempre.
+      for (const n of nombres) if (n.endsWith('.tmp')) olvidar(join(dir, n))
+
+      const ficheros = nombres.filter((n) => n.endsWith('.json'))
+      if (ficheros.length <= MAX_FICHEROS_EN_DISCO && escrituras % 32 !== 0) return
+
+      const conTamano = ficheros
+        .map((n) => {
+          const ruta = join(dir, n)
+          const info = statSync(ruta)
+          return { ruta, bytes: info.size, mtime: info.mtimeMs }
+        })
+        .sort((a, b) => a.mtime - b.mtime) // el más antiguo, primero
+
+      let quedan = conTamano.length
+      let bytes = conTamano.reduce((suma, f) => suma + f.bytes, 0)
+      for (const f of conTamano) {
+        if (quedan <= MAX_FICHEROS_EN_DISCO && bytes <= MAX_BYTES_EN_DISCO) break
+        if (olvidar(f.ruta)) {
+          quedan -= 1
+          bytes -= f.bytes
+        }
+      }
+    } catch {
+      // Directorio inexistente o ilegible: no hay nada que podar.
+    }
+  }
+
+  /** Escribe la copia en disco —temporal + rename, atómico— y poda si toca. */
+  function escribirEnDisco(clave: string, copia: Copia): void {
+    const dir = directorio()
+    if (!dir) return
+    const ruta = join(dir, archivoDe(clave))
+    const temporal = `${ruta}.${process.pid}.tmp`
+    try {
+      mkdirSync(dir, { recursive: true })
+      writeFileSync(temporal, JSON.stringify(copia), 'utf8')
+      // El rename es atómico en el mismo sistema de ficheros: un cierre a mitad
+      // deja el temporal a medias, nunca el JSON bueno truncado.
+      renameSync(temporal, ruta)
+    } catch {
+      olvidar(temporal) // el temporal a medias no se queda
+    }
+    podar()
+  }
+
+  return { leerDeDisco, escribirEnDisco }
 }
 
-/** Escribe la copia en disco —temporal + rename, atómico— y poda si toca. */
-export function escribirEnDisco(clave: string, copia: Copia): void {
-  const dir = directorio()
-  if (!dir) return
-  const ruta = join(dir, archivoDe(clave))
-  const temporal = `${ruta}.${process.pid}.tmp`
-  try {
-    mkdirSync(dir, { recursive: true })
-    writeFileSync(temporal, JSON.stringify(copia), 'utf8')
-    // El rename es atómico en el mismo sistema de ficheros: un cierre a mitad
-    // deja el temporal a medias, nunca el JSON bueno truncado.
-    renameSync(temporal, ruta)
-  } catch {
-    olvidar(temporal) // el temporal a medias no se queda
-  }
-  podar()
-}
+export type Disco = ReturnType<typeof crearDisco>

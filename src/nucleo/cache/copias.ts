@@ -23,7 +23,7 @@
  * es lo único que acota la antigüedad de la copia.
  */
 
-import { escribirEnDisco, leerDeDisco } from './disco.ts'
+import type { Disco } from './disco.ts'
 import type { Copia } from './tipos.ts'
 
 /**
@@ -58,47 +58,6 @@ export function esDescargaCacheable(url: string, metodo: string, contentType: st
  */
 const MAX_COPIAS = 64
 
-const copias = new Map<string, Copia>()
-
-/** Mete la copia en el mapa; si pasa del tope, la más antigua sale. */
-function ponerEnMemoria(clave: string, copia: Copia): void {
-  copias.delete(clave) // reinsertar mantiene el orden de inserción como orden de uso
-  copias.set(clave, copia)
-  while (copias.size > MAX_COPIAS) {
-    const masVieja = copias.keys().next().value
-    if (masVieja === undefined) break
-    copias.delete(masVieja)
-  }
-}
-
-/**
- * Copia guardada para `clave`, aunque esté vencida: la degradación la usa. El
- * mapa manda —el disco es solo para lo que la memoria perdió al reiniciar— y
- * lo que se lee de disco se sube al mapa.
- */
-export function obtenerCopia(clave: string): Copia | null {
-  const enMemoria = copias.get(clave)
-  if (enMemoria) return enMemoria
-  const deDisco = leerDeDisco(clave)
-  if (deDisco) ponerEnMemoria(clave, deDisco)
-  return deDisco
-}
-
-export function guardarCopia(clave: string, copia: Copia): void {
-  ponerEnMemoria(clave, copia)
-  escribirEnDisco(clave, copia)
-}
-
-/** Marca la copia como vista hoy (tras un 304), sin tocar su cuerpo. */
-export function refrescarCopia(clave: string, fecha: number, vence: number): Copia | null {
-  const c = copias.get(clave)
-  if (!c) return null
-  c.fecha = fecha
-  c.vence = vence
-  escribirEnDisco(clave, c) // la fecha nueva también sobrevive al reinicio
-  return c
-}
-
 /**
  * Cabeceras condicionales de una copia: vacías si la fuente no dio validador.
  *
@@ -116,12 +75,61 @@ export function cabecerasCondicionales(copia: Copia): Record<string, string> {
   return etag ? { 'If-None-Match': etag } : {}
 }
 
-/** Solo para las pruebas: vacía el mapa en memoria, sin tocar el disco (CACHE_DIR). */
-export function limpiarCopias(): void {
-  copias.clear()
+/** Copias en memoria de una instancia de caché, con su espejo en disco. */
+export function crearCopias(disco: Disco) {
+  const { escribirEnDisco, leerDeDisco } = disco
+  const copias = new Map<string, Copia>()
+
+  /** Mete la copia en el mapa; si pasa del tope, la más antigua sale. */
+  function ponerEnMemoria(clave: string, copia: Copia): void {
+    copias.delete(clave) // reinsertar mantiene el orden de inserción como orden de uso
+    copias.set(clave, copia)
+    while (copias.size > MAX_COPIAS) {
+      const masVieja = copias.keys().next().value
+      if (masVieja === undefined) break
+      copias.delete(masVieja)
+    }
+  }
+
+  /**
+   * Copia guardada para `clave`, aunque esté vencida: la degradación la usa. El
+   * mapa manda —el disco es solo para lo que la memoria perdió al reiniciar— y
+   * lo que se lee de disco se sube al mapa.
+   */
+  function obtenerCopia(clave: string): Copia | null {
+    const enMemoria = copias.get(clave)
+    if (enMemoria) return enMemoria
+    const deDisco = leerDeDisco(clave)
+    if (deDisco) ponerEnMemoria(clave, deDisco)
+    return deDisco
+  }
+
+  function guardarCopia(clave: string, copia: Copia): void {
+    ponerEnMemoria(clave, copia)
+    escribirEnDisco(clave, copia)
+  }
+
+  /** Marca la copia como vista hoy (tras un 304), sin tocar su cuerpo. */
+  function refrescarCopia(clave: string, fecha: number, vence: number): Copia | null {
+    const c = copias.get(clave)
+    if (!c) return null
+    c.fecha = fecha
+    c.vence = vence
+    escribirEnDisco(clave, c) // la fecha nueva también sobrevive al reinicio
+    return c
+  }
+
+  /** Solo para las pruebas: vacía el mapa en memoria, sin tocar el disco (CACHE_DIR). */
+  function limpiarCopias(): void {
+    copias.clear()
+  }
+
+  /** Cuántas copias hay vivas (diagnóstico y pruebas del tope). */
+  function copiasGuardadas(): number {
+    return copias.size
+  }
+
+  return { obtenerCopia, guardarCopia, refrescarCopia, limpiarCopias, copiasGuardadas }
 }
 
-/** Cuántas copias hay vivas (diagnóstico y pruebas del tope). */
-export function copiasGuardadas(): number {
-  return copias.size
-}
+export type Copias = ReturnType<typeof crearCopias>
