@@ -28,8 +28,8 @@
  *   (Diario Oficial), que sí se usan. La entidad expedidora solo consta en la
  *   prosa del encabezado y su forma cambia demasiado, así que se omite.
  */
-import type { Providencia as ProvidenciaCorte } from '../fuentes/jurisprudencia/corte.ts'
-import type { Providencia as ProvidenciaConsejo } from '../fuentes/jurisprudencia/consejoestado.ts'
+import type { Providencia as ProvidenciaCorte } from '../fuentes/jurisprudencia/corte/index.ts'
+import type { Providencia as ProvidenciaConsejo } from '../fuentes/jurisprudencia/consejoestado/index.ts'
 import type { Providencia as ProvidenciaSuprema } from '../fuentes/jurisprudencia/cortesuprema.ts'
 import type { Norma } from './parse/gestor.ts'
 

@@ -43,7 +43,7 @@ import { fileURLToPath } from 'node:url'
 import { BASE_GESTOR } from '../src/nucleo/parse/gestor.ts'
 import { pedir, restablecer } from '../src/nucleo/http.ts'
 import { diagnosticarRespuesta } from '../src/nucleo/portal-roto.ts'
-import { enlaceBusqueda } from '../src/fuentes/jurisprudencia/consejoestado.ts'
+import { enlaceBusqueda } from '../src/fuentes/jurisprudencia/consejoestado/index.ts'
 import { BASE_SENADO } from '../src/fuentes/senado.ts'
 import { BASE as BASE_DIARIO } from '../src/fuentes/diario_oficial/index.ts'
 
@@ -164,7 +164,7 @@ export const PORTALES: Portal[] = [
   },
   {
     nombre: 'Corte Constitucional (relatoría)',
-    // Misma API no documentada que src/fuentes/jurisprudencia/corte.ts
+    // Misma API no documentada que src/fuentes/jurisprudencia/corte/index.ts
     // (buscador_new, tipo=json): responde la salida cruda de Elasticsearch.
     url: 'https://www.corteconstitucional.gov.co/relatoria/buscador_new/?searchOption=texto&fini=1992-01-01&ffin=2100-12-31&buscar_por=querella&maxprov=1&slop=1&accion=search&tipo=json',
     accept: 'application/json,text/html,*/*',

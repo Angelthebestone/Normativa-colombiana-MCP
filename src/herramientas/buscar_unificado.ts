@@ -17,7 +17,7 @@ import { z } from 'zod'
 
 import { estricto } from '../nucleo/normalizar.ts'
 import * as gestor from '../fuentes/gestor/index.ts'
-import * as corte from '../fuentes/jurisprudencia/corte.ts'
+import * as corte from '../fuentes/jurisprudencia/corte/index.ts'
 import * as suin from '../fuentes/suin/index.ts'
 import * as dian from '../fuentes/normograma.ts'
 import { adaptador } from '../fuentes/sectorial.ts'

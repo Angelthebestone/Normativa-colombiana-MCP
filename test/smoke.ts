@@ -16,7 +16,7 @@ import { claveSuin, ficha, fichasDe } from '../src/fuentes/suin/index.ts'
 import { mereceAviso } from '../src/nucleo/actualizacion.ts'
 import * as dian from '../src/fuentes/normograma.ts'
 import * as suprema from '../src/fuentes/jurisprudencia/cortesuprema.ts'
-import * as consejo from '../src/fuentes/jurisprudencia/consejoestado.ts'
+import * as consejo from '../src/fuentes/jurisprudencia/consejoestado/index.ts'
 import * as anh from '../src/fuentes/anh.ts'
 import * as upme from '../src/fuentes/upme.ts'
 import * as creg from '../src/fuentes/creg.ts'
@@ -33,7 +33,7 @@ import { limpiarTermino, sinTildes } from '../src/nucleo/parse/texto.ts'
 import { advertenciasVigencia } from '../src/nucleo/parse/vigencia.ts'
 import { cuerpoDe, decodificar, TOPE_TEXTO } from '../src/nucleo/http.ts'
 import * as gestor from '../src/fuentes/gestor/index.ts'
-import * as corte from '../src/fuentes/jurisprudencia/corte.ts'
+import * as corte from '../src/fuentes/jurisprudencia/corte/index.ts'
 
 // Las pruebas marcadas con RED consultan los portales oficiales. Con SIN_RED=1
 // se saltan, para iterar rápido o sin conexión sin golpear un servicio público.

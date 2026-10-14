@@ -14,7 +14,7 @@ import { strict as assert } from 'node:assert'
 import test from 'node:test'
 
 import { LENTO } from './red.ts'
-import { porSentencia, verificar } from '../src/fuentes/jurisprudencia/corte.ts'
+import { porSentencia, verificar } from '../src/fuentes/jurisprudencia/corte/index.ts'
 
 test('verificar distingue existe y ahorra el segundo sondeo cuando el primero basta', LENTO, async () => {
   // Las SU solo casan sin el guion: la forma literal falla y hay que probar la segunda.

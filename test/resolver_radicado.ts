@@ -13,7 +13,7 @@ import test from 'node:test'
 import { componer } from '../src/herramientas/resolver_cita.ts'
 import { resolverRadicado as resolverDatos } from '../src/herramientas/resolver_radicado.ts'
 import { parsearRadicado } from '../src/nucleo/citas.ts'
-import { porRadicado, type Providencia } from '../src/fuentes/jurisprudencia/consejoestado.ts'
+import { porRadicado, type Providencia } from '../src/fuentes/jurisprudencia/consejoestado/index.ts'
 
 /** La respuesta tal como la ve quien llama a `resolver_cita` con un radicado. */
 const resolverRadicado = async (...a: Parameters<typeof resolverDatos>): Promise<string> =>

@@ -1,9 +1,9 @@
 /** `obtener_documento` con las tres cortes: una providencia con estructura, sección y pasajes rotulados. */
 import { etiquetaEn, ENCABEZADO_PROVIDENCIA, mapaDeSecciones, seccion as seccionDe, seccionesPresentes } from '../../nucleo/parse/secciones.ts'
 import { trocear } from '../../nucleo/parse/fragmentos.ts'
-import * as corte from '../../fuentes/jurisprudencia/corte.ts'
+import * as corte from '../../fuentes/jurisprudencia/corte/index.ts'
 import * as suprema from '../../fuentes/jurisprudencia/cortesuprema.ts'
-import * as consejo from '../../fuentes/jurisprudencia/consejoestado.ts'
+import * as consejo from '../../fuentes/jurisprudencia/consejoestado/index.ts'
 import type { Resueltas } from './esquema.ts'
 import { conOrigen, cuerpo, pasajes, reanudar, sinTexto } from './formato.ts'
 

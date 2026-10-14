@@ -6,7 +6,7 @@ import { estricto } from '../nucleo/normalizar.ts'
 import { alcance } from '../nucleo/alcance.ts'
 import { sinTildes } from '../nucleo/parse/texto.ts'
 import { vacio } from '../nucleo/vacio.ts'
-import * as consejo from '../fuentes/jurisprudencia/consejoestado.ts'
+import * as consejo from '../fuentes/jurisprudencia/consejoestado/index.ts'
 
 
 
