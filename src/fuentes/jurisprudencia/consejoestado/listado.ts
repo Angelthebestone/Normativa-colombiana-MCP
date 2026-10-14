@@ -1,5 +1,5 @@
 import * as cheerio from 'cheerio/slim'
-import { colapsarEspacios } from '../../../nucleo/parse.ts'
+import { colapsarEspacios } from '../../../nucleo/parse/texto.ts'
 import { BASE, RUTA } from './enlaces.ts'
 import type { Providencia, Titulacion } from './providencia.ts'
 

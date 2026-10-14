@@ -1,4 +1,5 @@
-import { BASE_GESTOR, CanarioError, type Resultado } from '../../nucleo/parse.ts'
+import { BASE_GESTOR, type Resultado } from '../../nucleo/parse/gestor.ts'
+import { CanarioError } from '../../nucleo/parse/errores.ts'
 import { traer } from './portal.ts'
 
 // ponytail: `conceptosfp.php` son 10,7 MB sin búsqueda en servidor, así que se

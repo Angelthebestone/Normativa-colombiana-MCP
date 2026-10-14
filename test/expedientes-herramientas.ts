@@ -6,7 +6,7 @@
  *   node --test test/expedientes-herramientas.ts
  */
 import { strict as assert } from 'node:assert'
-import { mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs'
+import { mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import * as os from 'node:os'
 import * as path from 'node:path'
 import test from 'node:test'
@@ -167,5 +167,38 @@ test('exportar sobre un archivo existente lo deja intacto y escribe con sufijo',
     assert.ok(readFileSync(conSufijo, 'utf8').includes('- resolver'))
   } finally {
     rmSync(dir, { recursive: true, force: true })
+  }
+})
+
+test('exportaciones concurrentes a la misma ruta no se pisan', async () => {
+  const dir = mkdtempSync(path.join(os.tmpdir(), 'expedientes-'))
+  delete process.env['EXPEDIENTES_DIR']
+  process.env['EXPEDIENTES'] = '1'
+  try {
+    const m = (await escribir({ accion: 'crear' })).match(/Expediente (\w+) creado/)
+    assert.ok(m)
+    const id = m[1]!
+    const ruta = path.join(dir, 'informe.md')
+    const rs = await Promise.all(Array.from({ length: 5 }, () => escribir({ accion: 'exportar', id, ruta })))
+    const rutas = rs.map((r) => r.match(/exportado a (\S+) \(/)?.[1])
+    assert.equal(new Set(rutas).size, 5, rs.join('\n'))
+    assert.equal(readdirSync(dir).length, 5)
+  } finally {
+    rmSync(dir, { recursive: true, force: true })
+  }
+})
+
+test('con EXPEDIENTES_DIR no escribible, crear falla en vez de afirmar persistencia', async () => {
+  const base = mkdtempSync(path.join(os.tmpdir(), 'expedientes-'))
+  const previa = process.env['EXPEDIENTES_DIR']
+  writeFileSync(path.join(base, 'bloqueo'), '')
+  process.env['EXPEDIENTES_DIR'] = path.join(base, 'bloqueo', 'anidado')
+  process.env['EXPEDIENTES'] = '1'
+  try {
+    await assert.rejects(() => escribir({ accion: 'crear' }), /No se pudo guardar el expediente/)
+  } finally {
+    if (previa === undefined) delete process.env['EXPEDIENTES_DIR']
+    else process.env['EXPEDIENTES_DIR'] = previa
+    rmSync(base, { recursive: true, force: true })
   }
 })

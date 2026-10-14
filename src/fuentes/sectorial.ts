@@ -111,3 +111,25 @@ export const adaptadores = (): Adaptador[] => [...REGISTRO.values()]
 export const adaptador = (id: string): Adaptador | undefined => REGISTRO.get(id)
 
 export const ids = (): string[] => [...REGISTRO.keys()]
+
+/**
+ * Lanza salvo que `url` sea https, con el origen exacto de `a.dominioPermitido`
+ * y sin credenciales. Va antes de cualquier petición con un enlace que trae
+ * quien llama: sin ella, `entidad` válida + `url` a 127.0.0.1 o a una red
+ * interna salía desde el proceso (SSRF).
+ */
+export function exigirOrigen(a: Adaptador, url: string): URL {
+  let u: URL
+  try {
+    u = new URL(url)
+  } catch {
+    throw new Error(`Enlace inválido: ${url}.`)
+  }
+  if (u.protocol !== 'https:' || u.origin !== new URL(a.dominioPermitido).origin) {
+    throw new Error(`El enlace ${url} no pertenece al dominio permitido de ${a.nombre} (${a.dominioPermitido}).`)
+  }
+  if (u.username || u.password) {
+    throw new Error(`El enlace ${url} lleva credenciales: los actos de ${a.nombre} se leen sin ellas.`)
+  }
+  return u
+}

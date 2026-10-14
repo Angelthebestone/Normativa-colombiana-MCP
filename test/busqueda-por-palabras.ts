@@ -7,9 +7,9 @@ import { strict as assert } from 'node:assert'
 import test from 'node:test'
 
 import { contienenTodos, pertinenciaDe, quitarStopwords } from '../src/fuentes/gestor/index.ts'
-import type { Resultado } from '../src/nucleo/parse.ts'
+import type { Resultado } from '../src/nucleo/parse/gestor.ts'
 import { contienenTodas, type Providencia } from '../src/fuentes/jurisprudencia/consejoestado/index.ts'
-import { buscar as buscarSuin, buscarEnIndice, buscarEnSuin, type ResultadoSuin } from '../src/fuentes/suin.ts'
+import { buscar as buscarSuin, buscarEnIndice, buscarEnSuin, type ResultadoSuin } from '../src/fuentes/suin/index.ts'
 import { escribir as escribirSuin } from '../src/herramientas/buscar_en_suin.ts'
 import { conAlternativas, desarrollarAbreviaturas } from '../src/nucleo/alternativas.ts'
 
@@ -100,7 +100,7 @@ test('SUIN: el índice no cubre el término y el buscador vivo encuentra la Ley 
             } satisfies ResultadoSuin,
           ],
         }
-      }) as typeof import('../src/fuentes/suin.ts')['buscar'],
+      }) as typeof import('../src/fuentes/suin/index.ts')['buscar'],
     },
     { texto: 'teletrabajo' },
   )
@@ -113,7 +113,7 @@ test('SUIN: el índice no cubre el término y el buscador vivo encuentra la Ley 
 
 test('SUIN: índice y buscador vivo vacíos declaran el hueco sin concluir que no existe', async () => {
   const r = await buscarEnSuin(
-    { buscar: (async () => ({ total: 0, items: [] })) as typeof import('../src/fuentes/suin.ts')['buscar'] },
+    { buscar: (async () => ({ total: 0, items: [] })) as typeof import('../src/fuentes/suin/index.ts')['buscar'] },
     { texto: 'zopilote interconectado' },
   )
   assert.ok(r.nota?.includes('NO significa que la norma no exista'), 'el hueco se declara y no se concluye la inexistencia')

@@ -1,15 +1,7 @@
-import {
-  BASE_GESTOR,
-  CanarioError,
-  enlacesDeNormas,
-  parseNorma,
-  parseTematica,
-  pdfEsEscaneo,
-  limpiarTermino,
-  type FilaTema,
-  type Norma,
-  type Resultado,
-} from '../../nucleo/parse.ts'
+import { BASE_GESTOR, enlacesDeNormas, parseNorma, parseTematica, type FilaTema, type Norma, type Resultado } from '../../nucleo/parse/gestor.ts'
+import { CanarioError } from '../../nucleo/parse/errores.ts'
+import { pdfEsEscaneo } from '../../nucleo/parse/pdf.ts'
+import { limpiarTermino } from '../../nucleo/parse/texto.ts'
 import { entero, traer } from './portal.ts'
 
 export async function obtenerNorma(id: string | number): Promise<Norma> {

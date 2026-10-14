@@ -27,7 +27,9 @@
  * vigencia declarado ("Vigente"), que se antepone al epígrafe tal cual lo
  * publica el portal, sin convertirlo en un booleano.
  */
-import { CanarioError, cargar, colapsarEspacios } from '../../nucleo/parse.ts'
+import { CanarioError } from '../../nucleo/parse/errores.ts'
+import { cargar } from '../../nucleo/parse/limpieza.ts'
+import { colapsarEspacios } from '../../nucleo/parse/texto.ts'
 import { pedir } from '../../nucleo/http.ts'
 import type { Adaptador, ActoSectorial, OpcionesSectorial, ResultadoSectorial } from '../sectorial.ts'
 

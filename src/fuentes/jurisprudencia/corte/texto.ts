@@ -1,4 +1,4 @@
-import { cargar, textoDe } from '../../../nucleo/parse.ts'
+import { cargar, textoDe } from '../../../nucleo/parse/limpieza.ts'
 import { rutaDeSentencia } from '../../../nucleo/citas.ts'
 import { BASE, pedir } from './relatoria.ts'
 

@@ -1,4 +1,4 @@
-import { sinTildes } from './parse.ts'
+import { sinTildes } from './parse/texto.ts'
 
 /** Sinónimos jurídicos curados, claves normalizadas (minúsculas y sin tildes). */
 export const TESAURO: Record<string, string[]> = {

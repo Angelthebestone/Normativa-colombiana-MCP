@@ -1,4 +1,4 @@
-import type { Norma } from '../parse.ts'
+import type { Norma } from '../parse/gestor.ts'
 import { fechaLarga } from './fecha.ts'
 import type { Cita } from './componentes.ts'
 
