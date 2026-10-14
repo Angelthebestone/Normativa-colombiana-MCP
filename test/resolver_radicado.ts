@@ -10,7 +10,7 @@
 import { strict as assert } from 'node:assert'
 import test from 'node:test'
 
-import { componer } from '../src/herramientas/resolver_cita.ts'
+import { componer } from '../src/herramientas/resolver_cita/componer.ts'
 import { resolverRadicado as resolverDatos } from '../src/herramientas/resolver_radicado.ts'
 import { parsearRadicado } from '../src/nucleo/citas/index.ts'
 import { porRadicado, type Providencia } from '../src/fuentes/jurisprudencia/consejoestado/index.ts'

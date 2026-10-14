@@ -6,7 +6,8 @@
 import { strict as assert } from 'node:assert'
 import test from 'node:test'
 
-import { calcularDatos, escribir, formatear, resolverUna, sinForma, textoDeDatos } from '../src/herramientas/validar_cita.ts'
+import { escribir, resolverUna } from '../src/herramientas/validar_cita.ts'
+import { calcularDatos, formatear, sinForma, textoDeDatos } from '../src/herramientas/validar_cita/datos.ts'
 
 const ENCONTRADA = { titulo: 'LEY 909 DE 2004', url: 'https://www.funcionpublica.gov.co/eva/gestornormativo/norma.php?i=123' }
 
