@@ -10,7 +10,7 @@ import test from 'node:test'
 import { buscar, enlaceBusqueda, type Providencia } from '../src/fuentes/jurisprudencia/consejoestado/index.ts'
 import { escribir } from '../src/herramientas/buscar_jurisprudencia_consejo_estado.ts'
 import type { pedir, Respuesta } from '../src/nucleo/http.ts'
-import { CanarioError } from '../src/nucleo/parse.ts'
+import { CanarioError } from '../src/nucleo/parse/errores.ts'
 
 test('enlaceBusqueda con exacto=true usa comillas (frase exacta) con searchMode any', () => {
   const url = enlaceBusqueda('nulidad electoral', 0, true)

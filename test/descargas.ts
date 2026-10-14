@@ -11,7 +11,7 @@ import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import test from 'node:test'
 
-import { descargarA, nombreSeguro } from '../src/nucleo/descargas.ts'
+import { descargarA, escribirSinColision, nombreSeguro } from '../src/nucleo/descargas.ts'
 
 const DOMINIO = 'https://prueba.gov.co'
 const PDF = Buffer.from('%PDF-1.4 contenido de prueba')
@@ -91,4 +91,52 @@ test('sin extensión en la URL se añade según el contentType', () => {
 test('una URL vacía o con solo separadores no produce un nombre vacío', () => {
   assert.ok(nombreSeguro(`${DOMINIO}/`).length > 0)
   assert.equal(nombreSeguro(`${DOMINIO}/../..`), 'archivo')
+})
+
+test('no crea ni toca un archivo auxiliar: un .prueba-escritura del usuario queda intacto', async () => {
+  const propio = mkdtempSync(join(tmpdir(), 'desc-aux-'))
+  try {
+    writeFileSync(join(propio, '.prueba-escritura'), 'DATOS DEL USUARIO')
+    const r = await descargarA(DOMINIO, `${DOMINIO}/normas/ley-1.pdf`, propio, {
+      pedirBytes: async () => pdfOk(),
+    })
+    assert.equal(readFileSync(join(propio, '.prueba-escritura'), 'utf8'), 'DATOS DEL USUARIO')
+    assert.deepEqual(readdirSync(propio).sort(), ['.prueba-escritura', 'ley-1.pdf'])
+    assert.deepEqual(readFileSync(r.rutaAbsoluta), PDF)
+  } finally {
+    rmSync(propio, { recursive: true, force: true })
+  }
+})
+
+test('descargas concurrentes del mismo nombre acaban en archivos distintos, cada uno con su contenido', async () => {
+  const propio = mkdtempSync(join(tmpdir(), 'desc-conc-'))
+  try {
+    const contenidos = Array.from({ length: 8 }, (_, i) => Buffer.from(`%PDF-1.4 copia ${i}`))
+    const rs = await Promise.all(
+      contenidos.map((c) =>
+        descargarA(DOMINIO, `${DOMINIO}/normas/misma.pdf`, propio, { pedirBytes: async () => pdfOk(c) }),
+      ),
+    )
+    const rutas = rs.map((r) => r.rutaAbsoluta)
+    assert.equal(new Set(rutas).size, contenidos.length, 'ningún nombre se repite')
+    rs.forEach((r, i) => assert.deepEqual(readFileSync(r.rutaAbsoluta), contenidos[i]))
+    assert.equal(readdirSync(propio).length, contenidos.length)
+  } finally {
+    rmSync(propio, { recursive: true, force: true })
+  }
+})
+
+test('escribirSinColision reserva el nombre: concurrentes nunca se pisan y lo previo no se toca', async () => {
+  const propio = mkdtempSync(join(tmpdir(), 'desc-wx-'))
+  try {
+    const base = join(propio, 'texto-gestor.txt')
+    writeFileSync(base, 'PREVIO')
+    const rutas = await Promise.all(Array.from({ length: 10 }, (_, i) => escribirSinColision(base, `texto ${i}`)))
+    assert.equal(readFileSync(base, 'utf8'), 'PREVIO')
+    assert.equal(new Set(rutas).size, 10)
+    assert.ok(!rutas.includes(base))
+    rutas.forEach((r, i) => assert.equal(readFileSync(r, 'utf8'), `texto ${i}`))
+  } finally {
+    rmSync(propio, { recursive: true, force: true })
+  }
 })

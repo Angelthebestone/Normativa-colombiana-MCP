@@ -1,4 +1,4 @@
-import { sinTildes } from '../../../nucleo/parse.ts'
+import { sinTildes } from '../../../nucleo/parse/texto.ts'
 
 export type Providencia = {
   id: string

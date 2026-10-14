@@ -1,4 +1,4 @@
-import { CanarioError } from '../../../nucleo/parse.ts'
+import { CanarioError } from '../../../nucleo/parse/errores.ts'
 import { pedir, pedirBytes } from '../../../nucleo/http.ts'
 import { enlaceProvidencia } from './enlaces.ts'
 

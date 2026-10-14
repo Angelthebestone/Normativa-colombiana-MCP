@@ -1,4 +1,5 @@
-import { BASE_GESTOR, parseResultados, sinTildes, tieneTildes, type Resultado } from '../../nucleo/parse.ts'
+import { BASE_GESTOR, parseResultados, type Resultado } from '../../nucleo/parse/gestor.ts'
+import { sinTildes, tieneTildes } from '../../nucleo/parse/texto.ts'
 import { obtener, poner, TTL_BUSQUEDA_MS } from '../../nucleo/cache.ts'
 import { entero, traer } from './portal.ts'
 import { resolver } from './catalogos.ts'

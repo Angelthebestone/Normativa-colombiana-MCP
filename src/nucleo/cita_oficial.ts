@@ -31,7 +31,7 @@
 import type { Providencia as ProvidenciaCorte } from '../fuentes/jurisprudencia/corte/index.ts'
 import type { Providencia as ProvidenciaConsejo } from '../fuentes/jurisprudencia/consejoestado/index.ts'
 import type { Providencia as ProvidenciaSuprema } from '../fuentes/jurisprudencia/cortesuprema.ts'
-import type { Norma } from './parse.ts'
+import type { Norma } from './parse/gestor.ts'
 
 /** Cita lista para pegar, con la lista de componentes que la fuente no dio. */
 export type Cita = { cita: string; faltan: string[] }

@@ -1,5 +1,5 @@
 import { esStopword } from '../../../nucleo/stopwords.ts'
-import { limpiarTermino, sinTildes } from '../../../nucleo/parse.ts'
+import { limpiarTermino, sinTildes } from '../../../nucleo/parse/texto.ts'
 import { BUSCADOR, aProvidencia, pedirJson, type HitES } from './relatoria.ts'
 import { prefijo, type Providencia, type TipoProvidencia } from './providencia.ts'
 

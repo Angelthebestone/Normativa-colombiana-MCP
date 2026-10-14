@@ -1,4 +1,4 @@
-import { sinTildes } from '../../../nucleo/parse.ts'
+import { sinTildes } from '../../../nucleo/parse/texto.ts'
 import { terminosSignificativos } from '../../gestor/index.ts'
 
 export type Titulacion = { problema: string; respuesta: string; nota: string }

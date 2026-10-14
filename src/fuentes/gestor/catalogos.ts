@@ -1,4 +1,6 @@
-import { BASE_GESTOR, CanarioError, parseOpciones, sinTildes } from '../../nucleo/parse.ts'
+import { BASE_GESTOR, parseOpciones } from '../../nucleo/parse/gestor.ts'
+import { CanarioError } from '../../nucleo/parse/errores.ts'
+import { sinTildes } from '../../nucleo/parse/texto.ts'
 import { traer } from './portal.ts'
 
 export type Catalogos = {
