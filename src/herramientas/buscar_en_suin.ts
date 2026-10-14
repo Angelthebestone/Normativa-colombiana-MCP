@@ -1,7 +1,8 @@
 /**
- * `buscar_en_suin`: el corpus histórico de SUIN-Juriscol (MinJusticia), incluidos
- * documentos que el Gestor no tiene. Reutiliza `buscar` de `fuentes/suin.ts`; aquí
- * solo van el esquema y el texto de la respuesta.
+ * `buscar_en_suin`: el buscador de SUIN-Juriscol (MinJusticia) —normas,
+ * reglamentos técnicos por materia y la jurisprudencia que SUIN registra—,
+ * incluidos documentos que el Gestor no tiene. Reutiliza `buscar` de
+ * `fuentes/suin.ts`; aquí solo van el esquema y el texto de la respuesta.
  */
 import type { ToolAnnotations } from '@modelcontextprotocol/sdk/types.js'
 import { z } from 'zod'
@@ -17,16 +18,15 @@ import * as suin from '../fuentes/suin.ts'
 export const TITULO = 'Buscar en SUIN-Juriscol'
 
 export const DESCRIPCION =
-  'Busca en los 56.832 documentos de SUIN-Juriscol (MinJusticia) por título, epígrafe, materia o entidad ' +
-  'emisora: leyes, decretos y resoluciones desde 1844, incluidos documentos que el Gestor Normativo no tiene. ' +
-  'Devuelve título, epígrafe, enlace y la vigencia del BUSCADOR, que NO es fiable (contradice la ficha). ' +
-  'NO busca dentro del articulado ni sirve para citas exactas ("LEY 909 DE 2004" no devuelve nada): para ' +
-  'una cita, y para el estado real de vigencia, ' +
-  'usa resolver_cita. vigencia y sector acotan la búsqueda de texto, no la sustituyen; para el tramo ' +
-  'siguiente repite la misma llamada con desde = desde + limite. ' +
-  'SU ÍNDICE TIENE HUECOS: "Teletrabajo" devuelve cero pese a estar en el título de la Ley 1221 de 2008, y ' +
-  'una frase larga empareja por palabras comunes. Ante un vacío, NO concluyas que no existe: prueba ' +
-  'buscar_por_tema.'
+  'Busca en el índice del buscador de SUIN-Juriscol (MinJusticia, unos 103.000 documentos hasta 2026) por ' +
+  'tipo, número, año, título, epígrafe, materia, sector o entidad. coleccion elige qué se busca: "normas" ' +
+  '(por defecto: leyes, decretos, resoluciones, circulares, directivas… desde 1844), o la jurisprudencia que ' +
+  'SUIN registra porque afectó la vigencia de alguna norma: "corte-constitucional", "consejo-estado" o ' +
+  '"corte-suprema". Los reglamentos técnicos se buscan por materia (ej. "Bebidas alcohólicas"). Cada ' +
+  'resultado trae el estado de vigencia de su ficha, el enlace y el id con el que obtener_documento ' +
+  '(fuente="suin") lee el texto. NO busca dentro del articulado. vigencia, sector y materia acotan la ' +
+  'búsqueda; para el tramo siguiente repite la misma llamada con desde = desde + limite. Ante un vacío, NO ' +
+  'concluyas que no existe: prueba buscar_por_tema.'
 
 export const ANOTACIONES: ToolAnnotations = {
   readOnlyHint: true,
@@ -36,12 +36,36 @@ export const ANOTACIONES: ToolAnnotations = {
 }
 
 const esquema = z.object({
-  texto: z.string().describe('Palabras del título, epígrafe o materia. Ej.: "servicio militar", "Buenaventura"'),
+  texto: z
+    .string()
+    .default('')
+    .describe('Palabras del tipo, número, año, título, epígrafe o materia. Ej.: "servicio militar", "ley 909 2004"'),
+  coleccion: z
+    .enum(Object.keys(suin.COLECCIONES) as [suin.Coleccion, ...suin.Coleccion[]])
+    .default('normas')
+    .describe('normas, o la jurisprudencia de la corte-constitucional, el consejo-estado o la corte-suprema'),
   vigencia: z
-    .enum(['Vigente', 'Vigencia en Estudio', 'Compilado', 'Derogado', 'No vigente', 'Declarado Inexequible', 'Sustituido'])
+    .enum([
+      'Vigente',
+      'Vigencia en Estudio',
+      'Derogado',
+      'Compilado',
+      'Declarado Inexequible',
+      'No vigente',
+      'Declarado Nulo',
+      'Derogado Parcialmente',
+      'Vigente Parcial',
+      'Suspendido Provisionalmente',
+      'Inexequible parcialmente',
+      'Sustituido',
+    ])
     .optional()
-    .describe('Filtra por el estado que declara el BUSCADOR, que no siempre coincide con la ficha'),
+    .describe('Filtra por el estado de vigencia de la ficha (solo normas)'),
   sector: z.string().optional().describe('Sector administrativo, ej. "Hacienda y Crédito Público"'),
+  materia: z
+    .string()
+    .optional()
+    .describe('Materia de SUIN; los reglamentos técnicos van por la suya, ej. "Bebidas alcohólicas"'),
   desde: z.coerce.number().int().min(0).default(0).describe('Cuántos saltarse antes de empezar'),
   limite: z.coerce.number().int().min(1).max(50).default(15),
 })
@@ -52,61 +76,72 @@ type Params = z.infer<typeof esquema>
 
 /** `deps.buscar` inyecta SUIN para probar sin red. */
 export async function escribir(
-  { texto, vigencia, sector, desde, limite }: Params,
+  { texto, coleccion, vigencia, sector, materia, desde, limite }: Params,
   deps: { buscar?: typeof suin.buscar } = {},
 ): Promise<string> {
-  // Idea 5 — si la búsqueda rinde cero, se prueba el sinónimo del tesauro y
-  // se anuncia: el índice de SUIN tiene huecos conocidos ("Teletrabajo" da 0
-  // pese a existir la Ley 1221 de 2008), así que el vacío no es palabra final.
+  if (!texto.trim() && !materia && !vigencia && !sector) {
+    throw new Error('Indica texto, materia, vigencia o sector: sin ninguno no hay nada que buscar en SUIN.')
+  }
+  // Si la búsqueda rinde cero, se prueba el sinónimo del tesauro y se anuncia.
   // Una variante sustituye a lo pedido, así que solo vale lo que la contiene
   // entera: «trabajo remoto» arrastraba 15 documentos que solo dicen «trabajo».
+  let total = 0
   const { items, variantesUsadas } = await conAlternativas(
     (t) =>
-      (deps.buscar ?? suin.buscar)({ texto: t, vigencia, sector, desde, limite }).then((r) => {
-        if (t === texto) return r.items
+      (deps.buscar ?? suin.buscar)({ texto: t, coleccion, vigencia, sector, materia, desde, limite }).then((r) => {
+        if (t === texto) {
+          total = r.total
+          return r.items
+        }
         const terminos = terminosSignificativos(t)
-        return r.items.filter((d) => {
+        const validos = r.items.filter((d) => {
           const heno = sinTildes(`${d.titulo} ${d.epigrafe}`).toLowerCase()
           return terminos.every((x) => heno.includes(x))
         })
+        if (!total) total = validos.length
+        return validos
       }),
     texto,
     1,
   )
-  const r = { items, total: items.length }
   const avisoAlternativa = variantesUsadas.length
     ? `La búsqueda de "${texto}" no rindió resultados; se usó «${variantesUsadas[0]}». Si no es lo que buscabas, ` +
-      `no concluyas que el documento no existe: el índice de SUIN tiene huecos.\n\n`
+      `no concluyas que el documento no existe.\n\n`
     : ''
-  if (!r.total) {
+  const que = coleccion === 'normas' ? 'documentos' : `providencias (${coleccion})`
+  if (!total) {
     return vacio(
-      `documentos en SUIN para "${texto}"`,
-      'El buscador de SUIN solo indexa título, epígrafe, materia y entidad: no busca dentro del articulado, y las ' +
-        'citas exactas no funcionan ahí. Para una norma concreta usa resolver_cita. Su índice tiene huecos ' +
-        '("Teletrabajo" da 0 pese a estar en el título de la Ley 1221 de 2008): un vacío no prueba que no exista; ' +
-        'prueba buscar_por_tema.',
+      `${que} en SUIN para "${texto}"`,
+      'El buscador de SUIN indexa tipo, número, año, título, epígrafe, materia y entidad: no busca dentro del ' +
+        'articulado. Para una norma concreta usa resolver_cita; un vacío no prueba que no exista: prueba ' +
+        'buscar_por_tema.',
     )
   }
-  if (!r.items.length) {
-    return vacio(`documentos a partir de la posición ${desde}`, `La búsqueda reúne ${r.total}; pide un "desde" menor.`)
+  if (!items.length) {
+    return vacio(`${que} a partir de la posición ${desde}`, `La búsqueda reúne ${total}; pide un "desde" menor.`)
   }
-  const fin = desde + r.items.length
+  const fin = desde + items.length
+  const normas = coleccion === 'normas'
   return (
-    `${alcance([{ clave: 'suin', detalle: `${r.total} documento(s)` }])}\n\n` +
-      `${avisoAlternativa}${r.total} documento(s) en SUIN-Juriscol; se muestran ${desde + 1}–${fin}.\n\n` +
-      r.items
-        .map(
-          (d) =>
-            `- ${d.titulo} (${d.subtipo})\n  ${d.epigrafe || '(sin epígrafe)'}\n` +
-            `  Vigencia SEGÚN EL BUSCADOR: ${d.vigencia || '(sin dato)'}\n  ${d.url}`,
-        )
-        .join('\n') +
-      (fin < r.total ? `\n\nQuedan ${r.total - fin}: repite con desde=${fin}.` : '') +
-      `\n\nATENCIÓN: la vigencia de esta lista es la del índice de búsqueda y contradice la ficha del documento ` +
-      `(la Ley 74 de 1923 figura aquí como "Vigencia en Estudio" y su ficha dice DEROGADO). Para el estado real ` +
-      `de una norma, pídela por su cita con resolver_cita. Ese camino tiene un tope, y este ejemplo lo enseña: ` +
-      `resolver_cita solo alcanza lo que estén el Gestor Normativo o el índice de leyes de SUIN, y la Ley 74 de ` +
-      `1923 no está en ninguno, así que responderá que no la encuentra. Cuando pase eso, el único estado fiable ` +
-      `es el de la ficha del documento, en el enlace de arriba.`
+    `${alcance([{ clave: 'suin', detalle: `${total} ${que}` }])}\n\n` +
+    `${avisoAlternativa}${total} ${que} en SUIN-Juriscol; se muestran ${desde + 1}–${fin}.\n\n` +
+    items
+      .map(
+        (d) =>
+          `- ${d.titulo}${d.subtipo ? ` (${d.subtipo})` : ''}\n` +
+          `  ${normas ? '' : 'Norma demandada: '}${d.epigrafe || '(sin dato)'}\n` +
+          (normas
+            ? `  Estado de vigencia (ficha SUIN): ${d.vigencia || '(sin dato en la ficha)'}${d.entidad ? ` · ${d.entidad}` : ''}\n`
+            : d.entidad
+              ? `  Ponente: ${d.entidad}\n`
+              : '') +
+          `  ${d.url}\n  Para leer: obtener_documento con fuente="suin", id="${d.id}"`,
+      )
+      .join('\n') +
+    (fin < total ? `\n\nQuedan ${total - fin}: repite con desde=${fin}.` : '') +
+    (normas
+      ? '\n\nEl estado es el campo de la ficha de SUIN, copiado tal cual: "Vigencia en Estudio" no es "vigente", y ' +
+        'un estado vacío es que la ficha no lo trae, no que la norma rija.'
+      : '')
   )
 }

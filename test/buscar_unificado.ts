@@ -213,29 +213,12 @@ test('mismoOrigen: solo el enlace que obtener_documento aceptará habilita «Par
   assert.equal(mismoOrigen('https://normograma.invima.gov.co', 'no-es-url'), false)
 })
 
-test('formatear: el item con paraLeer lo muestra; SUIN no lo lleva y se explica una vez al final', () => {
-  const g: Item = { ...item('gestor', 'Decreto 1'), paraLeer: paraLeerDe('gestor', { id: '1' }) }
-  const s = item('suin', 'Dec 2') // sin paraLeer: SUIN no sirve texto
-  const txt = formatear({ gestor: [g], suin: [s] }, 'x')
-  assert.match(txt, /  Para leer: obtener_documento con fuente="gestor", id="1"/)
-  // El ítem de SUIN no lleva la línea; la razón va una sola vez, al final.
-  assert.doesNotMatch(txt, /\[suin\] Dec 2[\s\S]*Para leer: obtener_documento con fuente="suin"/)
-  assert.match(txt, /Los resultados de SUIN no traen "Para leer"/)
-  assert.equal(txt.split('Los resultados de SUIN no traen').length - 1, 1)
-})
-
-test('formatear: sin ítems de SUIN no aparece la nota', () => {
-  const txt = formatear({ gestor: [item('gestor', 'Ley 1')], suin: [] }, 'x')
-  assert.doesNotMatch(txt, /no traen "Para leer"/)
-})
-
 test('escribir json: trae las claves documentadas y «Para leer» por fuente, sin cabecera ni pie', async () => {
   const porFuente = porFuenteBase()
   porFuente['gestor'] = async () => [{ ...item('gestor', 'Ley 1'), paraLeer: paraLeerDe('gestor', { id: '7' }) }]
   porFuente['corte'] = async () => [
     { ...item('corte-constitucional', 'T-1/24'), paraLeer: paraLeerDe('corte', { ruta: '2024/T-099-24.htm' }) },
   ]
-  porFuente['suin'] = async () => [item('suin', 'Dec 2')]
   const r = await escribir({ texto: 'x', limite: 5, formato: 'json' }, { porFuente })
   const d = JSON.parse(r)
   assert.deepEqual(Object.keys(d).sort(), [
@@ -253,9 +236,6 @@ test('escribir json: trae las claves documentadas y «Para leer» por fuente, si
   assert.equal(gestor.paraLeer, 'obtener_documento con fuente="gestor", id="7"')
   const corte = d.resultados.find((i: Item) => i.fuente === 'corte-constitucional')
   assert.equal(corte.paraLeer, 'obtener_documento con fuente="corte", ruta="2024/T-099-24.htm"')
-  const suin = d.resultados.find((i: Item) => i.fuente === 'suin')
-  assert.equal(suin.paraLeer, undefined)
-  assert.ok(d.avisos.some((a: string) => /SUIN/.test(a)), 'el json debe declarar por qué SUIN no trae «Para leer»')
 })
 
 test('escribir json: un perfil desconocido no sale a la red y trae alcance y aviso', async () => {

@@ -33,7 +33,7 @@ test('con ficha devuelve el estado con el id clásico y cachea', async () => {
   if (a.ok) {
     assert.equal(a.ficha.estado, 'Vigente')
     // El id del índice nuevo difiere del clásico: el enlace lleva el clásico.
-    assert.equal(a.ficha.url, 'https://www.suin-juriscol.gov.co/viewDocument.asp?id=30036080')
+    assert.equal(a.ficha.url, 'https://lexis.minjusticia.gov.co/minjusticia/viewDocument/30036080')
   }
   const b = await ficha('Decreto', '1101', '2015', d)
   assert.equal(b.ok, true)
@@ -62,16 +62,15 @@ test('identidad: el tipo pedido casa con el tipo o el subtipo, y la ley no casa 
   assert.equal((await ficha('Ley', '1240', '2015', { pedirJson: ley })).ok, false)
 })
 
-test('sin resultados es no-consta, y después de 2020 dice que el índice no llega', async () => {
+test('sin resultados es no-consta, sin cortar por año: el índice llega al año en curso', async () => {
   const vacio = indice([])
-  const viejo = await ficha('Decreto', '1102', '2015', { pedirJson: vacio })
-  assert.deepEqual(viejo, { ok: false, razon: 'no-consta' })
-  const reciente = await ficha('Decreto', '1103', '2023', { pedirJson: vacio })
-  assert.equal(reciente.ok, false)
-  if (!reciente.ok) {
-    assert.equal(reciente.razon, 'no-consta')
-    assert.match(reciente.detalle ?? '', /llega hasta 2020/)
-  }
+  assert.deepEqual(await ficha('Decreto', '1102', '2015', { pedirJson: vacio }), { ok: false, razon: 'no-consta' })
+  assert.deepEqual(await ficha('Decreto', '1103', '2023', { pedirJson: vacio }), { ok: false, razon: 'no-consta' })
+  const reciente = await ficha('Ley', '2281', '2023', {
+    pedirJson: indice([{ tipo: 'LEY', numero: '2281', anio: '2023', estado: 'Declarado Inexequible' }]),
+  })
+  assert.equal(reciente.ok, true)
+  if (reciente.ok) assert.equal(reciente.ficha.estado, 'Declarado Inexequible')
 })
 
 test('red caída o respuesta con otra forma es ficha-caida con el motivo, nunca no-consta', async () => {

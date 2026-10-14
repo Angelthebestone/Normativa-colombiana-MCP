@@ -6,53 +6,46 @@
  * tienen, y por eso hasta ahora ninguna respuesta podía decir si una norma
  * sigue vigente.
  *
- * El portal se rehízo entre el 2026-09-16 y el 2026-09-24 (medido): hasta el 16
- * respondía 301 a todo; desde entonces `www.suin-juriscol.gov.co` es una SPA de
- * Angular que sirve la MISMA página vacía de 4.758 bytes a cualquier ruta,
- * `viewDocument.asp?id=` incluida, así que la ficha HTML con sus
- * `<span field="…">` ya no existe. Lo que hay ahora:
+ * El portal se rehízo en septiembre de 2026 y volvió a cambiar en octubre
+ * (medido el 2026-10-14). `www.suin-juriscol.gov.co` sigue siendo una SPA que
+ * sirve la misma página vacía a cualquier ruta; lo vivo está en
+ * `lexis.minjusticia.gov.co`, cuyo front (`buscador/Detallado/{1,2,3}`:
+ * reglamentos técnicos, jurisprudencia y normas) habla con dos backends
+ * públicos y sin clave:
  *
- * - La FICHA sale del índice de Elasticsearch que consulta el buscador nuevo
- *   (`lexis.minjusticia.gov.co/elasticsearch/documents_stg`), público y sin
- *   clave: 64.792 decretos y 11.094 leyes con `tipo`, `subtipo`, `numero`,
- *   `anio`, `epigrafe` y `estado`. Ese `estado` ES el campo de la ficha vieja:
- *   la Ley 74 de 1923 da "Derogado" (la ficha decía DEROGADO; el índice de Azure
- *   dice "Vigencia en Estudio") y la Ley 1541 de 2012 "Vigencia en Estudio" (el
- *   campo de la ficha, no la prosa "Vigente"). Y trae decretos, que el índice
- *   empaquetado casi no tenía: la vigencia de un decreto deja de ser "no consta".
- * - Ese índice LLEGA HASTA 2020: el año más alto con documentos es 2020 (737), y
- *   la Ley 2124 de 2021 o la 2281 de 2023 no están. Una norma posterior sale
- *   "no consta" diciendo por qué; no se corta por año en el código, para que el
- *   día que carguen lo reciente se lea sin tocar nada.
- * - El TEXTO no se puede leer desde fuera: el visor nuevo lo pide a
- *   `http://192.168.8.64:10015` y los enlaces del buscador apuntan a
- *   `http://192.168.8.145/viewDocument.asp`, direcciones de red privada. Medido
- *   con un navegador: la página carga, la petición del texto no termina y el
- *   cuerpo queda con 0 caracteres. Se devuelve la ficha y se dice que el texto
- *   no está al alcance.
+ * - El índice de Elasticsearch `documents_pdn` (antes `documents_stg`, que
+ *   sigue respondiendo con una carga vieja de 82.445 documentos que se cortaba
+ *   en 2020). `documents_pdn` tiene 103.326 documentos cargados el 2026-10-02 y
+ *   llega a 2026 (1.078 normas de ese año): la Ley 2124 de 2021 y la 2281 de
+ *   2023 ya están. `configid` separa las colecciones: 30 normas (89.879: leyes,
+ *   decretos, resoluciones, circulares, directivas…), 200 Corte Constitucional
+ *   (7.609), 100 Consejo de Estado (3.483) y 300 Corte Suprema (2.355). Su
+ *   `estado` ES el campo de la ficha: la Ley 74 de 1923 da "Derogado" y la Ley
+ *   1541 de 2012 "Vigencia en Estudio". Los reglamentos técnicos no son otra
+ *   colección: el front los filtra por `materia` dentro de las normas.
+ * - `suin-search/api/documentos/{id}`, que devuelve el documento entero en
+ *   `textoHtml` (la Ley 909 de 2004: 175.015 caracteres) con el articulado, el
+ *   resumen de modificaciones por artículo, el de jurisprudencia y el estado
+ *   de vigencia. Un id inexistente da 204 sin cuerpo. Es lo que pinta el visor
+ *   `lexis.minjusticia.gov.co/minjusticia/viewDocument/{id}` (medido con un
+ *   navegador: 97.221 caracteres en su iframe), así que el TEXTO de SUIN vuelve
+ *   a leerse; hasta el 2026-09-24 el visor lo pedía a una dirección privada.
  */
 import { readFileSync } from 'node:fs'
 import { TTL_BUSQUEDA_MS } from '../nucleo/cache.ts'
-import { CanarioError, limpiarTermino, sinTildes } from '../nucleo/parse.ts'
+import { CanarioError, cargar, limpiarTermino, sinTildes, textoDe } from '../nucleo/parse.ts'
 import { pedir, pedirJson } from '../nucleo/http.ts'
 import { esStopword } from '../nucleo/stopwords.ts'
 
+const LEXIS = 'https://lexis.minjusticia.gov.co'
+
 /**
- * Dirección pública del documento: la clásica de SUIN, con el id que el propio
- * buscador nuevo usa en sus enlaces (`visualizacion`). Hoy sirve la SPA vacía,
- * pero es el identificador con el que el documento se cita y el único enlace
- * público: el del portal nuevo apunta a una dirección privada.
+ * Dirección pública del documento: el visor del portal nuevo, que sí pinta el
+ * texto. La clásica `www.suin-juriscol.gov.co/viewDocument.asp?id=` (la que
+ * aún devuelve el propio API en `url`) sirve la SPA vacía. El id es el clásico
+ * de SUIN: el de `visualizacion` en el índice y el del índice empaquetado.
  */
-export const enlaceSuin = (id: string | number): string => `https://www.suin-juriscol.gov.co/viewDocument.asp?id=${id}`
-
-/** El año más alto con documentos en el índice de fichas (medido el 2026-09-24). */
-const ULTIMO_ANIO_INDICE = 2020
-
-/** Lo que se dice cuando haría falta el texto de un documento de SUIN. */
-export const TEXTO_NO_PUBLICO =
-  'SUIN-Juriscol no sirve hoy el texto de sus documentos fuera de la red del Ministerio de Justicia (medido el ' +
-  '2026-09-24: su visor lo pide a una dirección privada y la página queda en blanco), así que el articulado no ' +
-  'se puede leer ni aquí ni en el enlace.'
+export const enlaceSuin = (id: string | number): string => `${LEXIS}/minjusticia/viewDocument/${id}`
 
 export const claveSuin = (tipo: string, numero: string, anio: string): string =>
   `${tipo.toLowerCase()} ${Number(numero)} ${anio}`
@@ -78,25 +71,47 @@ export type Ficha = {
   url: string
 }
 
-/** El índice de fichas del buscador nuevo de SUIN. */
-const FICHAS = 'https://lexis.minjusticia.gov.co/elasticsearch/documents_stg/_search'
+/** El índice de Elasticsearch del buscador nuevo de SUIN: fichas y búsqueda. */
+const INDICE = `${LEXIS}/elasticsearch/documents_pdn/_search`
 
-/** La forma que se espera del índice; `fichasDe` comprueba lo que usa. */
+/** Las colecciones del índice, por su `configid`. */
+export const COLECCIONES = {
+  normas: 30,
+  'corte-constitucional': 200,
+  'consejo-estado': 100,
+  'corte-suprema': 300,
+} as const
+export type Coleccion = keyof typeof COLECCIONES
+
+/** Un documento del índice, con los campos que se usan. */
+type DocIndice = {
+  id?: number | string
+  visualizacion?: number | string | null
+  configid?: number | null
+  name?: string | null
+  titulo?: string | null
+  tipo?: string | null
+  subtipo?: string | null
+  numero?: string | null
+  anio?: string | null
+  epigrafe?: string | null
+  estado?: string | null
+  entidad?: string | null
+  sector?: string | null
+  normademandada?: string | null
+  magistradoponente?: string | null
+  consejeroponente?: string | null
+  magistradosuprema?: string | null
+}
+
+/** La forma que se espera del índice; `fichasDe` y `resultadosDe` comprueban lo que usan. */
 export type RespuestaFichas = {
   hits?: {
+    total?: { value?: number } | number
     hits?: {
       /** Solo en consultas ordenadas: lo usa la paginación del generador del índice. */
       sort?: number[]
-      _source?: {
-        id?: number | string
-        visualizacion?: number | string | null
-        tipo?: string | null
-        subtipo?: string | null
-        numero?: string | null
-        anio?: string | null
-        epigrafe?: string | null
-        estado?: string | null
-      }
+      _source?: DocIndice
     }[]
   }
 }
@@ -127,101 +142,127 @@ export function fichasDe(json: RespuestaFichas | null | undefined): Ficha[] {
     })
 }
 
-// --- buscador (Azure Cognitive Search) ------------------------------------
+// --- buscador (Elasticsearch del portal nuevo) ------------------------------
 
 /**
- * El índice de Azure Cognitive Search que consultaba el front anterior de SUIN:
- * 56.832 documentos con epígrafe, sector, materia y entidad emisora. Sigue
- * respondiendo (medido el 2026-09-24) y es lo que permite explorar SUIN por
- * materia; el índice empaquetado solo sabe traducir una cita a un id.
+ * La búsqueda por texto del portal nuevo: la misma `multi_match` de su caja
+ * general sobre `documents_pdn`, acotada a una colección por `configid`.
+ * Sustituye al índice de Azure Cognitive Search del front anterior, cuyo campo
+ * de vigencia contradecía la ficha (la Ley 74 de 1923 figuraba "Vigencia en
+ * Estudio"), que no resolvía citas ("LEY 909 DE 2004" daba cero) y que no
+ * encontraba la Ley 1221 de 2008 por "teletrabajo". Aquí, medido el
+ * 2026-10-14, las tres cosas salen bien: el `estado` es el de la ficha.
  *
- * DOS LÍMITES MEDIDOS, y por eso esto NO sustituye a `ficha()`:
- *
- * 1. Su campo `vigencia` contradice a la ficha. La Ley 74 de 1923 (id 1622206)
- *    aparece aquí como "Vigencia en Estudio" y su ficha dice "Derogado". Solo
- *    82 de 56.832 figuran derogadas (0,14%): parece el estado de la carga
- *    inicial, no el actual. Se devuelve rotulado como dato del buscador.
- * 2. No sirve para resolver citas: "LEY 909 DE 2004" devuelve cero resultados.
- *    Para eso está `ficha()`.
- *
- * ponytail: la api-key es la que el propio sitio sirve a cualquier visitante en
- * js/buscador.js, y es de solo consulta. Si la rotan, esta búsqueda deja de
- * responder —de ahí el CanarioError, para que se note en vez de parecer que
- * SUIN no tiene nada.
+ * `materia` va como frase y no como término exacto: el campo junta varias
+ * materias con "|" ("Administrativo general|Laboral administrativo"), y el
+ * término exacto del front solo casa con los documentos de una sola.
  */
-const BUSCADOR = 'https://searchmjd.search.windows.net/indexes/suinjuriscol-index/docs'
-const API_KEY = '404481BD9298D9A33EE7215E16757100'
-
 export type ResultadoSuin = {
   id: string
   titulo: string
   subtipo: string
   epigrafe: string
+  /** El `estado` de la ficha; en jurisprudencia no lo hay. */
   vigencia: string
+  /** Entidad emisora; en jurisprudencia, el ponente. */
   entidad: string
   url: string
 }
 
-type RespuestaAzure = {
-  '@odata.count'?: number
-  value?: {
-    ID?: string
-    titulo?: string
-    subtipo?: string
-    epigrafe?: string
-    vigencia?: string[]
-    entidad_emisora?: string
-  }[]
-}
+/** Campos de la caja general del portal, con sus mismos pesos. */
+const CAMPOS_TEXTO = [
+  'name^5',
+  'epigrafe^2',
+  'anio^2',
+  'materia^2',
+  'tipo',
+  'tipodocumento',
+  'numero',
+  'sector',
+  'subtipo',
+  'estado',
+  'entidad',
+  'accionante',
+  'demandante',
+  'magistradoponente',
+  'consejeroponente',
+  'magistradosuprema',
+  'normademandada',
+  'documentofuente',
+  'numerodiariooficial',
+  'numeroradicacionproceso',
+]
 
-export async function buscar(opts: {
+/** El cuerpo de la consulta, separado para probarlo sin red. */
+export function consultaBusqueda(opts: {
   texto: string
+  coleccion?: Coleccion | undefined
   vigencia?: string | undefined
   sector?: string | undefined
+  materia?: string | undefined
   desde?: number | undefined
   limite?: number | undefined
-}): Promise<{ total: number; items: ResultadoSuin[] }> {
-  const texto = limpiarTermino(opts.texto) || '*'
-  const limite = Math.min(Math.max(opts.limite ?? 15, 1), 50)
-  const p = new URLSearchParams({
-    'api-version': '2019-05-06',
-    search: texto,
-    $top: String(limite),
-    $skip: String(Math.max(0, opts.desde ?? 0)),
-    $count: 'true',
-    $select: 'ID,titulo,subtipo,epigrafe,vigencia,entidad_emisora',
-  })
-  // Los filtros son campos de colección; se escriben tal como los espera OData.
-  const filtros = [
-    opts.vigencia ? `vigencia/any(t: t eq '${opts.vigencia.replace(/'/g, "''")}')` : '',
-    opts.sector ? `sector/any(t: t eq '${opts.sector.replace(/'/g, "''")}')` : '',
-  ].filter(Boolean)
-  if (filtros.length) p.set('$filter', filtros.join(' and '))
-
-  const r = await pedir(`${BUSCADOR}?${p}`, 40_000, 'application/json;odata.metadata=none', { 'api-key': API_KEY })
-  if (r.status !== 200) {
-    throw new CanarioError(`el buscador de SUIN respondió ${r.status} (la clave pública del portal pudo cambiar)`)
+}): Record<string, unknown> {
+  const texto = limpiarTermino(opts.texto)
+  const filtro: Record<string, unknown>[] = [{ term: { configid: COLECCIONES[opts.coleccion ?? 'normas'] } }]
+  if (opts.vigencia) filtro.push({ term: { 'estado.keyword': opts.vigencia } })
+  if (opts.sector) filtro.push({ term: { 'sector.keyword': opts.sector } })
+  const debe: Record<string, unknown>[] = []
+  // Las palabras pueden repartirse entre campos (el tipo en `name`, el año en `anio`), pero tienen que estar:
+  // con el `or` de la caja del portal, "LEY 909 DE 2004" reunía 89.151 documentos. Hasta dos palabras se exigen
+  // todas; con más, tres de cada cuatro, para que una frase larga no se quede en cero por una sola.
+  if (texto) {
+    debe.push({ multi_match: { query: texto, fields: CAMPOS_TEXTO, type: 'cross_fields', minimum_should_match: '2<75%' } })
   }
-  let j: RespuestaAzure
-  try {
-    j = JSON.parse(r.cuerpo) as RespuestaAzure
-  } catch {
-    throw new CanarioError('el buscador de SUIN no devolvió JSON')
-  }
-  if (!Array.isArray(j.value)) throw new CanarioError('la respuesta del buscador de SUIN no trae la lista de documentos')
-
+  if (opts.materia) debe.push({ match_phrase: { materia: opts.materia } })
   return {
-    total: typeof j['@odata.count'] === 'number' ? j['@odata.count'] : j.value.length,
-    items: j.value.map((d) => ({
-      id: String(d.ID ?? ''),
-      titulo: (d.titulo ?? '').replace(/\s+/g, ' ').trim(),
-      subtipo: d.subtipo ?? '',
-      epigrafe: (d.epigrafe ?? '').replace(/\s+/g, ' ').trim(),
-      vigencia: (d.vigencia ?? []).join(', '),
-      entidad: d.entidad_emisora ?? '',
-      url: enlaceSuin(d.ID ?? ''),
-    })),
+    from: Math.max(0, opts.desde ?? 0),
+    size: Math.min(Math.max(opts.limite ?? 15, 1), 50),
+    track_total_hits: true,
+    query: { bool: { filter: filtro, must: debe } },
   }
+}
+
+/** Espacios colapsados: los campos del índice y del visor traen saltos y dobles espacios. */
+const plano = (s: string): string => s.replace(/\s+/g, ' ').trim()
+
+/** Los resultados de una respuesta del índice; sin `hits.hits` es el portal cambiado. */
+export function resultadosDe(json: RespuestaFichas | null | undefined): { total: number; items: ResultadoSuin[] } {
+  const hits = json?.hits?.hits
+  if (!Array.isArray(hits)) throw new CanarioError('el índice de SUIN no trae hits.hits')
+  const t = json?.hits?.total
+  const total = typeof t === 'number' ? t : (t?.value ?? hits.length)
+  const items = hits
+    .map((h) => h._source ?? {})
+    .filter((d) => (d.visualizacion ?? d.id) != null)
+    .map((d) => {
+      const id = String(d.visualizacion ?? d.id)
+      const ponente = d.magistradoponente ?? d.consejeroponente ?? d.magistradosuprema ?? ''
+      const jurisprudencia = d.configid != null && d.configid !== COLECCIONES.normas
+      return {
+        id,
+        // Al `name` de una providencia le sobran el sello de tiempo del final y los "null" de campos vacíos.
+        titulo: plano(
+          (jurisprudencia ? (d.name ?? d.titulo ?? '') : (d.titulo ?? d.name ?? ''))
+            .replace(/\s+\d{9,}\s*$/, '')
+            .replace(/\bnull\b/g, ''),
+        ),
+        subtipo: plano(d.subtipo ?? ''),
+        epigrafe: plano((jurisprudencia ? (d.normademandada ?? d.epigrafe) : d.epigrafe) ?? ''),
+        vigencia: plano(d.estado ?? ''),
+        entidad: plano(jurisprudencia ? ponente : (d.entidad ?? '')),
+        url: enlaceSuin(id),
+      }
+    })
+  return { total, items }
+}
+
+export async function buscar(
+  opts: Parameters<typeof consultaBusqueda>[0],
+  deps: { pedirJson?: (url: string, cuerpo: unknown) => Promise<RespuestaFichas> } = {},
+): Promise<{ total: number; items: ResultadoSuin[] }> {
+  const json = await (deps.pedirJson ?? ((u, c) => pedirJson<RespuestaFichas>(u, c, 40_000)))(INDICE, consultaBusqueda(opts))
+  return resultadosDe(json)
 }
 
 // --- índice empaquetado ---------------------------------------------------
@@ -317,11 +358,15 @@ export async function ficha(
 
   let fichas: Ficha[]
   try {
-    const json = await (deps.pedirJson ?? ((u, c) => pedirJson<RespuestaFichas>(u, c, 8_000)))(FICHAS, {
+    const json = await (deps.pedirJson ?? ((u, c) => pedirJson<RespuestaFichas>(u, c, 8_000)))(INDICE, {
       size: 10,
       query: {
         bool: {
-          filter: [{ term: { 'numero.keyword': sinCeros(numero) } }, { term: { 'anio.keyword': anio } }],
+          filter: [
+            { term: { configid: COLECCIONES.normas } },
+            { term: { 'numero.keyword': sinCeros(numero) } },
+            { term: { 'anio.keyword': anio } },
+          ],
         },
       },
     })
@@ -332,21 +377,140 @@ export async function ficha(
     return { ok: false, razon: 'ficha-caida', detalle: (e as Error).message }
   }
   const f = fichas.find((x) => esLaPedida(x, tipo, numero, anio))
-  // Se recuerda el veredicto firme, la ficha y también el «no consta» (todo lo posterior a 2020 lo es, y
-  // sin esto se volvía a preguntar en cada herramienta); nunca la ficha caída, que se devolvió arriba.
-  const estado: EstadoFicha = f
-    ? { ok: true, ficha: f }
-    : Number(anio) > ULTIMO_ANIO_INDICE
-      ? {
-          ok: false,
-          razon: 'no-consta',
-          detalle:
-            `el índice público de SUIN-Juriscol llega hasta ${ULTIMO_ANIO_INDICE} (medido el 2026-09-24), así que ` +
-            `de una norma de ${anio} no puede haber ficha ahí: su ausencia no dice nada sobre la norma`,
-        }
-      : { ok: false, razon: 'no-consta' }
+  // Se recuerda el veredicto firme, la ficha y también el «no consta» (sin esto se volvía a preguntar en
+  // cada herramienta); nunca la ficha caída, que se devolvió arriba.
+  const estado: EstadoFicha = f ? { ok: true, ficha: f } : { ok: false, razon: 'no-consta' }
   cacheFichas.set(clave, { estado, ts: Date.now() })
   return estado
+}
+
+// --- texto del documento ------------------------------------------------------
+
+const DOCUMENTOS = `${LEXIS}/suin-search/api/documentos/`
+
+/** Una afectación del resumen de SUIN: qué artículo, qué le pasó y por qué norma o sentencia. */
+export type Afectacion = { articulo: string; accion: string; por: string }
+
+/**
+ * Un documento de SUIN leído de su API. `texto` es el articulado (o el cuerpo
+ * de la providencia); los resúmenes son los que el visor muestra plegados: las
+ * modificaciones por artículo, la jurisprudencia que lo afectó y las notas de
+ * vigencia de la norma entera. Son datos del portal, copiados sin interpretar.
+ */
+export type DocumentoSuin = {
+  id: string
+  titulo: string
+  epigrafe: string
+  estado: string
+  entidad: string
+  url: string
+  texto: string
+  modificaciones: Afectacion[]
+  jurisprudencia: Afectacion[]
+  notasVigencia: string[]
+  fechas: Record<string, string>
+}
+
+type RespuestaDocumento = {
+  success?: boolean
+  data?: {
+    id?: number | string
+    textoHtml?: string | null
+    vigencia?: string | null
+    epigrafe?: string | null
+    entidadEmisora?: string | null
+  } | null
+}
+
+/**
+ * El documento a partir de la respuesta del API, sin red. Sin `textoHtml` es el
+ * portal cambiado: canario. El articulado de una norma es el último `div` del
+ * cuerpo (el resto es la barra del visor, el carrusel de cursos y las tablas
+ * plegadas); una providencia no tiene esa estructura y se lee el cuerpo sin la
+ * barra. Los rótulos de artículo salen pegados al texto ("Artículo 10.Régimen"):
+ * se les devuelve el espacio para que el índice de artículos los reconozca.
+ */
+export function documentoDe(json: RespuestaDocumento | null | undefined, id: string): DocumentoSuin {
+  const d = json?.data
+  if (!d || typeof d.textoHtml !== 'string') throw new CanarioError('el documento de SUIN no trae data.textoHtml')
+  const $ = cargar(d.textoHtml)
+
+  const afectaciones = (sel: string): Afectacion[] =>
+    $(sel)
+      .find('li.resumenvigencias')
+      .toArray()
+      .flatMap((li) => {
+        const articulo = plano($(li).children('b').first().text()).replace(/:$/, '')
+        return $(li)
+          .find('li.referencia')
+          .toArray()
+          .map((ref) => {
+            const por = plano($(ref).find('a').last().text())
+            return { articulo, accion: plano(plano($(ref).text()).replace(por, '')), por }
+          })
+      })
+  const modificaciones = afectaciones('[id$=ResumenNotasVigencia]')
+  const jurisprudencia = afectaciones('[id$=ResumenAfectacionesJurisp]')
+  const notasVigencia = $('#tablita > ul.resumenvigencias > li.referencia')
+    .toArray()
+    .map((li) => plano($(li).text()))
+    .filter(Boolean)
+
+  // Las fechas van en parejas de párrafos (rótulo, valor) en la tabla del estado de vigencia.
+  const fechas: Record<string, string> = {}
+  const parrafos = $('table#toc p')
+    .toArray()
+    .map((p) => plano($(p).text()))
+  parrafos.forEach((p, i) => {
+    const valor = parrafos[i + 1] ?? ''
+    if (/^Fecha de /i.test(p) && /^\d{2}\/\d{2}\/\d{4}$/.test(valor)) fechas[p] = valor
+  })
+
+  const titulo = plano($('#titulotipo').text())
+  let texto: string
+  if (titulo) {
+    texto = textoDe(cargar(`<main>${$.html($('body').children('div').last())}</main>`), 'main')
+  } else {
+    $('header, #toolPanel, #toolFab, .slider, table#toc, [style*="display: none"]').remove()
+    texto = textoDe($, 'body')
+  }
+  texto = texto.replace(/(\b(?:ART[IÍ]CULO|Art[ií]culo)\s+\d+[A-Za-z]?\s*[°ºo]?\.)(?=[^\s\d])/g, '$1 ')
+
+  return {
+    id,
+    titulo,
+    // En las providencias el API manda el texto literal "null" en todos estos campos (medido el 2026-10-14).
+    epigrafe: d.epigrafe === 'null' ? '' : plano(d.epigrafe ?? ''),
+    estado: d.vigencia === 'null' ? '' : plano(d.vigencia ?? ''),
+    entidad: d.entidadEmisora === 'null' ? '' : plano(d.entidadEmisora ?? ''),
+    url: enlaceSuin(id),
+    texto,
+    modificaciones,
+    jurisprudencia,
+    notasVigencia,
+    fechas,
+  }
+}
+
+/**
+ * El documento de SUIN por su id clásico (el de `visualizacion` y de los
+ * enlaces). `null` si el portal no lo tiene: su API responde 204 sin cuerpo.
+ */
+export async function documento(
+  id: string,
+  deps: { pedir?: typeof pedir } = {},
+): Promise<DocumentoSuin | null> {
+  if (!/^\d+$/.test(id)) throw new Error(`Id de SUIN inválido: "${id}". Es numérico, el de buscar_en_suin o resolver_cita.`)
+  const r = await (deps.pedir ?? pedir)(`${DOCUMENTOS}${id}`, 60_000, 'application/json')
+  if (r.status === 204 || (r.status === 200 && !r.cuerpo.trim())) return null
+  if (r.status !== 200) throw new Error(`SUIN-Juriscol respondió ${r.status} al pedir el documento ${id}.`)
+  let json: RespuestaDocumento
+  try {
+    json = JSON.parse(r.cuerpo) as RespuestaDocumento
+  } catch {
+    throw new CanarioError('el documento de SUIN no llegó como JSON')
+  }
+  return documentoDe(json, id)
 }
 
 // --- búsqueda por texto con índice de leyes ----------------------------------
@@ -356,10 +520,9 @@ const normaliza = (s: string): string => sinTildes(s).toLowerCase().replace(/\s+
 
 /**
  * Búsqueda por texto sobre el índice de leyes empaquetado. A diferencia del
- * buscador de Azure, no normaliza tildes ni deriva: "Teletrabajo" no casa con
+ * buscador del portal, no normaliza tildes ni deriva: "Teletrabajo" no casa con
  * "trabajo remoto", así que una ley solo aparece si su título contiene la
- * palabra exacta, sin tildes. Si la búsqueda no rinde, `buscar_en_suin` cae al
- * buscador vivo.
+ * palabra exacta, sin tildes.
  */
 export function buscarEnIndice(texto: string, limite = 15): { total: number; items: ResultadoSuin[] } {
   const idx = cargarIndice()
@@ -398,7 +561,7 @@ export function buscarEnIndice(texto: string, limite = 15): { total: number; ite
 
 /**
  * Búsqueda por texto que primero prueba el índice de leyes empaquetado y, si
- * rinde 0, cae al buscador vivo de Azure (que sí normaliza y deriva: encuentra
+ * rinde 0, cae al buscador vivo del portal (que sí normaliza y deriva: encuentra
  * la Ley 1221 de 2008 para "teletrabajo"). El hueco del índice se declara en la
  * respuesta; si el fallback tampoco encuentra nada, la norma puede existir
  * igual: ese vacío no es palabra final.
@@ -432,7 +595,7 @@ export async function buscarEnSuin(
     ...(opts.desde ? { desde: opts.desde } : {}),
     ...(opts.limite ? { limite: opts.limite } : {}),
   })
-  aplicados.push('buscador del portal (Azure)')
+  aplicados.push('buscador del portal')
   if (vivo.items.length) {
     notas.push(
       'El índice empaquetado no cubría el término; se consultó el buscador del portal, que normaliza tildes y derivación.',

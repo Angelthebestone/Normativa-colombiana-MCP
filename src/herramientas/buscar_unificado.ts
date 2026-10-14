@@ -6,7 +6,7 @@
  * Es orquestación, no un scraper nuevo: reutiliza `gestor.buscar/tematica`,
  * `corte.buscar`, `suin.buscar` y `dian.buscar`, con `conAlternativas` por
  * fuente cuando rinde 0. Cada resultado se etiqueta con su fuente y su URL, y
- * la vigencia de SUIN se rotula "SEGÚN EL BUSCADOR" sin reinterpretarla.
+ * el estado de SUIN se rotula como dato de su ficha, sin reinterpretarlo.
  *
  * Ranking trivial: `perfil=tributario` prioriza la DIAN; el resto sigue el
  * orden Gestor → Corte → SUIN → DIAN. No hay reranking LLM ni router: es un
@@ -32,7 +32,7 @@ export const DESCRIPCION =
   'herramienta obvia; para una cita exacta sigue siendo mejor resolver_cita y para un tribunal concreto, su ' +
   'buscador propio. perfil elige las fuentes ("salud" añade INVIMA y Supersalud; "mineria", la ANM) y el ' +
   'orden; si pasas fuentes, esa lista manda y el perfil solo ordena. limite es POR fuente, así que el total ' +
-  'puede multiplicarse. La vigencia de SUIN se rotula SEGÚN EL BUSCADOR y no es la ficha oficial. Cuando la ' +
+  'puede multiplicarse. El estado de SUIN es el de su ficha, copiado tal cual. Cuando la ' +
   'fuente sirve su texto, cada resultado trae "Para leer", la llamada lista a obtener_documento. Una fuente ' +
   'caída se declara como fallo, no como vacío.'
 
@@ -100,8 +100,7 @@ export type Item = {
 /**
  * La llamada literal a `obtener_documento` que devuelve el texto de este
  * resultado. Se arma con los MISMOS nombres de parámetro que exige esa
- * herramienta por fuente (gestor→id, corte→ruta, dian→link, sectorial→entidad+url).
- * SUIN no tiene: su visor vive en una red privada (suin.TEXTO_NO_PUBLICO).
+ * herramienta por fuente (gestor→id, suin→id, corte→ruta, dian→link, sectorial→entidad+url).
  */
 export const paraLeerDe = (fuente: string, campos: Record<string, string>): string =>
   `obtener_documento con ${[`fuente="${fuente}"`, ...Object.entries(campos).map(([k, v]) => `${k}="${v}"`)].join(', ')}`
@@ -125,14 +124,6 @@ const PERFILES_ADMITIDOS = ['laboral', 'tributario', 'ambiental', 'contratacion'
 
 /** Fecha de la consulta en AAAA-MM-DD: la que el envoltorio ya no añade en modo json. */
 const hoy = () => new Date().toISOString().slice(0, 10)
-
-/**
- * Por qué los resultados de SUIN no llevan «Para leer». Va UNA vez al final, no
- * en cada ítem: es la misma razón para todos y repetirla infla la respuesta.
- */
-const NOTA_SUIN =
-  'Los resultados de SUIN no traen "Para leer": su visor de texto vive en una red privada (direcciones ' +
-  '192.168.x.x) y obtener_documento no lo alcanza.'
 
 /**
  * Qué fuentes consultar según perfil y filtro explícito. Las apagadas (FUENTES)
@@ -193,7 +184,8 @@ async function porSuin(texto: string, limite: number): Promise<Item[]> {
     fuente: 'suin',
     titulo: d.titulo,
     url: d.url,
-    ...(d.vigencia ? { detalle: `Vigencia SEGÚN EL BUSCADOR: ${d.vigencia}` } : {}),
+    ...(d.vigencia ? { detalle: `Estado de vigencia (ficha SUIN): ${d.vigencia}` } : {}),
+    paraLeer: paraLeerDe('suin', { id: d.id }),
   }))
 }
 
@@ -282,8 +274,6 @@ export function formatear(
       'Esto es un FALLO de la fuente, no un vacío: no concluyas que no hay resultados ahí. Vuelve a intentarlo.',
     )
   }
-  // Una sola línea al final explica por qué hay resultados sin «Para leer».
-  if (ordenados.some((i) => i.fuente === 'suin')) bloque.push('', NOTA_SUIN)
   return bloque.join('\n')
 }
 
@@ -380,7 +370,6 @@ export async function escribir(
       avisos.push('Un vacío en una fuente NO significa que la norma no exista; para una cita exacta usa resolver_cita.')
     if (caidas.length)
       avisos.push('Esto es un FALLO de la fuente, no un vacío: no concluyas que no hay resultados ahí. Vuelve a intentarlo.')
-    if (todos.some((i) => i.fuente === 'suin')) avisos.push(NOTA_SUIN)
     return JSON.stringify({
       fecha_consulta: hoy(),
       texto: params.texto,

@@ -124,7 +124,7 @@ test('SUIN: la ficha se lee del índice con el id clásico, y una respuesta sin 
       anio: '2019',
       epigrafe: 'por la cual',
       estado: 'Vigente',
-      url: 'https://www.suin-juriscol.gov.co/viewDocument.asp?id=30036080',
+      url: 'https://lexis.minjusticia.gov.co/minjusticia/viewDocument/30036080',
     },
   ])
   assert.throws(() => fichasDe({}), CanarioError)
@@ -134,7 +134,7 @@ test('SUIN: la ficha se lee del índice con el id clásico, y una respuesta sin 
 test('SUIN publica el estado, y es el campo de la ficha y no la prosa', RED, async (t) => {
   // La Ley 1541 de 2012 obligó a cambiar de fuente de verdad: su texto visible
   // decía "Vigente" y su campo "Vigencia en Estudio". La Ley 74 de 1923 es la
-  // que separa la ficha del índice de Azure: allí figura "Vigencia en Estudio".
+  // que separaba la ficha del viejo índice de Azure: allí figuraba "Vigencia en Estudio".
   const ley1541 = await ficha('Ley', '1541', '2012')
   // Un portal caído es la fuente, no el parser: bloquear por eso el publicar de
   // una versión que no lo toca es lo que este `skip` evita. Un portal CAMBIADO

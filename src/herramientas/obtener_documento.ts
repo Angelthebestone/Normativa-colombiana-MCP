@@ -51,6 +51,7 @@ import * as suprema from '../fuentes/jurisprudencia/cortesuprema.ts'
 import * as consejo from '../fuentes/jurisprudencia/consejoestado.ts'
 import * as dian from '../fuentes/normograma.ts'
 import * as creg from '../fuentes/creg.ts'
+import * as suin from '../fuentes/suin.ts'
 import { esCompiladora, avisoCompiladora } from '../nucleo/compiladas.ts'
 import { citaNorma } from '../nucleo/cita_oficial.ts'
 import { analizarVacancia, enVacancia } from '../nucleo/vacancia.ts'
@@ -59,12 +60,12 @@ import { alcance, proyectar } from '../nucleo/alcance.ts'
 export const TITULO = 'Obtener el texto de un documento por fuente'
 
 export const DESCRIPCION =
-  'Devuelve el texto (troceado, nunca entero) de una de las siete fuentes con texto. CADA FUENTE EXIGE LO ' +
-  'SUYO y los parámetros de otra no valen con ella: gestor necesita id; corte, ruta; suprema, ruta y sala; ' +
-  'consejo, token; dian, link; creg, ruta; sectorial, entidad y url. Una combinación que no encaje se ' +
+  'Devuelve el texto (troceado, nunca entero) de una de las ocho fuentes con texto. CADA FUENTE EXIGE LO ' +
+  'SUYO y los parámetros de otra no valen con ella: gestor necesita id; suin, id; corte, ruta; suprema, ruta y ' +
+  'sala; consejo, token; dian, link; creg, ruta; sectorial, entidad y url. Una combinación que no encaje se ' +
   'rechaza antes de salir a la red, diciendo qué falta y el ejemplo mínimo que funciona. Qué parte sale: ' +
   'historial (gestor) da los cambios anotados en vez del texto, del artículo si va con articulo; articulo ' +
-  '(gestor) o seccion (cortes) acotan y entonces buscar_en_texto no se aplica; desde solo avanza el troceo, ' +
+  '(gestor y suin) o seccion (cortes) acotan y entonces buscar_en_texto no se aplica; desde solo avanza el troceo, ' +
   'no los pasajes de buscar_en_texto. Informa total/mostrado/omitido y el "desde" del trozo siguiente. ' +
   'ESCRIBE EN DISCO solo con entero o ruta_destino, que se imponen a todo lo anterior: dian y sectorial ' +
   'guardan el archivo original; las demás, texto-<fuente>.txt (sin ruta_destino, en una carpeta temporal); ' +
@@ -111,12 +112,12 @@ export const schema = estricto({
   // Solo las fuentes encendidas (FUENTES): la llamada a una apagada no se puede
   // ni escribir, y la valida el mismo esquema antes de tocar la red.
   fuente: z
-    .enum(proyectar(['gestor', 'corte', 'suprema', 'consejo', 'dian', 'creg', 'sectorial'] as const, (f) => f))
+    .enum(proyectar(['gestor', 'suin', 'corte', 'suprema', 'consejo', 'dian', 'creg', 'sectorial'] as const, (f) => f))
     .describe('De qué fuente sale el documento'),
   ...comun,
   // Extras por fuente (opcionales; el handler valida cuál aplica según fuente).
-  id: z.coerce.string().optional().describe('Solo gestor: id numérico de la norma'),
-  articulo: z.preprocess(numeroDeArticulo, z.string().optional()).describe('Solo gestor: número de artículo'),
+  id: z.coerce.string().optional().describe('Solo gestor y suin: id numérico de la norma'),
+  articulo: z.preprocess(numeroDeArticulo, z.string().optional()).describe('Solo gestor y suin: número de artículo'),
   historial: z
     .boolean()
     .optional()
@@ -165,6 +166,7 @@ type Resueltas = z.infer<typeof schema>
  */
 const EXIGE: Record<string, string[]> = {
   gestor: ['id'],
+  suin: ['id'],
   corte: ['ruta'],
   suprema: ['ruta', 'sala'],
   consejo: ['token'],
@@ -176,6 +178,7 @@ const EXIGE: Record<string, string[]> = {
 /** El ejemplo mínimo que funciona, por fuente: es lo que el error devuelve. */
 const EJEMPLO: Record<string, string> = {
   gestor: '{"fuente":"gestor","id":"31431"}',
+  suin: '{"fuente":"suin","id":"1670817"}',
   corte: '{"fuente":"corte","ruta":"2021/SU-371-21.htm"}',
   suprema: '{"fuente":"suprema","ruta":"<la de buscar_jurisprudencia_suprema>","sala":"Laboral"}',
   consejo: '{"fuente":"consejo","token":"<el de buscar_jurisprudencia_consejo_estado>"}',
@@ -190,8 +193,8 @@ const EJEMPLO: Record<string, string> = {
  * del id y tiraba la ruta sin decir nada, que es el peor desenlace posible.
  */
 const EXCLUSIVOS: Record<string, string[]> = {
-  id: ['gestor'],
-  articulo: ['gestor'],
+  id: ['gestor', 'suin'],
+  articulo: ['gestor', 'suin'],
   historial: ['gestor'],
   sin_temas: ['gestor'],
   seccion: ['corte', 'suprema', 'consejo'],
@@ -238,6 +241,7 @@ const union = z.discriminatedUnion('fuente', [
       sin_temas: z.boolean().optional(),
     })
     .strict(),
+  z.object({ ...compartidos, fuente: z.literal('suin'), id: identificador, articulo: z.string().optional() }).strict(),
   z.object({ ...compartidos, fuente: z.literal('corte'), ruta: z.string(), seccion: z.enum(SECCIONES_PROVIDENCIA).optional() }).strict(),
   z
     .object({ ...compartidos, fuente: z.literal('suprema'), ruta: z.string(), sala: z.string(), seccion: z.enum(SECCIONES_PROVIDENCIA).optional() })
@@ -280,6 +284,7 @@ const topeDe = (l: number | undefined): number => Math.min(Math.max(l ?? 8000, 2
 function pedidoDe(r: Resueltas): string {
   switch (r.fuente) {
     case 'gestor':
+    case 'suin':
       return `id ${r.id}`
     case 'corte':
     case 'suprema':
@@ -561,6 +566,60 @@ async function gestorDocumento(p: Resueltas, tope: number): Promise<string> {
   )
 }
 
+/** Las afectaciones del resumen de SUIN como líneas; con artículo, solo las suyas y las de la norma entera. */
+function lineasAfectaciones(titulo: string, xs: suin.Afectacion[], articulo: string | undefined, max: number): string {
+  const propias = articulo
+    ? xs.filter((a) => a.articulo.replace(/^Art[ií]culo\s+/i, '').trim() === articulo || !/^Art[ií]culo/i.test(a.articulo))
+    : xs
+  if (!propias.length) return ''
+  const lineas = propias.slice(0, max).map((a) => `  - ${a.articulo}: ${a.accion}`)
+  const resto = propias.length - lineas.length
+  return `\n${titulo} (${propias.length}):\n${lineas.join('\n')}${resto > 0 ? `\n  … y ${resto} más (pide articulo= para ver las de uno).` : ''}`
+}
+
+/**
+ * SUIN: el articulado del documento con lo que su visor muestra plegado —el
+ * estado de vigencia, las notas de la norma entera, el resumen de
+ * modificaciones por artículo y el de jurisprudencia—, copiado sin interpretar.
+ */
+async function suinDocumento(p: Resueltas, tope: number, deps: DepsLectura = {}): Promise<string> {
+  if (!p.id) throw new Error('Para fuente="suin" hace falta id.')
+  const d = await (deps.documentoSuin ?? suin.documento)(p.id)
+  if (!d) return `SUIN-Juriscol no tiene un documento con id ${p.id}. Búscalo con buscar_en_suin o resolver_cita.`
+
+  const max = tope < 2000 ? 5 : 15
+  const cab =
+    [
+      d.titulo || `Documento ${d.id} de SUIN-Juriscol`,
+      d.epigrafe,
+      d.entidad ? `Entidad: ${d.entidad}` : '',
+      d.estado ? `Estado de vigencia (ficha SUIN, copiado tal cual): ${d.estado}` : '',
+      ...Object.entries(d.fechas).map(([k, v]) => `${k}: ${v}`),
+      ...(d.notasVigencia.length ? ['Notas de vigencia de la norma entera:', ...d.notasVigencia.slice(0, max).map((n) => `  - ${n}`)] : []),
+      `URL: ${d.url}`,
+    ]
+      .filter(Boolean)
+      .join('\n') +
+    lineasAfectaciones('Resumen de modificaciones de SUIN', d.modificaciones, p.articulo, max) +
+    lineasAfectaciones('Resumen de jurisprudencia de SUIN', d.jurisprudencia, p.articulo, max)
+
+  if (d.texto.length < 200) return `${cab}\n\n${sinTexto(d.texto.length, d.url)}`
+
+  let art: string | null = null
+  if (p.articulo) {
+    art = extraerArticulo(d.texto, p.articulo)
+    if (!art) {
+      const arts = indiceArticulos(d.texto)
+      return (
+        `${cab}\n\nNo encontré el artículo ${p.articulo}. ` +
+        (arts.length ? `Artículos detectados: ${arts.join(', ')}. Repite con articulo= y uno de esos.` : 'No se detectó ningún artículo en el texto.')
+      )
+    }
+  }
+  if (p.buscar_en_texto && !art) return pasajes(d.texto, p.buscar_en_texto, p.max_pasajes, tope, d.url, `${cab}\n\n`)
+  return `${cab}\n\n${cuerpo(trocear(art ?? d.texto, p.desde, tope), d.url, p)}`
+}
+
 async function corteDocumento(p: Resueltas, tope: number): Promise<string> {
   if (!p.ruta) throw new Error('Para fuente="corte" hace falta ruta.')
   let doc: Awaited<ReturnType<typeof corte.obtenerTexto>>
@@ -701,6 +760,7 @@ export type DepsLectura = {
   extraerPdf?: (bytes: Uint8Array) => Promise<string>
   descomprimirZip?: (bytes: Uint8Array) => Promise<Uint8Array | null>
   obtenerNorma?: typeof gestor.obtenerNorma
+  documentoSuin?: typeof suin.documento
 }
 
 /**
@@ -800,6 +860,12 @@ async function enteroDocumento(p: Resueltas, tope: number, deps: DepsLectura = {
     const n = await (deps.obtenerNorma ?? gestor.obtenerNorma)(p.id)
     texto = n.texto
     origen = n.url
+  } else if (p.fuente === 'suin') {
+    if (!p.id) throw new Error('Para fuente="suin" hace falta id.')
+    const d = await (deps.documentoSuin ?? suin.documento)(p.id)
+    if (!d) throw new Error(`SUIN-Juriscol no tiene un documento con id ${p.id}: no se puede guardar.`)
+    texto = d.texto
+    origen = d.url
   } else if (p.fuente === 'corte') {
     if (!p.ruta) throw new Error('Para fuente="corte" hace falta ruta.')
     const d = await corte.obtenerTexto(p.ruta)
@@ -821,7 +887,7 @@ async function enteroDocumento(p: Resueltas, tope: number, deps: DepsLectura = {
     // PDF del visor, que no se reconstruye aquí.
     throw new Error(
       `entero/ruta_destino no aplica a fuente="${p.fuente}": no hay archivo que guardar. ` +
-        `Con fuente="consejo" pide el texto sin entero (o abre el visor); entero sí vale con gestor, corte, suprema, creg, dian y sectorial.`,
+        `Con fuente="consejo" pide el texto sin entero (o abre el visor); entero sí vale con gestor, suin, corte, suprema, creg, dian y sectorial.`,
     )
   }
   await mkdir(destino, { recursive: true })
@@ -834,6 +900,7 @@ async function enteroDocumento(p: Resueltas, tope: number, deps: DepsLectura = {
 
 const POR_FUENTE: Record<Resueltas['fuente'], (p: Resueltas, tope: number, deps: DepsLectura) => Promise<string>> = {
   gestor: gestorDocumento,
+  suin: suinDocumento,
   corte: corteDocumento,
   suprema: supremaDocumento,
   consejo: consejoDocumento,

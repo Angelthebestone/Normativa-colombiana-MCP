@@ -308,36 +308,46 @@ test('lo inexistente se informa como texto, no como fallo de herramienta', LENTO
   assert.match(falsa.texto, /No encontré la cita/)
 })
 
-test('buscar_en_suin busca, pagina y avisa de que su vigencia no es fiable', LENTO, async () => {
+test('buscar_en_suin busca, pagina, resuelve una cita y da el estado de la ficha', LENTO, async () => {
   const r = await c.tool('buscar_en_suin', { texto: 'Buenaventura', limite: 3 })
   assert.equal(r.esError, false)
-  assert.match(r.texto, /documento\(s\) en SUIN-Juriscol; se muestran 1–3/)
-  // El aviso no es decorativo: sin él, el modelo tomaría el campo por bueno.
-  assert.match(r.texto, /contradice la ficha del documento/)
-  assert.match(r.texto, /Vigencia SEGÚN EL BUSCADOR/)
+  assert.match(r.texto, /documentos en SUIN-Juriscol; se muestran 1–3/)
+  assert.match(r.texto, /obtener_documento con fuente="suin", id="\d+"/)
 
   const dos = await c.tool('buscar_en_suin', { texto: 'Buenaventura', limite: 3, desde: 3 })
   assert.match(dos.texto, /se muestran 4–6/)
 
-  // Lo que el buscador NO puede hacer, y por eso resolver_cita sigue existiendo.
-  const cita = await c.tool('buscar_en_suin', { texto: 'LEY 909 DE 2004' })
-  assert.match(cita.texto, /No encontré|resolver_cita/)
+  // El buscador viejo (Azure) no resolvía citas ni daba el estado de la ficha; el nuevo sí.
+  const cita = await c.tool('buscar_en_suin', { texto: 'LEY 909 DE 2004', limite: 1 })
+  assert.match(cita.texto, /- LEY 909 2004[\s\S]*Estado de vigencia \(ficha SUIN\): Vigente/)
+
+  const cc = await c.tool('buscar_en_suin', { texto: 'ley 1943 de 2018', coleccion: 'corte-constitucional', limite: 2 })
+  assert.match(cc.texto, /providencias \(corte-constitucional\)/)
 })
 
-test('una ley que el Gestor no tiene se resuelve contra la ficha de SUIN', LENTO, async (t) => {
+test('una ley que el Gestor no tiene se resuelve contra SUIN, con su artículo', LENTO, async (t) => {
   // El Gestor no cubre todo el país: la Ley 1541 de 2012 no está ahí y sí en
   // SUIN. Antes se respondía "no encontré", que se lee como "no existe".
   const r = await c.tool('resolver_cita', { cita: 'art. 3 de la Ley 1541 de 2012' })
   assert.equal(r.esError, false)
-  if (/SUIN-Juriscol no respondió/.test(r.texto)) {
-    t.skip('el índice de fichas de SUIN no respondió: la fuente, no el servidor')
+  if (/SUIN-Juriscol no respondió|No se pudo leer el texto en SUIN/.test(r.texto)) {
+    t.skip('SUIN no respondió: la fuente, no el servidor')
     return
   }
   assert.match(r.texto, /SUIN-Juriscol sí la registra/)
   assert.match(r.texto, /Estado de vigencia según SUIN-Juriscol \(ficha consultada hoy\): Vigencia en Estudio/)
-  // El artículo pedido no se inventa ni se calla: se dice por qué no está.
-  assert.match(r.texto, /no sirve hoy el texto/)
-  assert.match(r.texto, /no se puede devolver el artículo 3/)
+  // SUIN vuelve a servir el texto: el artículo pedido sale de ahí.
+  assert.match(r.texto, /--- Artículo 3 ---/)
+  assert.match(r.texto, /obtener_documento con fuente="suin", id="1683108"/)
+})
+
+test('obtener_documento lee un documento de SUIN con su resumen de modificaciones', LENTO, async () => {
+  const r = await c.tool('obtener_documento', { fuente: 'suin', id: '1670817', articulo: '2' })
+  assert.equal(r.esError, false)
+  assert.match(r.texto, /LEY 909 DE 2004/)
+  assert.match(r.texto, /Estado de vigencia \(ficha SUIN, copiado tal cual\): Vigente/)
+  assert.match(r.texto, /Resumen de modificaciones de SUIN \(\d+\):\n\s+- Artículo 2: Modificado/)
+  assert.match(r.texto, /Artículo 2°\. Principios de la función pública/)
 })
 
 // --- las herramientas que nadie había ejercitado ------------------------

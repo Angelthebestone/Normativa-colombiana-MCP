@@ -33,6 +33,7 @@ export type Deps = {
   buscar?: typeof gestor.buscar
   obtenerNorma?: typeof gestor.obtenerNorma
   fichaSuin?: typeof suin.ficha
+  documentoSuin?: typeof suin.documento
 }
 
 /**
@@ -148,11 +149,11 @@ function citaOficial(p: Parameters<typeof citaCorteConstitucional>[0]): string {
  * porque el formato tiene que ser idéntico, y porque un artículo que falte se
  * marca en su propio bloque sin abortar los demás.
  */
-function bloqueArticulo(texto: string, numero: string): string {
+function bloqueArticulo(texto: string, numero: string, fuente: 'gestor' | 'suin' = 'gestor'): string {
   const art = extraerArticulo(texto, numero)
   return art
     ? [`--- Artículo ${numero} ---`, art, ...advertenciasVigencia(art)].join('\n')
-    : `No encontré un "artículo ${numero}" en el texto. Usa obtener_documento con fuente="gestor" y buscar_en_texto.`
+    : `No encontré un "artículo ${numero}" en el texto. Usa obtener_documento con fuente="${fuente}" y buscar_en_texto.`
 }
 
 /**
@@ -279,17 +280,37 @@ async function resolverUnaCita(cita: string, opciones: OpcionesCita = {}, deps: 
     const f = c.anio && activa('suin') ? await fichaSuin(c.tipo, c.numero, c.anio) : null
     if (f?.ok) {
       const v = f.ficha
-      return sinNorma(
+      // SUIN vuelve a servir el texto (desde octubre de 2026): el artículo pedido sale de ahí.
+      let articulos: string[] = []
+      let sinTexto = ''
+      if (pedidos.length) {
+        try {
+          const d = await (deps.documentoSuin ?? suin.documento)(v.id)
+          if (d && d.texto.length >= 200) articulos = pedidos.map((num) => bloqueArticulo(d.texto, num, 'suin'))
+          else sinTexto = `SUIN-Juriscol no devolvió el texto del documento ${v.id}: el artículo no se pudo leer.`
+        } catch (e) {
+          sinTexto = `No se pudo leer el texto en SUIN-Juriscol (${(e as Error).message}): vuelve a intentarlo.`
+        }
+      }
+      return {
         cita,
-        [{ clave: 'gestor', detalle: '0 documentos' }, { clave: 'suin', detalle: 'ficha encontrada' }],
-        `${cita} no está en el Gestor Normativo de Función Pública, pero SUIN-Juriscol sí la registra.\n` +
+        clave: `suin:${v.id}`,
+        titulo: `${v.tipo} ${v.numero} de ${v.anio}`,
+        usos: [
+          { clave: 'gestor', detalle: '0 documentos' },
+          { clave: 'suin', detalle: articulos.length ? 'ficha y texto' : 'ficha encontrada' },
+        ],
+        avisos,
+        ficha:
+          `${cita} no está en el Gestor Normativo de Función Pública, pero SUIN-Juriscol sí la registra.\n` +
           (v.epigrafe ? `${v.epigrafe}\n` : '') +
           `Estado de vigencia según SUIN-Juriscol (ficha consultada hoy): ${v.estado || 'SUIN no publica el estado de esta norma'}\n` +
-          `URL: ${v.url}\n\n` +
-          suin.TEXTO_NO_PUBLICO +
-          (pedidos.length ? ` Por eso no se puede devolver el artículo ${pedidos.join(', ')}: búscalo en el Diario Oficial.` : ''),
-        avisos,
-      )
+          `URL: ${v.url}\n` +
+          (sinTexto ? `\n${sinTexto}\n` : '') +
+          `\nSiguiente paso: ${pedidos.length ? 'la norma completa, con su resumen de modificaciones y de jurisprudencia' : 'el articulado'}, ` +
+          `con obtener_documento con fuente="suin", id="${v.id}".`,
+        articulos,
+      }
     }
     const suinCayo = f?.ok === false && f.razon === 'ficha-caida'
     return sinNorma(
