@@ -36,8 +36,7 @@ export type Item = {
 /**
  * La llamada literal a `obtener_documento` que devuelve el texto de este
  * resultado. Se arma con los MISMOS nombres de parámetro que exige esa
- * herramienta por fuente (gestor→id, corte→ruta, dian→link, sectorial→entidad+url).
- * SUIN no tiene: su visor vive en una red privada (suin.TEXTO_NO_PUBLICO).
+ * herramienta por fuente (gestor→id, suin→id, corte→ruta, dian→link, sectorial→entidad+url).
  */
 export const paraLeerDe = (fuente: string, campos: Record<string, string>): string =>
   `obtener_documento con ${[`fuente="${fuente}"`, ...Object.entries(campos).map(([k, v]) => `${k}="${v}"`)].join(', ')}`
@@ -58,14 +57,6 @@ export const mismoOrigen = (dominio: string, url: string): boolean => {
 }
 
 export const PERFILES_ADMITIDOS = ['laboral', 'tributario', 'ambiental', 'contratacion', 'energia', 'salud', 'mineria'] as const
-
-/**
- * Por qué los resultados de SUIN no llevan «Para leer». Va UNA vez al final, no
- * en cada ítem: es la misma razón para todos y repetirla infla la respuesta.
- */
-export const NOTA_SUIN =
-  'Los resultados de SUIN no traen "Para leer": su visor de texto vive en una red privada (direcciones ' +
-  '192.168.x.x) y obtener_documento no lo alcanza.'
 
 /**
  * Qué fuentes consultar según perfil y filtro explícito. Las apagadas (FUENTES)
@@ -126,7 +117,8 @@ async function porSuin(texto: string, limite: number): Promise<Item[]> {
     fuente: 'suin',
     titulo: d.titulo,
     url: d.url,
-    ...(d.vigencia ? { detalle: `Vigencia SEGÚN EL BUSCADOR: ${d.vigencia}` } : {}),
+    ...(d.vigencia ? { detalle: `Estado de vigencia (ficha SUIN): ${d.vigencia}` } : {}),
+    paraLeer: paraLeerDe('suin', { id: d.id }),
   }))
 }
 

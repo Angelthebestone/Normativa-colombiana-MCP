@@ -141,10 +141,12 @@ export async function escribir({ cita }: Params): Promise<string> {
     // índice que contradecía a la ficha; ya no hay dos vías.
     const f = await suin.ficha(c.tipo, c.numero, anio)
     if (f.ok) {
+      // 7.854 documentos del índice traen `estado` vacío (medido el 2026-10-14): hay ficha, pero no
+      // dice nada de la vigencia, y eso no puede salir con la misma confianza que un estado publicado.
       return formatear({
         cita,
-        estado: f.ficha.estado || 'SUIN no publica el estado de esta norma',
-        confianza: 'alta',
+        estado: f.ficha.estado || 'no consta (la ficha de SUIN no publica el estado de esta norma)',
+        confianza: f.ficha.estado ? 'alta' : 'baja',
         url: f.ficha.url,
         alcance: alcance(fuentesSuin),
         explicacion: `Ficha de SUIN-Juriscol (${f.ficha.subtipo || f.ficha.tipo}), consultada hoy. El estado es el que publica la ficha.`,

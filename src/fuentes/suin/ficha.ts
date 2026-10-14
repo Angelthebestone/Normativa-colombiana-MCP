@@ -2,10 +2,8 @@ import { TTL_BUSQUEDA_MS } from '../../nucleo/cache.ts'
 import { CanarioError } from '../../nucleo/parse/errores.ts'
 import { sinTildes } from '../../nucleo/parse/texto.ts'
 import { pedirJson } from '../../nucleo/http.ts'
+import { COLECCIONES, INDICE, type RespuestaFichas } from './elasticsearch.ts'
 import { claveSuin, enlaceSuin } from './enlace.ts'
-
-/** El año más alto con documentos en el índice de fichas (medido el 2026-09-24). */
-const ULTIMO_ANIO_INDICE = 2020
 
 /**
  * Metadatos de un documento de SUIN. El estado se devuelve literal, sin
@@ -26,29 +24,6 @@ export type Ficha = {
   epigrafe: string
   estado: string
   url: string
-}
-
-/** El índice de fichas del buscador nuevo de SUIN. */
-const FICHAS = 'https://lexis.minjusticia.gov.co/elasticsearch/documents_stg/_search'
-
-/** La forma que se espera del índice; `fichasDe` comprueba lo que usa. */
-export type RespuestaFichas = {
-  hits?: {
-    hits?: {
-      /** Solo en consultas ordenadas: lo usa la paginación del generador del índice. */
-      sort?: number[]
-      _source?: {
-        id?: number | string
-        visualizacion?: number | string | null
-        tipo?: string | null
-        subtipo?: string | null
-        numero?: string | null
-        anio?: string | null
-        epigrafe?: string | null
-        estado?: string | null
-      }
-    }[]
-  }
 }
 
 /**
@@ -138,11 +113,15 @@ export async function ficha(
 
   let fichas: Ficha[]
   try {
-    const json = await (deps.pedirJson ?? ((u, c) => pedirJson<RespuestaFichas>(u, c, 8_000)))(FICHAS, {
+    const json = await (deps.pedirJson ?? ((u, c) => pedirJson<RespuestaFichas>(u, c, 8_000)))(INDICE, {
       size: 10,
       query: {
         bool: {
-          filter: [{ term: { 'numero.keyword': sinCeros(numero) } }, { term: { 'anio.keyword': anio } }],
+          filter: [
+            { term: { configid: COLECCIONES.normas } },
+            { term: { 'numero.keyword': sinCeros(numero) } },
+            { term: { 'anio.keyword': anio } },
+          ],
         },
       },
     })
@@ -153,19 +132,9 @@ export async function ficha(
     return { ok: false, razon: 'ficha-caida', detalle: (e as Error).message }
   }
   const f = fichas.find((x) => esLaPedida(x, tipo, numero, anio))
-  // Se recuerda el veredicto firme, la ficha y también el «no consta» (todo lo posterior a 2020 lo es, y
-  // sin esto se volvía a preguntar en cada herramienta); nunca la ficha caída, que se devolvió arriba.
-  const estado: EstadoFicha = f
-    ? { ok: true, ficha: f }
-    : Number(anio) > ULTIMO_ANIO_INDICE
-      ? {
-          ok: false,
-          razon: 'no-consta',
-          detalle:
-            `el índice público de SUIN-Juriscol llega hasta ${ULTIMO_ANIO_INDICE} (medido el 2026-09-24), así que ` +
-            `de una norma de ${anio} no puede haber ficha ahí: su ausencia no dice nada sobre la norma`,
-        }
-      : { ok: false, razon: 'no-consta' }
+  // Se recuerda el veredicto firme, la ficha y también el «no consta» (sin esto se volvía a preguntar en
+  // cada herramienta); nunca la ficha caída, que se devolvió arriba.
+  const estado: EstadoFicha = f ? { ok: true, ficha: f } : { ok: false, razon: 'no-consta' }
   cacheFichas.set(clave, { estado, ts: Date.now() })
   return estado
 }

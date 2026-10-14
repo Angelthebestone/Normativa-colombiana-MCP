@@ -24,9 +24,11 @@ export const DESCRIPCION =
   'Casi todas entregan PDF sin texto extraíble, y la mayoría no publica estado de vigencia; donde aparece ' +
   '(ANM, Supersociedades) es la fila del propio portal, no una verificación: para el estado real de una ley ' +
   'o un decreto, resolver_cita.\n' +
-  'LOS FILTROS NO SE COMPORTAN IGUAL EN TODAS: el Invima exige texto o año; la Superfinanciera y la ' +
-  'Supertransporte se quedan en el año en curso si no indicas otro; la ANM no aplica el año a las ' +
-  'circulares. Cada respuesta dice qué hizo, pero no lo adivines: indica el año si lo esperabas.'
+  'LOS FILTROS NO SE COMPORTAN IGUAL EN TODAS: el Invima y el Ministerio de Educación exigen texto o año; la ' +
+  'Superfinanciera y la Supertransporte se quedan en el año en curso si no indicas otro; el Ministerio de ' +
+  'Transporte solo busca su catálogo de 2016–2024 si indicas el año (sin año, solo los actos de 2025 en ' +
+  'adelante); la ANM no aplica el año a las circulares. Cada respuesta dice qué hizo, pero no lo adivines: ' +
+  'indica el año si lo esperabas.'
 
 export const ANOTACIONES: ToolAnnotations = {
   readOnlyHint: true,

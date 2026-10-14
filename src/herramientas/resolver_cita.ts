@@ -74,9 +74,10 @@ async function resolverUnaCita(cita: string, opciones: OpcionesCita = {}, deps: 
       ` a esa, pídela con su tipo exacto.`
     : ''
   const fichaSuin = deps.fichaSuin ?? suin.ficha
+  const documentoSuin = deps.documentoSuin ?? suin.documento
 
   if (!r.items.length) {
-    return resolverSinGestor({ cita, c, porCodigo, articuloIgnorado, pedidos, otroTipo, fichaSuin })
+    return resolverSinGestor({ cita, c, porCodigo, articuloIgnorado, pedidos, otroTipo, fichaSuin, documentoSuin })
   }
   const ambigua = normaAmbigua(cita, c, r.items)
   if (ambigua) return ambigua

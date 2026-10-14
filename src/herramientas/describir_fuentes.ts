@@ -60,10 +60,11 @@ export async function escribir({ fuente }: Params): Promise<string> {
       `su respuesta y el TEXTO COMPLETO con obtener_documento con fuente="consejo". El texto sale del PDF que publica ` +
       `el buscador; su token caduca en una hora, así que para citar se usa el radicado, no el enlace.`],
     ['dian', `- DIAN — normograma tributario, aduanero y cambiario. Ninguna otra herramienta cubre esa materia.`],
-    ['suin', `- SUIN-Juriscol (MinJusticia) — corpus histórico desde 1844 y, sobre todo, la ÚNICA fuente que publica el ` +
+    ['suin', `- SUIN-Juriscol (MinJusticia) — normas desde 1844 hasta el año en curso, reglamentos técnicos y la ` +
+      `jurisprudencia que afectó la vigencia de alguna norma, con su texto; sobre todo, la ÚNICA fuente que publica el ` +
       `estado de vigencia como dato.`],
     ['senado', `- Secretaría del Senado — solo el CÓDIGO CIVIL (Ley 84 de 1873), artículo por artículo, porque el Gestor no lo ` +
-      `publica y SUIN no sirve su texto. Solo HTTP sin cifrar: el texto no se puede autenticar en tránsito. Trae los ` +
+      `publica. Solo HTTP sin cifrar: el texto no se puede autenticar en tránsito. Trae los ` +
       `apartes tachados (inexequibles o derogados) marcados con ~~ ~~, y NO reproduce las notas de vigencia y ` +
       `jurisprudencia del portal (son de su editor): remite al enlace.`],
     ['diario', `- Diario Oficial (Imprenta Nacional) — la consulta pública de diarios publicados: en qué diario (número, edición, ` +
@@ -130,10 +131,8 @@ export async function escribir({ fuente }: Params): Promise<string> {
       `LO QUE NO ESTÁ CUBIERTO — decirlo importa más que la lista de arriba:\n` +
       `- El ESTADO PROCESAL de un caso: si un proceso sigue abierto, en qué etapa va o cuándo se falla. Aquí solo ` +
       `hay normas y providencias YA PUBLICADAS.\n` +
-      `- La vigencia de lo POSTERIOR A 2020: la ficha de SUIN sale de su índice público, que llega hasta 2020. Que ` +
-      `una norma de 2021 en adelante no traiga estado NO significa que esté derogada ni vigente: no consta.\n` +
-      `- El TEXTO de los documentos de SUIN: su visor lo pide a una dirección privada del Ministerio y se queda en ` +
-      `blanco. Se da la ficha y el estado; el articulado, del Gestor o del Diario Oficial.\n` +
+      `- La vigencia de lo que SUIN no tiene: su ficha sale del índice público de su buscador. Que una norma no ` +
+      `traiga estado NO significa que esté derogada ni vigente: no consta.\n` +
       `- Los códigos se citan por su nombre (Comercio, Sustantivo del Trabajo, Procesal del Trabajo, Penal, ` +
       `Procedimiento Penal, General del Proceso, CPACA, Infancia y Adolescencia, Estatuto Tributario) y salen del ` +
       `Gestor. El CÓDIGO CIVIL (${refCodigo(CODIGOS.find((c) => c.senado)!)}) no está allí: se lee artículo por artículo de la ` +

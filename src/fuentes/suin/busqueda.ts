@@ -3,7 +3,7 @@ import { buscarEnIndice } from './indice.ts'
 
 /**
  * Búsqueda por texto que primero prueba el índice de leyes empaquetado y, si
- * rinde 0, cae al buscador vivo de Azure (que sí normaliza y deriva: encuentra
+ * rinde 0, cae al buscador vivo del portal (que sí normaliza y deriva: encuentra
  * la Ley 1221 de 2008 para "teletrabajo"). El hueco del índice se declara en la
  * respuesta; si el fallback tampoco encuentra nada, la norma puede existir
  * igual: ese vacío no es palabra final.
@@ -37,7 +37,7 @@ export async function buscarEnSuin(
     ...(opts.desde ? { desde: opts.desde } : {}),
     ...(opts.limite ? { limite: opts.limite } : {}),
   })
-  aplicados.push('buscador del portal (Azure)')
+  aplicados.push('buscador del portal')
   if (vivo.items.length) {
     notas.push(
       'El índice empaquetado no cubría el término; se consultó el buscador del portal, que normaliza tildes y derivación.',

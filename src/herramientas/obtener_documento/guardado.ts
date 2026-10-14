@@ -7,6 +7,7 @@ import { trocear } from '../../nucleo/parse/fragmentos.ts'
 import { descargarA, escribirSinColision } from '../../nucleo/descargas.ts'
 import { adaptador } from '../../fuentes/sectorial.ts'
 import * as gestor from '../../fuentes/gestor/index.ts'
+import * as suin from '../../fuentes/suin/index.ts'
 import * as corte from '../../fuentes/jurisprudencia/corte/index.ts'
 import * as suprema from '../../fuentes/jurisprudencia/cortesuprema.ts'
 import * as creg from '../../fuentes/creg.ts'
@@ -67,6 +68,12 @@ export async function enteroDocumento(p: Resueltas, tope: number, deps: DepsLect
     const n = await (deps.obtenerNorma ?? gestor.obtenerNorma)(p.id)
     texto = n.texto
     origen = n.url
+  } else if (p.fuente === 'suin') {
+    if (!p.id) throw new Error('Para fuente="suin" hace falta id.')
+    const d = await (deps.documentoSuin ?? suin.documento)(p.id)
+    if (!d) throw new Error(`SUIN-Juriscol no tiene un documento con id ${p.id}: no se puede guardar.`)
+    texto = d.texto
+    origen = d.url
   } else if (p.fuente === 'corte') {
     if (!p.ruta) throw new Error('Para fuente="corte" hace falta ruta.')
     const d = await corte.obtenerTexto(p.ruta)
@@ -88,7 +95,7 @@ export async function enteroDocumento(p: Resueltas, tope: number, deps: DepsLect
     // PDF del visor, que no se reconstruye aquí.
     throw new Error(
       `entero/ruta_destino no aplica a fuente="${p.fuente}": no hay archivo que guardar. ` +
-        `Con fuente="consejo" pide el texto sin entero (o abre el visor); entero sí vale con gestor, corte, suprema, creg, dian y sectorial.`,
+        `Con fuente="consejo" pide el texto sin entero (o abre el visor); entero sí vale con gestor, suin, corte, suprema, creg, dian y sectorial.`,
     )
   }
   await mkdir(destino, { recursive: true })

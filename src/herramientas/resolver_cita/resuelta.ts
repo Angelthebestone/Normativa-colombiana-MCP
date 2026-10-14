@@ -14,6 +14,7 @@ export type Deps = {
   buscar?: typeof gestor.buscar
   obtenerNorma?: typeof gestor.obtenerNorma
   fichaSuin?: typeof suin.ficha
+  documentoSuin?: typeof suin.documento
 }
 
 /**

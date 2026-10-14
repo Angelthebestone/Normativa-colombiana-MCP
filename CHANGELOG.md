@@ -5,10 +5,26 @@ Este proyecto sigue [versionado semántico](https://semver.org/lang/es/).
 
 ## [Sin publicar]
 
+**SUIN-Juriscol alineado con su portal de octubre de 2026, y dos ministerios nuevos.** Medido el 2026-10-14 contra `lexis.minjusticia.gov.co/buscador/Detallado/{1,2,3}` (reglamentos técnicos, jurisprudencia y normas).
+
+### Añadido
+
+- **`obtener_documento` con `fuente="suin"`** (`id`, `articulo` opcional): el texto de `suin-search/api/documentos/{id}`, con el estado de su ficha, las fechas, las notas de vigencia de la norma entera y los resúmenes de modificaciones y de jurisprudencia por artículo que el visor muestra plegados (con `articulo`, solo los de ese artículo). Admite `buscar_en_texto`, `desde` y `entero`. Un id que SUIN no tiene (204) se dice como tal.
+- **`mineducacion`** en `buscar_normativa_sectorial`: normograma del Ministerio de Educación Nacional (`normograma.info/men`), con el buscador `prueba-men` de Avance Jurídico (texto y año). Indexa la compilación del sector, no solo actos del MEN; corta en 10.000 resultados.
+- **`mintransporte`** en `buscar_normativa_sectorial`: Ministerio de Transporte. Sin año o desde 2025, la tabla `/normatividad/actos/` (255 actos, 2025–2026); con un año de 2016 a 2024, su catálogo `/documentos/` por año (resoluciones, direcciones territoriales y decretos), con un tope de 8 peticiones por llamada y la consulta parcial declarada. Antes de 2016 solo alcanza los decretos 2008–2022 de la raíz del catálogo, y lo declara. Se descartaron el buscador del catálogo (reCAPTCHA) y el repositorio DSpace (fechas de relleno, hasta 2018).
+- `test/suin-documento.ts` y `test/mintransporte-actos.ts`, sin red.
+
 ### Cambiado
 
 - **`resolver_cita` rechaza `cita` y `citas` a la vez**, con `validar` o sin él, antes de consultar ninguna fuente («Usa cita (una) o citas (un lote), no las dos»). Antes el lote mandaba y la cita suelta se descartaba con un aviso (o en silencio, con `validar: true`).
 - **El lote `citas` lleva entre 1 y 20 citas** (`MAX_LOTE`), en `resolver_cita` y en `validar_cita`. El esquema publica `minItems`/`maxItems`; un lote vacío o de 21 es un error de esquema que dice el tope. Un escrito con más citas se valida en varias llamadas.
+- **La ficha de SUIN sale del índice `documents_pdn`** (103.326 documentos, cargado el 2026-10-02), filtrada a la colección de normas (`configid` 30). El anterior, `documents_stg`, se cortaba en 2020: la Ley 2124 de 2021 y la 2281 de 2023 («Declarado Inexequible») ya tienen estado. Desaparece el «no consta» con el motivo «el índice llega hasta 2020».
+- **`buscar_en_suin` consulta el mismo índice que el buscador nuevo** en vez del de Azure Cognitive Search (retirado, con su api-key). El estado de cada resultado es el de la ficha, una cita escrita («LEY 909 DE 2004») sale primera y «teletrabajo» encuentra la Ley 1221 de 2008. Parámetros nuevos: `coleccion` (`normas`, `corte-constitucional`, `consejo-estado`, `corte-suprema`) y `materia` (los reglamentos técnicos van por la suya); `vigencia` admite los 12 estados del índice; `texto` es opcional si hay otro filtro. Cada resultado trae «Para leer» con `obtener_documento` y el total es el del índice. Desaparecen el rótulo «Vigencia SEGÚN EL BUSCADOR» y el aviso de que contradecía la ficha, también en `buscar_unificado`.
+- **El enlace de SUIN es el visor nuevo** (`lexis.minjusticia.gov.co/minjusticia/viewDocument/{id}`): `www.suin-juriscol.gov.co/viewDocument.asp?id=` sirve una SPA vacía.
+- **`resolver_cita`, ruta «no está en el Gestor pero sí en SUIN»:** devuelve el artículo pedido leído de SUIN, y su siguiente paso es `obtener_documento` con `fuente="suin"`.
+- Instrucciones del servidor, `describir_fuentes`, la descripción de `buscar_normativa_sectorial` y `plugin/references/fuentes-oficiales.md` actualizados: la vigencia de SUIN ya no «llega hasta 2020», su texto se lee y los filtros de los dos ministerios nuevos se declaran.
+- `datos/indice-suin.json` regenerado: 11.648 leyes (2026-10-14). `scripts/salud.ts` sondea `documents_pdn` y la API de texto en lugar de `documents_stg` y Azure.
+- `test/buscar_unificado.ts` pierde las pruebas de la nota «Los resultados de SUIN no traen "Para leer"», que ya no existe.
 
 ### Corregido
 
@@ -17,6 +33,10 @@ Este proyecto sigue [versionado semántico](https://semver.org/lang/es/).
 - **Las descargas ya no escriben `.prueba-escritura`.** La comprobación previa de permisos truncaba un archivo del usuario con ese nombre y dejaba el auxiliar en la carpeta. El error de escritura se informa ahora desde la escritura real.
 - **Dos escrituras simultáneas al mismo nombre ya no se pisan.** Descargas, `obtener_documento` con `entero`/`ruta_destino` y `expediente` con `exportar` reservan el nombre al abrirlo con creación exclusiva; ante un archivo existente prueban el siguiente sufijo. Antes comprobaban que el nombre estaba libre y escribían después, y dos llamadas podían elegir el mismo.
 - **Superfinanciera devolvía siempre «degradada» y ningún resultado.** El portal está sano: responde `301 /10115974 → /10115974/`, `302 → loader.php` y `200`. Pero el disyuntor contaba como «bucle» (y por tanto como fallo) cualquier 301 cuyo destino solo difiere en la barra final, y las tres consultas anuales seguidas armaban la pausa de 60 s. Ahora solo es bucle el 301 cuyo destino es la misma URL pedida —el síntoma medido de SUIN—. Medido en vivo: sin filtros, 3 actos de 157 (2026); año 2024 con «riesgo», 21; año 2020, 255; el host no queda degradado.
+- **«DECRETA:» y el cierre de una enumeración ya no esconden el artículo siguiente.** Cualquier línea terminada en dos puntos se tomaba por anuncio de un texto transcrito, así que el índice de artículos y `articulo()` saltaban el artículo 1 tras «DECRETA:» y, en la Ley 2281 de 2023, el 11 (el 10 lo arrastraba). Ahora la frase de los dos puntos tiene que mencionar una disposición o un cambio («artículo», «quedará», «modifica», «adiciona»…). Medido el 2026-10-14 sobre el texto de SUIN de ocho leyes (2281/2023, 2418/2024, 1437/2011, 789/2002, 1955/2019, 769/2002, 1060/2006, 2277/2022): solo se ganan artículos reales (el 1 en la 1437, la 1060 y la 2281; el 11 en la 2281) y no se pierde ninguno.
+- **`consultar_vigencia` ya no da confianza alta a una ficha sin estado**: 7.854 documentos del índice de SUIN traen `estado` vacío; ahora sale «no consta», confianza baja.
+- **Normogramas de Avance Jurídico (INVIMA, Supersalud, MEN): el total es lo que reúne el filtro**, no el tamaño de la página, y `solo_entidad` filtra la lista entera antes de paginar (antes devolvía páginas cortas).
+- El documento de SUIN de una providencia ya no muestra el texto literal «null» de los campos vacíos del API.
 
 ## [1.15.2] — 2026-10-04
 

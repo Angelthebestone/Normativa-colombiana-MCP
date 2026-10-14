@@ -111,7 +111,7 @@ function suin(respuesta: () => Promise<RespuestaFichas>) {
   }
 }
 
-test('suin: «no consta» se recuerda: una norma posterior a 2020 se pregunta una sola vez', async () => {
+test('suin: «no consta» se recuerda: una norma sin ficha se pregunta una sola vez', async () => {
   const s = suin(indice([]))
   const a = await ficha('Decreto', '4001', '2023', { pedirJson: s.pedirJson })
   const b = await ficha('Decreto', '4001', '2023', { pedirJson: s.pedirJson })
