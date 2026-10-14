@@ -42,7 +42,7 @@ import {
   sinTildes,
   trocear,
 } from '../src/nucleo/parse.ts'
-import { cuerpoDe, decodificar } from '../src/nucleo/http.ts'
+import { cuerpoDe, decodificar, TOPE_TEXTO } from '../src/nucleo/http.ts'
 import * as gestor from '../src/fuentes/gestor.ts'
 import * as corte from '../src/fuentes/jurisprudencia/corte.ts'
 
@@ -210,7 +210,7 @@ test('una conexión cortada a mitad del gzip rechaza, no cuelga ni tumba el proc
   const { port } = srv.address() as { port: number }
 
   const respuesta = new Promise<Buffer>((resolve, reject) => {
-    get({ host: '127.0.0.1', port }, (res) => cuerpoDe(res).then(resolve, reject)).on('error', reject)
+    get({ host: '127.0.0.1', port }, (res) => cuerpoDe(res, TOPE_TEXTO).then(resolve, reject)).on('error', reject)
   })
   const colgada = Symbol('colgada')
   const fin = await Promise.race([
