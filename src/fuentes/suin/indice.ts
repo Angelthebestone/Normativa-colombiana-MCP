@@ -1,5 +1,5 @@
 import { readFileSync } from 'node:fs'
-import { sinTildes } from '../../nucleo/parse.ts'
+import { sinTildes } from '../../nucleo/parse/texto.ts'
 import { esStopword } from '../../nucleo/stopwords.ts'
 import type { ResultadoSuin } from './buscador.ts'
 import { enlaceSuin } from './enlace.ts'

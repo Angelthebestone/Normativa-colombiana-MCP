@@ -123,6 +123,8 @@ export const TORCIDAS: Torcida[] = [
   { herramienta: 'buscar_unificado', args: { texto: 'teletrabajo', fuentes: 'gestor' }, porque: 'string donde va arreglo', correcta: { fuentes: ['gestor'] } },
   { herramienta: 'resolver_cita', args: { citas: 'Ley 909 de 2004' }, porque: 'string donde va arreglo', correcta: { citas: ['Ley 909 de 2004'] } },
   { herramienta: 'resolver_cita', args: { cita: ['Ley 909 de 2004'] }, porque: 'arreglo donde va string', correcta: { cita: 'Ley 909 de 2004' } },
+  { herramienta: 'resolver_cita', args: { cita: 'Ley 909 de 2004', citas: ['C-337/11'] }, porque: 'cita y citas a la vez: el lote descartaba la suelta', rechazaDespues: 'unaViaDeCita' },
+  { herramienta: 'resolver_cita', args: { citas: [] }, porque: 'lote vacío' },
   { herramienta: 'consultar_vigencia', args: { cita: ['Ley 909 de 2004'] }, porque: 'arreglo donde va string' },
 
   // --- enumeraciones mal escritas -----------------------------------------

@@ -1,4 +1,5 @@
-import { CanarioError, limpiarTermino } from '../../nucleo/parse.ts'
+import { CanarioError } from '../../nucleo/parse/errores.ts'
+import { limpiarTermino } from '../../nucleo/parse/texto.ts'
 import { pedir } from '../../nucleo/http.ts'
 import { enlaceSuin } from './enlace.ts'
 

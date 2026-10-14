@@ -5,7 +5,7 @@
  * Administrativa Especial Dirección de Impuestos y Aduanas Nacionales" no
  * aparece en su catálogo, mientras que "Ministerio del Trabajo" sí).
  */
-import { sinTildes } from './parse.ts'
+import { sinTildes } from './parse/texto.ts'
 
 export const ALIASES: Record<string, string> = {
   // Los que el catálogo del Gestor tiene con ese nombre exacto.

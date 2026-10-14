@@ -1,5 +1,6 @@
 import { TTL_BUSQUEDA_MS } from '../../nucleo/cache.ts'
-import { CanarioError, sinTildes } from '../../nucleo/parse.ts'
+import { CanarioError } from '../../nucleo/parse/errores.ts'
+import { sinTildes } from '../../nucleo/parse/texto.ts'
 import { pedirJson } from '../../nucleo/http.ts'
 import { claveSuin, enlaceSuin } from './enlace.ts'
 

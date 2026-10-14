@@ -7,7 +7,7 @@ import { strict as assert } from 'node:assert'
 import test from 'node:test'
 
 import { contienenTodos, pertinenciaDe, quitarStopwords } from '../src/fuentes/gestor.ts'
-import type { Resultado } from '../src/nucleo/parse.ts'
+import type { Resultado } from '../src/nucleo/parse/gestor.ts'
 import { contienenTodas, type Providencia } from '../src/fuentes/jurisprudencia/consejoestado.ts'
 import { buscar as buscarSuin, buscarEnIndice, buscarEnSuin, type ResultadoSuin } from '../src/fuentes/suin/index.ts'
 import { escribir as escribirSuin } from '../src/herramientas/buscar_en_suin.ts'

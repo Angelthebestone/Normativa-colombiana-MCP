@@ -16,7 +16,7 @@
  * deja de responder, el canario lo dirá y habrá que buscar el buscador nuevo;
  * no se puede evitar hoy porque producción no expone ninguno.
  */
-import { CanarioError } from '../nucleo/parse.ts'
+import { CanarioError } from '../nucleo/parse/errores.ts'
 import { pedir } from '../nucleo/http.ts'
 
 const BUSCADOR = 'https://normograma.info/prueba-dian/buscador/Buscar.ashx'
