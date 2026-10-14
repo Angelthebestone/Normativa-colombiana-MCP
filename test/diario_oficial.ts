@@ -9,7 +9,7 @@ import { strict as assert } from 'node:assert'
 import { readFileSync } from 'node:fs'
 import test from 'node:test'
 
-import { buscar, leerFormulario, leerPagina, leerParcial, fechaPortal, TIPOS } from '../src/fuentes/diario_oficial.ts'
+import { buscar, leerFormulario, leerPagina, leerParcial, fechaPortal, TIPOS } from '../src/fuentes/diario_oficial/index.ts'
 import { formatear, escribir } from '../src/herramientas/buscar_diario_oficial.ts'
 import { pedir, type Respuesta } from '../src/nucleo/http.ts'
 import { CanarioError } from '../src/nucleo/parse/errores.ts'
