@@ -52,7 +52,7 @@ import * as consejo from '../fuentes/jurisprudencia/consejoestado/index.ts'
 import * as dian from '../fuentes/normograma.ts'
 import * as creg from '../fuentes/creg.ts'
 import { esCompiladora, avisoCompiladora } from '../nucleo/compiladas.ts'
-import { citaNorma } from '../nucleo/cita_oficial.ts'
+import { citaNorma } from '../nucleo/cita_oficial/index.ts'
 import { analizarVacancia, enVacancia } from '../nucleo/vacancia.ts'
 import { alcance, proyectar } from '../nucleo/alcance.ts'
 
