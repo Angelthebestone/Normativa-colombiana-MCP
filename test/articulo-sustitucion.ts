@@ -8,7 +8,7 @@
 import { strict as assert } from 'node:assert'
 import test from 'node:test'
 
-import { articulo, indiceArticulos } from '../src/nucleo/parse.ts'
+import { articulo, indiceArticulos } from '../src/nucleo/parse/articulos.ts'
 
 /** La forma de la Ley 1060 de 2006, que es la que se comprobó contra el portal. */
 const LEY_MODIFICATORIA = [

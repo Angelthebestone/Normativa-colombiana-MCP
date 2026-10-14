@@ -18,11 +18,12 @@ import { z } from 'zod'
 import { estricto } from '../nucleo/normalizar.ts'
 import * as gestor from '../fuentes/gestor/index.ts'
 import * as corte from '../fuentes/jurisprudencia/corte.ts'
-import * as suin from '../fuentes/suin.ts'
+import * as suin from '../fuentes/suin/index.ts'
 import * as dian from '../fuentes/normograma.ts'
 import { adaptador } from '../fuentes/sectorial.ts'
 import { conAlternativas } from '../nucleo/alternativas.ts'
 import { activa, alcance, proyectar } from '../nucleo/alcance.ts'
+import { fechaBogota } from '../nucleo/fecha.ts'
 
 export const TITULO = 'Buscar en varias fuentes a la vez'
 
@@ -122,9 +123,6 @@ export const mismoOrigen = (dominio: string, url: string): boolean => {
 }
 
 const PERFILES_ADMITIDOS = ['laboral', 'tributario', 'ambiental', 'contratacion', 'energia', 'salud', 'mineria'] as const
-
-/** Fecha de la consulta en AAAA-MM-DD: la que el envoltorio ya no añade en modo json. */
-const hoy = () => new Date().toISOString().slice(0, 10)
 
 /**
  * Por qué los resultados de SUIN no llevan «Para leer». Va UNA vez al final, no
@@ -298,7 +296,7 @@ export async function escribir(
     const aviso = `No existe el perfil "${params.perfil}". Disponibles: ${PERFILES_ADMITIDOS.join(', ')}.`
     if (json) {
       return JSON.stringify({
-        fecha_consulta: hoy(),
+        fecha_consulta: fechaBogota(),
         texto: params.texto,
         perfil: params.perfil,
         alcance: cabecera,
@@ -382,7 +380,7 @@ export async function escribir(
       avisos.push('Esto es un FALLO de la fuente, no un vacío: no concluyas que no hay resultados ahí. Vuelve a intentarlo.')
     if (todos.some((i) => i.fuente === 'suin')) avisos.push(NOTA_SUIN)
     return JSON.stringify({
-      fecha_consulta: hoy(),
+      fecha_consulta: fechaBogota(),
       texto: params.texto,
       ...(params.perfil ? { perfil: params.perfil } : {}),
       alcance: lineaAlcance,

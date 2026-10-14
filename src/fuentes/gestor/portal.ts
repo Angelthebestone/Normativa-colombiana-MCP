@@ -1,4 +1,4 @@
-import { NoExisteError } from '../../nucleo/parse.ts'
+import { NoExisteError } from '../../nucleo/parse/errores.ts'
 import { pedir } from '../../nucleo/http.ts'
 
 // El ritmo y la serialización por dominio los gobierna `pedir`.

@@ -1,4 +1,5 @@
-import { limpiarTermino, sinTildes, type Resultado } from '../../nucleo/parse.ts'
+import { limpiarTermino, sinTildes } from '../../nucleo/parse/texto.ts'
+import { type Resultado } from '../../nucleo/parse/gestor.ts'
 import { esStopword } from '../../nucleo/stopwords.ts'
 
 

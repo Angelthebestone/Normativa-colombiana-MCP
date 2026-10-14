@@ -20,7 +20,8 @@
  * 2026-09-03 contra el propio buscador) e incluye fallos de 2026 publicados
  * en septiembre del mismo año, así que la actualización es continua.
  */
-import { cargar, limpiarTermino, sinTildes, textoDe } from '../../nucleo/parse.ts'
+import { cargar, textoDe } from '../../nucleo/parse/limpieza.ts'
+import { limpiarTermino, sinTildes } from '../../nucleo/parse/texto.ts'
 import { parsearCita, rutaDeSentencia } from '../../nucleo/citas.ts'
 import { obtener, poner, TTL_BUSQUEDA_MS } from '../../nucleo/cache.ts'
 import { pedir as http } from '../../nucleo/http.ts'

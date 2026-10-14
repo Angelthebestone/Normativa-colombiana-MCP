@@ -27,7 +27,7 @@ import { activa, alcance, avisoApagada } from '../nucleo/alcance.ts'
 import { idTipo, parsearCita, candidatosAmbiguos } from '../nucleo/citas.ts'
 import * as corte from '../fuentes/jurisprudencia/corte.ts'
 import * as gestor from '../fuentes/gestor/index.ts'
-import * as suin from '../fuentes/suin.ts'
+import * as suin from '../fuentes/suin/index.ts'
 
 export const TITULO = 'Consultar la vigencia de una norma'
 

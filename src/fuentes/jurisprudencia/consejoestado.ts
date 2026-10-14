@@ -25,7 +25,8 @@
  * sentencia".
  */
 import * as cheerio from 'cheerio/slim'
-import { CanarioError, colapsarEspacios, limpiarTermino, sinTildes } from '../../nucleo/parse.ts'
+import { CanarioError } from '../../nucleo/parse/errores.ts'
+import { colapsarEspacios, limpiarTermino, sinTildes } from '../../nucleo/parse/texto.ts'
 import { terminosSignificativos } from '../gestor/index.ts'
 import { pedir, pedirBytes } from '../../nucleo/http.ts'
 

@@ -5,12 +5,12 @@
  * persiste en disco (y entonces no expira por TTL fijo ni se pierde al reiniciar).
  */
 import type { ToolAnnotations } from '@modelcontextprotocol/sdk/types.js'
-import { stat, writeFile } from 'node:fs/promises'
+import { stat } from 'node:fs/promises'
 import * as path from 'node:path'
 import { z } from 'zod'
 
 import { estricto } from '../nucleo/normalizar.ts'
-import { sinColision } from '../nucleo/descargas.ts'
+import { escribirSinColision } from '../nucleo/descargas.ts'
 import { agregar, crear, enDisco, habilitado, leer, type Expediente } from '../nucleo/expediente.ts'
 
 const AVISO_DESACTIVADO =
@@ -86,13 +86,7 @@ async function esDirectorio(ruta: string): Promise<boolean> {
 }
 
 /** Argumentos de `escribir`, ya resueltos por el esquema del SDK. */
-type Args = {
-  accion: 'crear' | 'agregar' | 'leer' | 'exportar'
-  id?: string
-  campo?: keyof Expediente
-  texto?: string
-  ruta?: string
-}
+type Args = z.infer<typeof schema>
 
 export async function escribir(args: Args): Promise<string> {
   return `${ALCANCE}\n\n${await cuerpo(args)}`
@@ -165,11 +159,11 @@ async function cuerpo(args: Args): Promise<string> {
       return `No existe el directorio ${padre} para exportar. Créalo antes o pasa otra ruta. No se creó ningún archivo.`
     }
     // Un archivo que ya existe no se reemplaza: se escribe al lado, con sufijo.
-    const destino = await sinColision(pedido)
+    let destino: string
     try {
-      await writeFile(destino, exportar(datos, args.id), 'utf8')
-    } catch {
-      return `No se pudo escribir el expediente ${args.id} en ${destino}. No se creó ningún archivo.`
+      destino = await escribirSinColision(pedido, exportar(datos, args.id))
+    } catch (e) {
+      return `No se pudo escribir el expediente ${args.id} en ${pedido}: ${(e as Error).message}. No se creó ningún archivo.`
     }
     return (
       `Expediente ${args.id} exportado a ${path.resolve(destino)} (${(await stat(destino)).size} bytes).` +

@@ -1,14 +1,29 @@
-import { articulo as extraerArticulo, sinTildes } from './parse.ts'
+import { articulo as extraerArticulo } from './parse/articulos.ts'
+import { sinTildes } from './parse/texto.ts'
 
-/** false si la URL no parsea; true solo si el hostname coincide, sin 'www.' ni puerto. */
+/**
+ * false si la URL no parsea o no es https; true solo si el hostname coincide,
+ * sin 'www.' ni puerto. Sin el protocolo, `javascript://funcionpublica.gov.co/`
+ * pasaba por enlace oficial.
+ */
 export function validarUrl(url: string, dominioEsperado: string): boolean {
-  let hostname: string
+  let u: URL
   try {
-    hostname = new URL(url).hostname
+    u = new URL(url)
   } catch {
     return false
   }
-  return hostname.toLowerCase().replace(/^www\./i, '') === dominioEsperado.toLowerCase().replace(/^www\./i, '')
+  if (u.protocol !== 'https:') return false
+  return u.hostname.toLowerCase().replace(/^www\./i, '') === dominioEsperado.toLowerCase().replace(/^www\./i, '')
+}
+
+/** true si la URL parsea y su parámetro `nombre` vale exactamente `valor` (no basta con contenerlo). */
+export function parametroEs(url: string, nombre: string, valor: string): boolean {
+  try {
+    return new URL(url).searchParams.get(nombre) === valor
+  } catch {
+    return false
+  }
 }
 
 /** Escapa el término para poder usarlo como literal dentro de un RegExp. */
@@ -27,7 +42,7 @@ export function validarNumeroAnio(titulo: string, numero: string, anio?: string)
   return true
 }
 
-/** true si `articulo` de parse.ts encuentra el artículo pedido y trae texto. */
+/** true si `articulo` de parse/articulos.ts encuentra el artículo pedido y trae texto. */
 export function validarArticulo(texto: string, articulo: string): boolean {
   const extraido = extraerArticulo(texto, articulo)
   return extraido !== null && extraido.trim() !== ''
