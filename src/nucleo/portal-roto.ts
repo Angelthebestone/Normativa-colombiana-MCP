@@ -11,6 +11,7 @@
  *     `http.ts`, para que el host quede degradado y se diga cuándo reintentar.
  */
 import { sinTildes } from './parse.ts'
+import { fechaBogota } from './fecha.ts'
 
 /** Número(s) de la norma dentro del epígrafe: "Ley 2021 de 2021" → ["2021"]. */
 export function numeroDelEpigrafe(epigrafe: string): string[] {
@@ -98,14 +99,11 @@ export function diagnosticarRespuesta(
   return { roto: false }
 }
 
-/** YYYY-MM-DD en UTC: la fecha de la copia, sin hora ni zona que la hagan ilegible. */
-export const fechaCorta = (ms: number): string => new Date(ms).toISOString().slice(0, 10)
-
 /**
  * Rótulo obligatorio de una respuesta degradada. Sin esto no se sirve la copia:
  * una degradada sin rotular es peor que un vacío, porque el modelo la lee como
  * si viniera de la fuente en vivo.
  */
 export function rotuloCopia(fuente: string, fechaMs: number): string {
-  return `AVISO: la fuente ${fuente} no respondió; este texto viene de una copia consultada el ${fechaCorta(fechaMs)} y puede no reflejar cambios posteriores.`
+  return `AVISO: la fuente ${fuente} no respondió; este texto viene de una copia consultada el ${fechaBogota(new Date(fechaMs))} y puede no reflejar cambios posteriores.`
 }

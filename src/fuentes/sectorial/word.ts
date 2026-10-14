@@ -10,7 +10,7 @@
  */
 import { inflateRaw } from 'node:zlib'
 import { pedirBytes } from '../../nucleo/http.ts'
-import type { Adaptador } from '../sectorial.ts'
+import { exigirOrigen, type Adaptador } from '../sectorial.ts'
 
 export type TextoWord = { texto: string; url: string } | { sinTexto: true; url: string }
 
@@ -139,15 +139,7 @@ export async function extraerTextoWord(
 ): Promise<TextoWord> {
   const descargar = deps.pedirBytes ?? pedirBytes
 
-  let dominio: URL
-  try {
-    dominio = new URL(url)
-  } catch {
-    throw new Error(`Enlace Word inválido: ${url}.`)
-  }
-  if (dominio.origin !== new URL(a.dominioPermitido).origin) {
-    throw new Error(`El enlace Word no pertenece al dominio permitido de ${a.nombre} (${a.dominioPermitido}).`)
-  }
+  exigirOrigen(a, url)
 
   const r = await descargar(
     url,

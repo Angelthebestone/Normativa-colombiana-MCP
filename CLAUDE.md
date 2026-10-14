@@ -1,81 +1,105 @@
-# Instrucciones del proyecto
+For any AI or human agent. This is law. Optimized for high-quality, maintainable, efficient systems in any language.
 
-## Criterio al escribir código
 
-Rige para **todos los agentes**: para mí y para cualquier subagente. Cada punto está aquí porque su ausencia ya costó algo en este repo.
+### 1. ARCHITECTURE & MODULARITY
 
-- **Borrar el camino viejo, no envolverlo.** Cuando el enlace permanente del Consejo de Estado resultó equivalente al postback de WebForms, se sustituyó entero en vez de dejar los dos. Nada de capas de compatibilidad, respaldos ni migraciones para conservar lo que ya no hace falta.
-- **La implementación más simple que cumpla el requisito de hoy.** Se descartó empaquetar el corpus en SQLite con FTS5 —dependencia nativa y un snapshot que envejece— porque el requisito real se cubría consultando en vivo. Sin abstracciones especulativas ni configuración para valores que no cambian.
-- **Crecer por capas, sin romper lo que ya sirve.** Primero cuatro reguladores funcionando de extremo a extremo, después diez encima. Nunca cambiar un producto que funciona por complejidad a medio terminar.
-- **Un módulo por responsabilidad.** Una fuente, un fichero en `src/fuentes/`. Cuando diez fuentes resultaron tener la misma forma, se les dio un contrato común (`src/fuentes/sectorial.ts`) en lugar de diez herramientas casi iguales.
-- **Reutilizar lo que ya está instalado antes de escribir nada.** `pedir` de `src/nucleo/http.ts` para todo HTTP y `cargar` de `src/nucleo/parse.ts` para HTML: traen ritmo por dominio, reintentos, decodificación y cadena de certificados. Un `fetch` directo se salta las cuatro cosas. Comprobar la documentación y los tipos de una dependencia antes de dar por hecho que le falta algo.
-- **Decidir para el largo plazo.** El contrato `Adaptador` se escribió antes que los adaptadores, y por eso diez subagentes en paralelo produjeron piezas que encajan. Un apaño pensado para reemplazarse después se queda para siempre.
-- **Cuando el atajo es deliberado, se marca.** Comentario `ponytail:` diciendo cuál es el techo y cuál sería el salto siguiente.
+**The Golden Rule: Package by Feature, NEVER by Type.**
 
-## Command Code como subagente
+- **FORBIDDEN:** `src/utils/`, `src/helpers/`, `src/common/`, `src/models/`, `src/controllers/`, `src/managers/`. If you create `utils`, you failed to name the domain.
+- **REQUIRED - Screaming Architecture:** src/
+billing/ # Business capability
+domain/ # Pure business logic, zero dependencies
+application/ # Use cases / Services
+infrastructure/ # DB, API clients, adapters
+presentation/ # HTTP handlers, CLI
+users/
+- **Dependency Rule:** `domain` -> knows nothing. `application` -> depends on domain ports. `infrastructure` -> implements ports. Dependencies point INWARD.
+- **Principles:** SOLID, High Cohesion / Low Coupling, Composition over Inheritance, Law of Demeter (no `a.b().c().d()`), Immutability by default.
+- **File Size:** Max 300 lines. One concept per file. If file needs `And` in its name, split it.
+- **No God Objects, No Singletons with mutable state.**
+### 2. NAMING - Architecture is Naming
 
-Se invoca como **`cmdc`** (el nombre corto) o `command-code`; `commandcode` es otro alias. Están en el PATH.
-**No uses `cmd`**: aunque el paquete registra ese alias, en Windows lo tapa el `cmd.exe` del sistema y lanzarlo abre un intérprete de órdenes en vez del agente.
+- **Folders = Business Nouns:** `orders/`, `payments/` GOOD. `misc/` BAD.
+- **Files = Domain Concepts:** `order_validator`, `payment_processor` GOOD. `helper`, `util`, `manager` BAD.
+- **Functions = Verbs + Intent:** `calculateTotalWithTax()` GOOD. `doCalc()`, `process()`, `handle()` BAD.
+- **Booleans = Questions:** `isPaid`, `hasAccess`, `canCheckout`.
+- **Constants:** No magic numbers. `if status == 2` FORBIDDEN. `if status == OrderStatus.PAID` REQUIRED.
+- **Consistency:** `getUser` OR `fetchUser`, never both. `snake_case` or `camelCase` per language, but consistent.
 
-```
-cmdc -p "tarea" -n nombre-sesion --trust --yolo --skip-onboarding --effort high
-```
+### 3. CODE QUALITY & ANTI-DRY
 
-### Cuándo usarlo
+- **DRY - Zero Tolerance for Duplication:** 3 lines duplicated twice = extract to domain function.
+- **KISS & YAGNI:** Don't abstract prematurely. Don't build for "future". Simplest solution that satisfies behavior wins.
+- **Functions:** Max 3 params (else use DTO), Max 1 indent level (use guard clauses `if !valid { return err }`), Cyclomatic Complexity < 10.
+- **No `else` hell, no nested loops > 2 levels.**
 
-- **Antes que mis propios subagentes.** Si hacen falta cinco, **cuatro van en Command Code** y uno en los míos.
-- **También para retroalimentación.** No solo para producir: pedirle que critique un cambio hecho, que busque el fallo que se me pasó o que revise una decisión de diseño. Funciona: revisando este mismo documento detectó una afirmación falsa sobre su propio catálogo de modelos.
+### 4. EFFICIENCY & PERFORMANCE
 
-### Lo que no se toca
+- **Choose Data Structures Consciously:** Default to O(1) lookups (Map/Set). Document Big O in comment for any core logic.
+- **Resource Efficiency:** No allocations in hot loops, no N+1 queries, use `with_capacity`, connection pools, streaming for large datasets.
+- **No Premature Optimization, but No Pessimization:** Measure before optimizing. Add performance budget: p95 < 200ms for API, no O(n^2) in request path.
+- **Concurrency:** Atomics > Mutex for counters. No `Mutex` inside async. No blocking IO (`sleep`, `fs.readSync`) in async path. Use `spawn_blocking`.
+- **Idempotency:** All operations that can be retried MUST be idempotent.
 
-- **El modelo se queda en DeepSeek V4 Flash**, que es el de por defecto. Nada de `-m` / `--model`.
-  Comprobado ejecutándolo el 2026-08-03 con la v1.9.0 instalada, porque es fácil equivocarse en las dos direcciones: el catálogo **sí** incluye modelos de Anthropic y OpenAI, pero `--model claude-sonnet-5` responde **403 `MODEL_NOT_IN_PLAN`** (exige plan Pro) y `--model sonnet` responde **`unknown model`** porque ese alias corto no existe. Si alguien afirma lo contrario citando documentación, vuelve a ejecutarlo antes de creerlo: la documentación del catálogo y el binario no coinciden.
-- **El tope de turnos no se establece.** Nada de `--max-turns`; se queda en 100. La consecuencia hay que asumirla al encargar, no al ejecutar: **trocear la tarea para que quepa**. Dos entidades por lote entraron; cinco no habrían entrado.
+### 5. DATA & API DESIGN
 
-### Lo que sí se ajusta
+- **API Design:** REST must be resource-oriented, paginated (`cursor` not `offset`), versioned (`/v1/`), and idempotent (`Idempotency-Key`). Use DTOs, never expose domain entities directly.
+- **Data Modeling:** Model invariants in types, not in comments. Use value objects. DB schema changes require migrations, never manual edits.
+- **Configuration - 12 Factor:** No hardcoded config. Use env vars. Config fails fast on startup.
+- **Feature Flags:** New behavior behind flags, not `if` branches commented.
 
-- **`--effort`**, entre `high` y `max` según la tarea. `max` para diseño, depuración esquiva o revisión crítica; `high` para trabajo mecánico y acotado. La ayuda del binario solo documenta hasta `high`, pero **`max` funciona** y confirma con `Reasoning effort set to max`.
+### 6. ERROR HANDLING, SECURITY, OBSERVABILITY
 
-### Continuidad de sesión
+- **Errors:** Typed domain errors `Result<T, DomainError>`. Library = `thiserror`, App = `anyhow` with context. NEVER `panic!`, `unwrap()` in lib, empty `catch`.
+- **Security - OWASP:** Validate all inputs at boundary. No secrets in code/logs. No SQL/NoSQL injection (use parameterized queries). Principle of Least Privilege. Run `cargo audit` / `npm audit`.
+- **Observability:** No `print`. Use structured logging `tracing`/`pino`. Log context `{orderId, userId}`, not strings. Metrics for business events, traces for request flow. Never log PII.
 
-Cada invocación con `-p` arranca **en frío**: sin `--resume` no hay nada del hilo anterior, y el aprendizaje de preferencias está apagado (`.commandcode/settings.json`), así que tampoco queda poso entre sesiones. Con `--resume`, en cambio, el hilo sigue entero. Si la segunda petición necesita el contexto de la primera, se reanuda:
+### 7. TESTING - THE MOST IMPORTANT SECTION
 
-```
-cmdc -p "primera tarea" -n adaptadores-salud --trust --yolo --skip-onboarding
-cmdc -p "ahora corrige X" --resume adaptadores-salud --trust --yolo --skip-onboarding
-```
+**TEST BEHAVIOR, NOT IMPLEMENTATION. THIS IS LAW.**
 
-- `-n <nombre>` nombra la sesión al crearla; `--resume <nombre>` la retoma con el hilo intacto (verificado: recordó un dato de la petición anterior).
-- `--continue` retoma la última sin nombrarla. `--fork-session` la bifurca sin tocar la original.
-- Abrir una sesión nueva para seguir el mismo trabajo obliga a reexplicarlo todo y se paga en contexto.
+- **FORBIDDEN:** Testing private methods, asserting `mockRepo.save.calledOnce`, testing internal state.
+- **REQUIRED:** Test public observable behavior: `Given [state] When [action] Then [observable output/side effect]`.
 
-### Banderas que hacen falta
+**Testing Matrix:**
+- **Unit:** Domain logic only. Fast, deterministic, no IO. Use Given-When-Then: `should_reject_order_when_cart_empty`
+- **Integration:** Test Port + Adapter (e.g., Real DB via testcontainers, Real API client). Verify wiring.
+- **Contract/E2E:** Critical user flows only.
 
-| Bandera | Para qué |
-|---|---|
-| `-p "tarea"` | Modo no interactivo. Obligatoria como subagente. |
-| `-n <nombre>` / `--resume <nombre>` | Nombrar la sesión y retomarla después. |
-| `-c, --continue` | Retomar la última sesión sin haberla nombrado. |
-| `--trust` | Evita el aviso de confianza del proyecto. |
-| `--yolo` | Salta los permisos. Necesaria si va a escribir ficheros sin supervisión. |
-| `--skip-onboarding` | Evita el asistente de «taste» en ejecuciones automáticas. |
-| `--output-format json` | Flujo NDJSON de eventos **más una última línea con el resultado**. Solo si vas a parsear; en modo texto la cola de la salida ya es el informe final y se lee mejor. |
-| `--add-dir` / `-w, --worktree` | Contexto extra; aislarlo del árbol de trabajo. |
+**Rules:** Tests must be deterministic, isolated, < 100ms for unit. No `sleep`, no network in unit tests. Use Fakes, not excessive Mocks.
 
-No envolver la llamada en `timeout`: corta la ejecución a media tarea. Para trabajos largos, lanzarla en segundo plano y recoger el informe cuando avise.
+### 8. DEPENDENCIES & TOOLING
 
-### Lo aprendido usándolo
+- **No new dependency for a 10-line problem.** Check stdlib first.
+- **Lockfiles committed.** Minimal dependency tree.
+- **Devex:** `format`, `lint`, `typecheck`, `test` must pass before done.
 
-- **El código de salida no prueba nada.** Con `--model sonnet` terminó en **exit 0** habiendo fallado por completo; el error solo estaba en la salida. Leer siempre la salida.
-- **Los 100 turnos se agotan y el trabajo queda a medias**, con un aviso al final que es fácil pasar por alto. Ya dejó un adaptador sin la nota que él mismo había decidido añadir.
-- **Sus informes no se dan por buenos.** Entregó dos adaptadores reportados como verificados que ignoraban el parámetro `limite` y devolvían la tabla entera. Regla: **si escribió código, se reejecuta contra la fuente real antes de integrarlo**; si solo opinó (revisión, crítica), se verifica lo que afirme antes de actuar. Su crítica de este documento acertó en el catálogo de modelos y se equivocó en el detalle, y solo se supo comprobándolo.
-- **Escribe `.commandcode/` en el proyecto.** Ya está en `.gitignore`; no commitearlo.
+### 9. DOCUMENTATION & GIT
 
-### Cómo se le encarga una tarea
+- **Comments explain WHY, not WHAT.** If WHAT needs comment, rename.
+- **Public API:** Must have docstring with runnable example.
+- **Git:** Conventional Commits `feat:`, `fix:`, `refactor:`. Small atomic PRs. One PR = One concern. PR explains WHY, not WHAT.
 
-1. **Los ficheros exactos que debe escribir, y prohibirle el resto.** Con varios en paralelo es lo único que evita que se pisen.
-2. **El contrato contra el que programar** (la interfaz o el tipo), no una descripción en prosa.
-3. **Un fichero del repo como modelo de estilo.** `src/fuentes/anh.ts` para una fuente nueva. Las fuentes viven una por fichero en `src/fuentes/`; las sectoriales, en `src/fuentes/sectorial/` y se dan de alta en `registro.ts`.
-4. **Los comandos de verificación del repo**, o inventará los suyos: `npm run typecheck`, `npm run lint`, `npm test` y `npm run test:e2e` (`npm run check` los encadena). Las pruebas marcadas `RED` consultan portales reales; `SIN_RED=1` las salta.
-5. **La obligación de verificar**: un script temporal **fuera del repo**, ejecutado contra la fuente real, con números medidos en el informe.
-6. **Una cláusula de honestidad explícita**: si algo no es viable, que lo diga con evidencia —URL, código HTTP, qué vio— en vez de inventar un parser que falle en silencio. Sin esa cláusula, rellena huecos.
+### 10. DEFINITION OF DONE & SELF-REVIEW CHECKLIST
+
+Before you say "done", check:
+
+- [ ] Package by Feature respected? No `utils/`?
+- [ ] Naming screams business intent? No `manager`, `data`, `helper`?
+- [ ] No duplication? No magic numbers?
+- [ ] DRY, KISS, SOLID respected? File < 300 lines? Function < 50 lines?
+- [ ] Efficiency: Big O considered? No N+1? No blocking in async?
+- [ ] Errors typed with context? No `unwrap`/`panic` in prod?
+- [ ] Security: inputs validated? No secrets?
+- [ ] Tests verify BEHAVIOR (input->output) not implementation (mock calls)? Happy + Error + Edge covered?
+- [ ] `fmt`, `lint`, `test`, `audit` green?
+- [ ] No debug logs left?
+
+### 11. PROHIBITED
+
+1. Creating `utils`, `common`, `helpers` folders.
+2. `any`, `Object`, `interface{}` to bypass types.
+3. `console.log` / `println!` debug code.
+4. Copy-paste instead of reusing domain.
+5. Testing implementation details.
+6. God files, God functions, boolean trap `do(true, false)`.

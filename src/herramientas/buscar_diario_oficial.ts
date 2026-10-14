@@ -16,6 +16,7 @@ import { z } from 'zod'
 
 import { estricto } from '../nucleo/normalizar.ts'
 import { BASE, MAXIMO, TIPOS, buscar, fechaPortal, type Resultado } from '../fuentes/diario_oficial.ts'
+import { fechaBogota } from '../nucleo/fecha.ts'
 
 export const TITULO = 'Buscar en el Diario Oficial (Imprenta Nacional)'
 
@@ -56,15 +57,8 @@ export const schema = estricto(esquema.shape)
 
 type Params = z.infer<typeof esquema>
 
-/**
- * Fecha de hoy en el formato del portal, para la nota de lo que puede faltar.
- * No se importa el `hoy()` de `index.ts`: ese módulo importa este, y la vuelta
- * sería circular.
- */
-const hoy = (): string => {
-  const d = new Date()
-  return `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`
-}
+/** Fecha de hoy en Colombia en el formato del portal, para la nota de lo que puede faltar. */
+const hoy = (): string => fechaBogota().split('-').reverse().join('/')
 
 /** Los filtros, en prosa, para que la respuesta diga con qué se buscó. */
 function conQue(p: Params, desde: string | null, hasta: string | null): string {

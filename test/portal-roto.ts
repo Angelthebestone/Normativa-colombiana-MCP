@@ -11,7 +11,6 @@ import type { pedir, Respuesta } from '../src/nucleo/http.ts'
 import {
   advertenciaPortalRoto,
   diagnosticarRespuesta,
-  fechaCorta,
   numeroDelArchivo,
   numeroDelEpigrafe,
   rotuloCopia,
@@ -128,7 +127,6 @@ test('portal roto: la página de mantenimiento y el 503 sí marcan', () => {
 
 test('rótulo de copia: dice la fuente y la fecha, que es lo que el modelo necesita para no confundirla con la fuente viva', () => {
   const ms = Date.UTC(2026, 8, 16, 5, 6, 52)
-  assert.equal(fechaCorta(ms), '2026-09-16')
   const rotulo = rotuloCopia('normograma.dian.gov.co', ms)
   assert.match(rotulo, /normograma\.dian\.gov\.co/)
   assert.match(rotulo, /2026-09-16/)
