@@ -12,6 +12,7 @@ import * as suin from '../fuentes/suin.ts'
 import { caracterDelNivel, tipoANivel } from '../nucleo/jerarquia.ts'
 import { fragmentos, historial, sinTildes } from '../nucleo/parse.ts'
 import { activa, alcance } from '../nucleo/alcance.ts'
+import { fechaBogota } from '../nucleo/fecha.ts'
 
 export const TITULO = 'Analizar un posible conflicto entre dos normas'
 
@@ -46,9 +47,6 @@ export const schema = estricto({
 
 /** Entrada del cliente: `formato` llega opcional (tiene default). */
 type Parametros = z.input<typeof schema>
-
-/** Fecha de la consulta en AAAA-MM-DD: la que el envoltorio ya no añade en modo json. */
-const hoy = () => new Date().toISOString().slice(0, 10)
 
 /**
  * Las dos advertencias de cierre. En markdown van al pie; en json, dentro de
@@ -246,7 +244,7 @@ export async function escribir(params: Parametros): Promise<string> {
   // y las advertencias de cierre en `avisos`; sin cabecera ni pie.
   if (formato === 'json') {
     return JSON.stringify({
-      fecha_consulta: hoy(),
+      fecha_consulta: fechaBogota(),
       alcance: cabecera,
       ...(sobre ? { sobre } : {}),
       evidencias: [evA, evB],

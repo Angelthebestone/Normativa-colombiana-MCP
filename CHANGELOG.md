@@ -5,8 +5,14 @@ Este proyecto sigue [versionado semántico](https://semver.org/lang/es/).
 
 ## [Sin publicar]
 
+### Cambiado
+
+- **`resolver_cita` rechaza `cita` y `citas` a la vez**, con `validar` o sin él, antes de consultar ninguna fuente («Usa cita (una) o citas (un lote), no las dos»). Antes el lote mandaba y la cita suelta se descartaba con un aviso (o en silencio, con `validar: true`).
+- **El lote `citas` lleva entre 1 y 20 citas** (`MAX_LOTE`), en `resolver_cita` y en `validar_cita`. El esquema publica `minItems`/`maxItems`; un lote vacío o de 21 es un error de esquema que dice el tope. Un escrito con más citas se valida en varias llamadas.
+
 ### Corregido
 
+- **Las fechas que ve el usuario son las de Colombia**, no las de UTC ni las de la zona del host: el pie «Consulta del…», `fecha_consulta` en json, la fecha de una copia servida sin red, el «hoy» del Diario Oficial, el año en curso por defecto de CREG, Superfinanciera y Supertransporte, y el día contra el que la vacancia decide si una norma ya entró en vigor. Antes, de 19:00 a medianoche de Bogotá la consulta salía fechada al día siguiente. Una sola función, `fechaBogota` (`src/nucleo/fecha.ts`); los timestamps técnicos de los logs siguen en UTC.
 - **`expediente` ya no confirma una persistencia que no ocurrió.** Con `EXPEDIENTES_DIR`, un fallo de escritura (permisos, disco lleno, ruta que no es directorio) se tragaba y `crear`/`agregar` respondían éxito con el expediente solo en memoria. Ahora la llamada falla con el motivo y el cambio no se aplica tampoco en memoria. Cada guardado escribe en un temporal, lo sincroniza y lo renombra sobre `<id>.json`, así que un cierre a mitad deja el archivo anterior y no uno truncado.
 - **Las descargas ya no escriben `.prueba-escritura`.** La comprobación previa de permisos truncaba un archivo del usuario con ese nombre y dejaba el auxiliar en la carpeta. El error de escritura se informa ahora desde la escritura real.
 - **Dos escrituras simultáneas al mismo nombre ya no se pisan.** Descargas, `obtener_documento` con `entero`/`ruta_destino` y `expediente` con `exportar` reservan el nombre al abrirlo con creación exclusiva; ante un archivo existente prueban el siguiente sufijo. Antes comprobaban que el nombre estaba libre y escribían después, y dos llamadas podían elegir el mismo.

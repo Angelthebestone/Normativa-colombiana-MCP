@@ -36,13 +36,12 @@ import * as obtenerDocumento from './herramientas/obtener_documento.ts'
 import { redResumen, VERSION } from './nucleo/http.ts'
 import { avisoVersion } from './nucleo/actualizacion.ts'
 import './fuentes/sectorial/registro.ts'
+import { fechaBogota } from './nucleo/fecha.ts'
 
-
-const hoy = () => new Date().toISOString().slice(0, 10)
 
 /** Toda respuesta sale fechada y con el descargo: es la fuente lo que la hace útil. */
 const txt = (s: string) => ({
-  content: [{ type: 'text' as const, text: `${s}\n\nConsulta del ${hoy()}. ${DESCARGO}${avisoVersion()}` }],
+  content: [{ type: 'text' as const, text: `${s}\n\nConsulta del ${fechaBogota()}. ${DESCARGO}${avisoVersion()}` }],
 })
 
 // --- índice temático empaquetado -----------------------------------------
