@@ -73,3 +73,40 @@ test('el veredicto guardado caduca a los cinco minutos', async () => {
     mock.timers.reset()
   }
 })
+
+/** Captura los argumentos con los que se sondea, para mirar la ventana de fechas. */
+function espia(items: { sentencia: string }[]) {
+  const recibidas: { termino: string; desde?: string; hasta?: string }[] = []
+  const buscar = (async (o: { termino: string; desde?: string; hasta?: string }) => {
+    recibidas.push(o)
+    return { items }
+  }) as unknown as Buscar
+  return { recibidas, buscar }
+}
+
+/**
+ * La ventana es el año de la cita. Sin acotar, el buscador —que es de texto
+ * completo— devuelve las providencias que la MENCIONAN y no la providencia, y
+ * el sondeo concluía «no-existe» sobre sentencias que sí están: medido el
+ * 2026-10-15, «T-406/92» daba 51 aciertos ajenos y «T-760/08», 254.
+ */
+test('el sondeo acota la búsqueda al año de la cita', async () => {
+  const e = espia([{ sentencia: 'T-406/92' }])
+  const v = await verificar('T-406/92', { buscar: e.buscar })
+  assert.equal(v.estado, 'existe')
+  assert.deepEqual(
+    e.recibidas.map((r) => [r.desde, r.hasta]),
+    [['1992-01-01', '1993-01-01']],
+    'un solo sondeo, acotado a 1992',
+  )
+})
+
+test('una cita sin año no acota: no hay año con el que acotar', async () => {
+  const e = espia([])
+  const v = await verificar('T-407', { buscar: e.buscar })
+  assert.equal(v.estado, 'no-existe')
+  assert.ok(
+    e.recibidas.every((r) => r.desde === undefined && r.hasta === undefined),
+    'ningún sondeo lleva ventana',
+  )
+})

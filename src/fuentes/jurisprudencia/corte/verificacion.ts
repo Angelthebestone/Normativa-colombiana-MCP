@@ -27,6 +27,24 @@ function formasDeSondeo(sentencia: string): string[] {
 }
 
 /**
+ * La ventana de fechas del sondeo: el año de la cita, no el buscador entero.
+ *
+ * Son 30 años de relatoría (1992→2100) y el buscador es de TEXTO COMPLETO: sin
+ * acotar, el número de la sentencia se busca en el texto de todas las demás, y
+ * la providencia buscada no sale. Medido el 2026-10-15, con la ventana completa
+ * y `maxprov` 20: «T-406/92» 51 aciertos, «T-760/08» 254, «T-025/04» 314, y en
+ * ninguno está la providencia —que sí está en el sitio, su ruta responde 200—
+ * así que el sondeo concluía «no-existe» sobre sentencias reales. Con la ventana
+ * del año exacto los mismos términos dan 1, 4 y 3 aciertos y la providencia está
+ * entre ellos. Se probaron 16 sentencias y autos de 1992 a 2026: 16 aciertan con
+ * la ventana corta, 12 fallan sin ella. El peor caso de ruido baja a 12, cómodo
+ * bajo el tope de 20.
+ */
+function ventanaDe(anio: string | undefined): { desde?: string; hasta?: string } {
+  return anio ? { desde: `${anio}-01-01`, hasta: `${Number(anio) + 1}-01-01` } : {}
+}
+
+/**
  * Veredictos firmes de `verificar`, guardados un rato. Una búsqueda no se revalida
  * como una copia de documento, y sin esto volver a preguntar por la misma sentencia
  * paga otra vez todos los sondeos: medido el 2026-09-29, C-337/11 costaba +2
@@ -82,10 +100,11 @@ export async function verificar(
   const clave = `corte:verificar:${objetivo}`
   const guardado = obtener(clave) as VerificacionSentencia | null
   if (guardado) return guardado
+  const ventana = ventanaDe(parsearCita(sentencia)?.anio)
   try {
     for (const forma of formasDeSondeo(sentencia)) {
       sondeos.push(forma)
-      const { items } = await (deps.buscar ?? buscar)({ termino: forma, limite: 20 })
+      const { items } = await (deps.buscar ?? buscar)({ termino: forma, limite: 20, ...ventana })
       const p = items.find((x) => identidad(x.sentencia) === objetivo)
       if (p) return recordar(clave, { estado: 'existe', providencia: p, sondeos })
     }
