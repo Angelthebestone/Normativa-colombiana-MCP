@@ -3,6 +3,28 @@
 Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/).
 Este proyecto sigue [versionado semántico](https://semver.org/lang/es/).
 
+## [1.16.1] — 2026-10-15
+
+**Tres falsos que costaban caro: una sentencia declarada inexistente, el Diario Oficial caído entero y un 500 disfrazado de mantenimiento.** Sin parámetros nuevos ni retirados.
+
+### Corregido
+
+- **La Corte ya no declara inexistentes sentencias que existen.** La relatoría busca en TEXTO COMPLETO sobre 30 años, así que buscar una sentencia por su número devolvía las providencias que la MENCIONAN y no ella: `resolver_cita` con «T-406/92» respondía «No existe ninguna providencia con el número T-406/92 en la relatoría», que es falso. Ahora el sondeo acota la ventana a fini/ffin del año de la cita, que es lo que hace aparecer el registro. Medido el 2026-10-15: con la ventana completa fallaban «T-406/92» (51 aciertos ajenos), «T-760/08» (254), «C-355/06» (28) y «T-025/04» (314); con la del año exacto aciertan 16 de 16 sentencias y autos probados, de 1992 a 2026. No se gasta ninguna petición de más: son los mismos tres sondeos. La ruta negativa sigue intacta (`T-9999/99` y `C-9999/11` se siguen declarando inexistentes). Aviso para quien retome esto: **la relatoría responde 200 a cualquier ruta** —un soft-404 de 8,6 KB contra los 160 KB de `T-406-92.htm`—, así que la existencia no se puede deducir del código de respuesta; la prueba es que el registro aparezca en el índice.
+- **`buscar_diario_oficial` vuelve a responder.** El portal rotó su certificado hoja el 2026-10-08 y lo sirve sin el intermedio, así que Node fallaba con «unable to verify the first certificate». Se añade el intermedio «SSL.com TLS Issuing RSA CA R1» a la lista de CA —la raíz que lo firma ya viene con Node— como ya se hacía con funcionpublica.gov.co, suin-juriscol.gov.co, sic.gov.co y corteconstitucional.gov.co. La verificación del certificado sigue activa.
+- **Un «?» o un «&» en la búsqueda del Gestor ya no acaba en «el portal a veces está en mantenimiento».** Esos dos signos hacen que el buscador del portal responda 500 —medido el 2026-10-15, sueltos o dentro de una palabra, mientras «¿», «#» y «%» responden 200— y `limpiarTermino` ya quitaba comillas, `<>`, `;`, `%` y `\` pero no estos dos. El mensaje mandaba a reintentar para siempre en vez de decir que el término era el problema.
+
+### Verificado
+
+| | antes | después |
+|---|---|---|
+| `resolver_cita` «T-406/92» | «no existe ninguna providencia» | resuelta, con fecha, ponente y expediente |
+| aciertos ajenos del sondeo (T-406/92 · T-760/08 · C-355/06 · T-025/04) | 51 · 254 · 28 · 314 | 1 · 4 · 2 · 3 |
+| sentencias y autos probados que aciertan | 12 de 16 | 16 de 16 |
+| peor caso de ruido del sondeo (tope 20) | 314 | 12 |
+| `buscar_diario_oficial` | «unable to verify the first certificate» | responde |
+| `buscar_normas` con «ÁÉÍÓÚ ¿? \<script\>» | 500 del Gestor | vacío declarado |
+| suite completa | 577 de 579 | 579 de 579 |
+
 ## [1.16.0] — 2026-10-14
 
 **SUIN-Juriscol alineado con su portal de octubre de 2026, y dos ministerios nuevos.** Medido el 2026-10-14 contra `lexis.minjusticia.gov.co/buscador/Detallado/{1,2,3}` (reglamentos técnicos, jurisprudencia y normas).
