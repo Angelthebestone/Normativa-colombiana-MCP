@@ -149,6 +149,10 @@ test('las stopwords se descartan: son las que inundan el resultado', () => {
 test('el saneamiento quita lo que hace fallar al portal con 500', () => {
   assert.equal(limpiarTermino('Ley 80 "de 1993"'), 'Ley 80 de 1993')
   assert.equal(limpiarTermino("<script>'x'"), 'script x')
+  // El «?» y el «&» son 500 medidos del buscador del Gestor (2026-10-15), no
+  // una precaución de simetría.
+  assert.equal(limpiarTermino('¿teletrabajo?'), '¿teletrabajo')
+  assert.equal(limpiarTermino('renta & complementarios'), 'renta complementarios')
 })
 
 test('sinTildes conserva la longitud, para poder cortar por índice', () => {

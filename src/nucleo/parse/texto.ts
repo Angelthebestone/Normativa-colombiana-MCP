@@ -28,6 +28,14 @@ export const normalizarRotulo = (s: string): string =>
     return /[A-ZÁÉÍÓÚÑ]/.test(resto) && resto === resto.toUpperCase() ? palabra.toUpperCase() : palabra
   })
 
-/** Ambos portales devuelven error ante comillas y signos de control en los términos. */
+/**
+ * Ambos portales devuelven error ante comillas y signos de control en los términos.
+ *
+ * «?» y «&» no entran por simetría: entran porque el buscador del Gestor
+ * responde 500 con ellos. Medido el 2026-10-15 contra `funajax.php`, con
+ * `palabras=?`, `palabras=&` y con el signo dentro de una palabra; en cambio
+ * «¿», «#» y «%» responden 200. Sin sacarlos, una búsqueda con «?» acababa en
+ * un error que culpaba al portal de estar en mantenimiento.
+ */
 export const limpiarTermino = (s: string): string =>
-  s.replace(/["'<>;%\\]/g, ' ').replace(/\s+/g, ' ').trim()
+  s.replace(/["'<>;%\\?&]/g, ' ').replace(/\s+/g, ' ').trim()
