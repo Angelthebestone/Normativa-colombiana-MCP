@@ -2,17 +2,17 @@ import { request as pedirHttps } from 'node:https'
 import { pipeline, type Readable } from 'node:stream'
 import { rootCertificates } from 'node:tls'
 import { createGunzip, createInflate } from 'node:zlib'
-import { GLOBALSIGN_OV, GODADDY_G2, SECTIGO_EV, SECTIGO_OV } from '../ca.ts'
+import { GLOBALSIGN_OV, GODADDY_G2, SECTIGO_EV, SECTIGO_OV, SSLCOM_TLS_ISSUING_R1 } from '../ca.ts'
 
 /**
  * Raíces de Node más los intermedios que funcionpublica.gov.co,
- * suin-juriscol.gov.co, sic.gov.co y corteconstitucional.gov.co omiten. La
- * verificación del certificado sigue ACTIVA: solo se completa una cadena que
- * el servidor envía incompleta.
+ * suin-juriscol.gov.co, sic.gov.co, corteconstitucional.gov.co y
+ * svrpubindc.imprenta.gov.co omiten. La verificación del certificado sigue
+ * ACTIVA: solo se completa una cadena que el servidor envía incompleta.
  * Nunca usar rejectUnauthorized:false — este MCP entrega información legal y
  * la autenticidad de la fuente es parte del producto.
  */
-const CA = [...rootCertificates, SECTIGO_OV, SECTIGO_EV, GLOBALSIGN_OV, GODADDY_G2]
+const CA = [...rootCertificates, SECTIGO_OV, SECTIGO_EV, GLOBALSIGN_OV, GODADDY_G2, SSLCOM_TLS_ISSUING_R1]
 
 /** esbuild la sustituye desde package.json; sin empaquetar no existe. */
 declare const __VERSION__: string | undefined
