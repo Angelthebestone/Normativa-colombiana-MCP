@@ -54,3 +54,4 @@ calificaciones-glama.md
 # proyecto. En 1.15.2 se coló .kilo/worktrees/season-barometer con los índices
 # duplicados y la extensión pasó de 1,5 a 2,3 MB.
 .kilo/
+qa-*.ts
