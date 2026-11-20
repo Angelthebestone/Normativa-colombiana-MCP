@@ -49,7 +49,13 @@ test('el formulario del portal se lee entero y sin los botones de fila', () => {
   assert.match(campos['javax.faces.ViewState'] ?? '', /^-?\d+:-?\d+$/)
   // Los botones «Ver Diario» de cada fila NO viajan: enviados, el portal abre el
   // detalle de la última fila en vez de buscar (medido).
-  assert.equal(Object.keys(campos).filter((c) => /j_idt34|btnBuscar|Cancelar/.test(c)).length, 0)
+  assert.equal(Object.keys(campos).filter((c) => /:\d+:j_idt\d+|btnBuscar|Cancelar/.test(c)).length, 0)
+})
+
+test('los botones de fila no viajan aunque JSF los renumere', () => {
+  // El portal pasó de j_idt34 a j_idt35 el 2026-11-19 y la búsqueda abrió un detalle.
+  const renumerado = BASE_HTML.replaceAll('j_idt34', 'j_idt35')
+  assert.equal(Object.keys(leerFormulario(renumerado).campos).filter((c) => /:\d+:j_idt\d+/.test(c)).length, 0)
 })
 
 test('los códigos del tipo de norma son los del propio portal', () => {
@@ -112,7 +118,7 @@ test('buscar envía solo el botón pulsado y con los filtros pedidos', async () 
   const envio = new URLSearchParams(vistas[1]!.cuerpo)
   assert.equal(envio.get('tipoNorma_input'), '01')
   assert.equal(envio.get('numeroNorma'), '2466')
-  assert.equal([...envio.keys()].filter((k) => k.endsWith(':j_idt34')).length, 0)
+  assert.equal([...envio.keys()].filter((k) => /:\d+:j_idt\d+$/.test(k)).length, 0)
   assert.ok(envio.has('btnBuscar'))
   assert.match(vistas[1]!.extra['Cookie'] ?? '', /JSESSIONID=/)
   assert.equal(vistas[1]!.extra['Content-Type'], 'application/x-www-form-urlencoded')

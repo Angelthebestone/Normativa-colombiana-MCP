@@ -1,8 +1,16 @@
 import { CanarioError } from '../../nucleo/parse/errores.ts'
 import { cargar } from '../../nucleo/parse/limpieza.ts'
 
-/** Botones del formulario: se descartan del cuerpo y solo se añade el pulsado. */
-const BOTONES = /^(?:btnBuscar|botonCancelarBuscar|dtbDiariosOficiales:\d+:j_idt34)$/
+/**
+ * Un botón solo viaja cuando se pulsa. Se reconoce por el elemento y no por el
+ * nombre: los botones «Ver Diario» de cada fila se llaman `...:N:j_idt<k>` con
+ * un número que JSF autogenera y que el portal cambió de 34 a 35 (medido el
+ * 2026-11-19); enviar uno abre el detalle de ese diario en vez del listado.
+ */
+function esBoton(el: { tagName: string; attribs: Record<string, string> }): boolean {
+  if (el.tagName === 'button') return true
+  return el.tagName === 'input' && /^(?:submit|button|image|reset)$/i.test(el.attribs['type'] ?? '')
+}
 
 /**
  * Campos del formulario y `action` de la página. Lanza canario si el portal
@@ -21,7 +29,7 @@ export function leerFormulario(html: string): { action: string; campos: Record<s
   $form.find('[name]').each((_, el) => {
     const $el = $(el)
     const nombre = $el.attr('name')
-    if (!nombre || BOTONES.test(nombre)) return
+    if (!nombre || esBoton(el)) return
     // Un <select> viaja con el valor de su opción marcada, no con el del atributo.
     campos[nombre] =
       el.tagName === 'select'

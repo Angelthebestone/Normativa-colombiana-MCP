@@ -18,7 +18,7 @@
  * Lo que se midió el 2026-09-28, y por qué el código es como es:
  *
  * - **Solo viaja el botón que se pulsa.** El formulario trae un botón por fila
- *   (`dtbDiariosOficiales:N:j_idt34`, «Ver Diario»). Si se envían todos —como
+ *   (`dtbDiariosOficiales:N:j_idt<k>`, «Ver Diario»). Si se envían todos —como
  *   haría quien copie los campos del formulario— el portal no busca: abre el
  *   detalle de la ÚLTIMA fila enviada. Se comprobó: la respuesta de 15.700 bytes
  *   era el detalle del diario 53.631, no la tabla. Por eso `leerFormulario`
