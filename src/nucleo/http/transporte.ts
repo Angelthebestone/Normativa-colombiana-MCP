@@ -1,18 +1,7 @@
 import { request as pedirHttps } from 'node:https'
 import { pipeline, type Readable } from 'node:stream'
-import { rootCertificates } from 'node:tls'
 import { createGunzip, createInflate } from 'node:zlib'
-import { GLOBALSIGN_OV, GODADDY_G2, SECTIGO_EV, SECTIGO_OV, SSLCOM_TLS_ISSUING_R1 } from '../ca.ts'
-
-/**
- * Raíces de Node más los intermedios que funcionpublica.gov.co,
- * suin-juriscol.gov.co, sic.gov.co, corteconstitucional.gov.co y
- * svrpubindc.imprenta.gov.co omiten. La verificación del certificado sigue
- * ACTIVA: solo se completa una cadena que el servidor envía incompleta.
- * Nunca usar rejectUnauthorized:false — este MCP entrega información legal y
- * la autenticidad de la fuente es parte del producto.
- */
-const CA = [...rootCertificates, SECTIGO_OV, SECTIGO_EV, GLOBALSIGN_OV, GODADDY_G2, SSLCOM_TLS_ISSUING_R1]
+import { aprenderCadena, autoridades } from './autoridades.ts'
 
 /** esbuild la sustituye desde package.json; sin empaquetar no existe. */
 declare const __VERSION__: string | undefined
@@ -111,7 +100,37 @@ export class TopeExcedido extends Error {
   }
 }
 
+const TOPE_INTERMEDIO = 16 * 1024
+const PLAZO_INTERMEDIO_MS = 10_000
+
+async function descargarIntermedio(url: URL): Promise<Buffer> {
+  const r = await pedirUnaVez(url.href, PLAZO_INTERMEDIO_MS, '*/*', {}, TOPE_INTERMEDIO)
+  if (r.status !== 200) throw new Error(`el emisor declarado respondió ${r.status}`)
+  return r.datos
+}
+
+const esCadenaIncompleta = (e: unknown): boolean =>
+  e instanceof Error && 'code' in e && (e.code === 'UNABLE_TO_VERIFY_LEAF_SIGNATURE' || e.code === 'UNABLE_TO_GET_ISSUER_CERT_LOCALLY')
+
 export async function crudo(
+  url: string,
+  timeout: number,
+  accept: string,
+  extra: Record<string, string>,
+  tope: number,
+  cuerpo?: string,
+): Promise<Cruda> {
+  try {
+    return await pedirUnaVez(url, timeout, accept, extra, tope, cuerpo)
+  } catch (e) {
+    const { protocol, hostname, port } = new URL(url)
+    if (protocol !== 'https:' || !esCadenaIncompleta(e)) throw e
+    if (!(await aprenderCadena(hostname, Number(port) || 443, descargarIntermedio))) throw e
+    return pedirUnaVez(url, timeout, accept, extra, tope, cuerpo)
+  }
+}
+
+async function pedirUnaVez(
   url: string,
   timeout: number,
   accept: string,
@@ -132,7 +151,7 @@ export async function crudo(
     const req = request(
       url,
       {
-        ca: CA,
+        ca: autoridades(),
         timeout,
         method: cuerpo === undefined ? 'GET' : 'POST',
         headers: {
