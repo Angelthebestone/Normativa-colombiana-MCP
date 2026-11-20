@@ -1,6 +1,6 @@
 # Aviso sobre los contenidos consultados
 
-El código de este proyecto está bajo licencia MIT (ver [LICENSE](LICENSE)). Ese permiso cubre el software, no los contenidos que consulta.
+El código de este proyecto está bajo licencia Apache 2.0 (ver [LICENSE](LICENSE)). Ese permiso cubre el software, no los contenidos que consulta.
 
 ## Origen de los datos
 

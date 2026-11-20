@@ -2,7 +2,7 @@
 
 [![npm](https://img.shields.io/npm/v/normativa-colombia-mcp.svg)](https://www.npmjs.com/package/normativa-colombia-mcp)
 [![descargas npm](https://img.shields.io/npm/dm/normativa-colombia-mcp.svg)](https://www.npmjs.com/package/normativa-colombia-mcp)
-[![Licencia: MIT](https://img.shields.io/badge/licencia-MIT-blue.svg)](LICENSE)
+[![Licencia: Apache-2.0](https://img.shields.io/badge/licencia-Apache--2.0-blue.svg)](LICENSE)
 [![MCP](https://img.shields.io/badge/MCP-servidor-black.svg)](https://modelcontextprotocol.io)
 
 **Normativa Colombia MCP** es un servidor de código abierto del [Model Context Protocol (MCP)](https://modelcontextprotocol.io) para consultar **leyes, decretos, resoluciones, conceptos y jurisprudencia de Colombia** desde Claude, Cursor, VS Code o cualquier asistente de IA, con datos de fuentes oficiales: el Gestor Normativo de la Función Pública, la Corte Constitucional, la Corte Suprema, el Consejo de Estado, SUIN-Juriscol (estado de vigencia), la DIAN y el Diario Oficial. Sin abrir el navegador ni pelear con formularios.
@@ -376,4 +376,4 @@ Para reportar una vulnerabilidad, mira [SECURITY.md](SECURITY.md); no abras un i
 
 ## Licencia
 
-Código bajo licencia MIT (ver [LICENSE](LICENSE)). Sobre los contenidos normativos y el acceso automatizado a los portales, mira [NOTICE.md](NOTICE.md).
+Código bajo licencia Apache 2.0 (ver [LICENSE](LICENSE)). Sobre los contenidos normativos y el acceso automatizado a los portales, mira [NOTICE.md](NOTICE.md).

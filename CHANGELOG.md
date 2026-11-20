@@ -3,6 +3,24 @@
 Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/).
 Este proyecto sigue [versionado semántico](https://semver.org/lang/es/).
 
+## [1.16.2] — 2026-11-19
+
+**El Gestor Normativo, el buscador de SUIN y el Diario Oficial vuelven a responder, y los intermedios TLS que falten se descargan solos.** Sin parámetros nuevos ni retirados. **Cambio de licencia: de MIT a Apache 2.0.**
+
+### Cambiado
+
+- **Licencia Apache 2.0.** El `LICENSE` del repositorio pasó de MIT a Apache 2.0 (29 de octubre de 2026) y esta versión alinea `package.json`, `manifest.json`, el README y `NOTICE.md`. Las versiones anteriores siguen publicadas bajo MIT.
+
+### Corregido
+
+- **El Gestor Normativo y el buscador de SUIN vuelven a responder.** `funcionpublica.gov.co` pasó el 2026-11-06 a un certificado de Let's Encrypt (YR1) y `lexis.minjusticia.gov.co` sirve el suyo sin el intermedio, así que Node fallaba con «unable to verify the first certificate». Se añaden a `ca.ts` los intermedios «Let's Encrypt YR1», la raíz «ISRG Root YR» (firmada de forma cruzada por ISRG Root X1) y «Sectigo OV R36».
+- **`buscar_diario_oficial` devolvía el detalle de un diario en vez del listado.** El portal renumeró un id autogenerado (`j_idt34` pasó a `j_idt35`) y el botón «Ver Diario» de la fila 0 viajaba en la búsqueda. Ahora los botones se descartan por tipo de elemento y no por número.
+
+### Añadido
+
+- **README, descripción y palabras clave orientados a la búsqueda:** título y primer párrafo con lo que se busca, secciones «¿Para qué sirve?» y «Preguntas frecuentes», la lista completa de fuentes, y la descripción y las keywords de npm y de GitHub.
+- **Los intermedios que faltan se descargan solos.** Ante «unable to verify», el transporte lee la URL del emisor que declara el certificado del portal (AIA), la descarga y la acepta solo si la firma una raíz de Node y es una CA, y reintenta una vez. Así una rotación de certificado de un portal ya no exige publicar una versión nueva. La lista fija de `ca.ts` queda como respaldo. Medido el 2026-11-19 sin la lista fija: funcionpublica (2 eslabones), lexis y SUIN (1) responden.
+
 ## [1.16.1] — 2026-10-15
 
 **Tres falsos que costaban caro: una sentencia declarada inexistente, el Diario Oficial caído entero y un 500 disfrazado de mantenimiento.** Sin parámetros nuevos ni retirados.
