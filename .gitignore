@@ -31,11 +31,9 @@ CLAUDE.md
 # openspec/ SÍ se versiona desde v1.11.0: los specs main y el archive de changes
 # son parte de la documentación del proyecto.
 graphify-out/
-AGENTS.md
 GOAL.md
 IDEAS_V2_ADICIONALES.md
 CALIDAD_HERRAMIENTAS_GLAMA.md
-AGENTS.md
 .medidas/  
 command-code-session-6a9ce306.jsonl
 command-code-session-6a9ce306.md
