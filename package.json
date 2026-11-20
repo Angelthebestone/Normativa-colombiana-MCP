@@ -1,7 +1,7 @@
 {
   "name": "normativa-colombia-mcp",
   "version": "1.16.1",
-  "description": "MCP para consultar la normativa y la jurisprudencia colombiana: Gestor Normativo de Función Pública, Corte Constitucional, Corte Suprema, SUIN-Juriscol (vigencia) y normograma de la DIAN",
+  "description": "Servidor MCP de leyes, decretos y jurisprudencia de Colombia: altas cortes, vigencia (SUIN), DIAN y Diario Oficial, para Claude, Cursor y agentes de IA.",
   "license": "MIT",
   "type": "module",
   "scripts": {
@@ -59,17 +59,29 @@
   },
   "keywords": [
     "mcp",
+    "mcp-server",
     "model-context-protocol",
     "claude",
+    "claude-desktop",
+    "cursor",
     "colombia",
     "normativa",
+    "normativa-colombiana",
     "jurisprudencia",
     "legaltech",
+    "legal-ai",
     "derecho",
+    "leyes",
+    "decretos",
+    "sentencias",
+    "corte-constitucional",
+    "corte-suprema",
+    "consejo-de-estado",
+    "funcion-publica",
     "dian",
     "vigencia",
     "tributario",
     "suin",
-    "corte-suprema"
+    "diario-oficial"
   ]
 }

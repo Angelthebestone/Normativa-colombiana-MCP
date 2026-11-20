@@ -1,12 +1,27 @@
-# Normativa Colombia — servidor MCP
+# Normativa Colombia MCP — leyes, decretos y jurisprudencia de Colombia para Claude y agentes de IA
 
 [![npm](https://img.shields.io/npm/v/normativa-colombia-mcp.svg)](https://www.npmjs.com/package/normativa-colombia-mcp)
+[![descargas npm](https://img.shields.io/npm/dm/normativa-colombia-mcp.svg)](https://www.npmjs.com/package/normativa-colombia-mcp)
 [![Licencia: MIT](https://img.shields.io/badge/licencia-MIT-blue.svg)](LICENSE)
 [![MCP](https://img.shields.io/badge/MCP-servidor-black.svg)](https://modelcontextprotocol.io)
 
-Consulta la normativa y la jurisprudencia colombiana desde cualquier asistente de IA que hable [Model Context Protocol](https://modelcontextprotocol.io), sin abrir el navegador ni pelear con formularios.
+**Normativa Colombia MCP** es un servidor de código abierto del [Model Context Protocol (MCP)](https://modelcontextprotocol.io) para consultar **leyes, decretos, resoluciones, conceptos y jurisprudencia de Colombia** desde Claude, Cursor, VS Code o cualquier asistente de IA, con datos de fuentes oficiales: el Gestor Normativo de la Función Pública, la Corte Constitucional, la Corte Suprema, el Consejo de Estado, SUIN-Juriscol (estado de vigencia), la DIAN y el Diario Oficial. Sin abrir el navegador ni pelear con formularios.
 
-Conecta seis fuentes oficiales:
+[Instalación](#instalación) · [Qué puedes preguntar](#qué-puedes-preguntar) · [Preguntas frecuentes](#preguntas-frecuentes) · [Lo que debes saber](#lo-que-debes-saber-antes-de-confiar-en-una-respuesta) · [Para desarrolladores](#para-desarrolladores)
+
+## ¿Para qué sirve?
+
+- **Buscar una ley, un decreto o una resolución colombiana** por su número y año («Ley 909 de 2004», «Decreto 1083 de 2015») y leer su texto y sus artículos.
+- **Saber si una norma está vigente, derogada o modificada**, con el estado que publica SUIN-Juriscol del Ministerio de Justicia y un nivel de confianza.
+- **Encontrar jurisprudencia:** sentencias y autos de la Corte Constitucional, providencias de la Corte Suprema (tutelas, civil, laboral y penal) y del Consejo de Estado.
+- **Leer los códigos por su nombre:** «art. 191 del Código de Comercio», Código Civil, Penal, Sustantivo del Trabajo, General del Proceso, CPACA y Estatuto Tributario.
+- **Consultar normativa tributaria, aduanera y cambiaria** del normograma de la DIAN.
+- **Ver en qué Diario Oficial se publicó una norma** y qué diarios salieron en unas fechas.
+- **Comparar artículos y reformas** entre normas, y reunir la evidencia de un posible conflicto entre dos de ellas.
+
+## Fuentes oficiales que consulta
+
+Más de 25 fuentes oficiales colombianas. Las principales:
 
 - **Gestor Normativo** del Departamento Administrativo de la Función Pública — leyes, decretos, resoluciones, circulares y conceptos del sector público, con la consulta temática y los *restrictores* que explican por qué cada norma aplica a un tema.
 - **Relatoría de la Corte Constitucional** — 44.839 providencias según su propio índice, con fallos recientes publicados el mismo año.
@@ -14,6 +29,8 @@ Conecta seis fuentes oficiales:
 - **Corte Suprema de Justicia** — providencias de las salas de Tutelas, Civil, Laboral y Penal, cada una con las normas que cita.
 - **Consejo de Estado** — providencias tituladas de lo contencioso administrativo, con el problema jurídico que la Sala se planteó, su respuesta y el texto completo. Con esta se completan las tres altas cortes, y las tres entregan texto.
 - **Normograma de la DIAN** — normativa tributaria, aduanera y cambiaria.
+- **Diario Oficial** (Imprenta Nacional) y **Secretaría del Senado** (el Código Civil, artículo por artículo).
+- **Reguladores y ministerios sectoriales** — CREG, ANH, UPME, ANLA, SIC, Superfinanciera, Supersalud, ANT, Ministerio de Educación, Ministerio de Transporte, Unidad de Víctimas y más.
 
 Es un servidor MCP estándar que se comunica por **stdio**, así que sirve en Claude Desktop, Claude Code, Cursor, VS Code, Windsurf, Zed, Continue, LM Studio, agentes propios hechos con los SDK de MCP y cualquier cliente que aparezca después.
 
@@ -216,6 +233,32 @@ Sobre la capa común de metadatos, evidencia y normalización:
 - **`expediente`** con `accion="crear|agregar|leer|exportar"` agrupa consultas, citas y observaciones de una investigación. **Desactivado por defecto**: se activa con la variable de entorno `EXPEDIENTES=1`; la persistencia en disco, con `EXPEDIENTES_DIR`.
 
 Una regla de oro de las V2: si una cita viene sin año y el número es ambiguo ("Decreto 1072" son cuatro), la herramienta **no elige por ti**: lista los candidatos y pide el año.
+
+## Preguntas frecuentes
+
+### ¿Cómo consulto una ley o un decreto colombiano desde Claude?
+
+Instala el servidor ([Instalación](#instalación)) y pregunta por la norma con su número y año: «¿Qué dice la Ley 1221 de 2008?». La herramienta `resolver_cita` la encuentra y devuelve su texto con el enlace a la fuente oficial. También entiende los códigos por su nombre («art. 83 del Código Penal») y las sentencias («C-337/11», «T-099/24»).
+
+### ¿Cómo sé si una ley colombiana sigue vigente?
+
+Con `consultar_vigencia` o con `resolver_cita`: piden el estado a SUIN-Juriscol, del Ministerio de Justicia, y lo entregan literal («Vigente», «Derogado», «Vigencia en Estudio»…) con su nivel de confianza y el enlace. El servidor nunca afirma por su cuenta que una norma esté vigente: si no consta, lo dice. Verifica siempre en el enlace antes de actuar.
+
+### ¿Puedo buscar jurisprudencia de la Corte Constitucional, la Corte Suprema y el Consejo de Estado?
+
+Sí. `buscar_jurisprudencia` cubre la relatoría de la Corte Constitucional, `buscar_jurisprudencia_suprema` las salas de la Corte Suprema y `buscar_jurisprudencia_consejo_estado` las providencias del Consejo de Estado. En las tres, `obtener_documento` trae el texto completo, y `linea_jurisprudencial` lista las providencias que citan una sentencia de la Corte Constitucional.
+
+### ¿Con qué asistentes y editores funciona?
+
+Con cualquier cliente MCP que lance servidores por stdio: Claude Desktop (con un clic, vía `.mcpb`), Claude Code, Cursor, VS Code, Windsurf, Zed, Continue, LM Studio y agentes propios hechos con los SDK de MCP en Python o TypeScript.
+
+### ¿Es asesoría jurídica?
+
+No. Es un buscador que le da a un asistente de IA acceso a fuentes oficiales colombianas. Cada respuesta lleva el enlace a la fuente para que verifiques antes de decidir. Ver [Lo que debes saber antes de confiar en una respuesta](#lo-que-debes-saber-antes-de-confiar-en-una-respuesta).
+
+### ¿Es gratis y de código abierto?
+
+Sí. El código es de código abierto (ver [Licencia](#licencia)) y las fuentes que consulta son portales públicos del Estado colombiano. No hay cuentas, claves de API ni analítica.
 
 ## Lo que debes saber antes de confiar en una respuesta
 
